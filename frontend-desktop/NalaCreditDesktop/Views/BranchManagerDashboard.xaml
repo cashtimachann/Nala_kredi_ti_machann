@@ -1,0 +1,643 @@
+<Window x:Class="NalaCreditDesktop.Views.BranchManagerDashboard"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Nala Kredi Ti Machann - Chef de Succursale" 
+        Height="950" Width="1700"
+        WindowState="Maximized"
+        WindowStartupLocation="CenterScreen"
+        Background="#F5F7FA">
+
+    <Window.Resources>
+        <!-- Styles -->
+        <Style x:Key="HeaderTextStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="#2C3E50"/>
+        </Style>
+
+        <Style x:Key="SubHeaderTextStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#34495E"/>
+        </Style>
+
+        <Style x:Key="StatCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="Margin" Value="10"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="#CCCCCC" BlurRadius="10" ShadowDepth="2" Opacity="0.3"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MenuButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="20,15"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="5"
+                                Margin="5,2">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                            VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#34495E"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="ActionButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#3498DB"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="20,12"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="5"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#2980B9"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="#16A085" Padding="20">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock Text="🏢" FontSize="32" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                    <StackPanel>
+                        <TextBlock Text="Chef de Succursale" 
+                                   FontSize="24" 
+                                   FontWeight="Bold" 
+                                   Foreground="White"/>
+                        <TextBlock x:Name="UserNameText" 
+                                   Text="[Nom du chef] - Succursale Port-au-Prince" 
+                                   FontSize="14" 
+                                   Foreground="#E8F8F5"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,20,0">
+                    <Border Background="#E74C3C" 
+                            CornerRadius="20" 
+                            Padding="12,6" 
+                            Margin="0,0,15,0"
+                            Cursor="Hand">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="⚠️" FontSize="16" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="AlertBadge" 
+                                       Text="8" 
+                                       FontWeight="Bold" 
+                                       Foreground="White" 
+                                       FontSize="14"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock x:Name="CurrentTimeText" 
+                               FontSize="16" 
+                               Foreground="White" 
+                               VerticalAlignment="Center"
+                               Margin="0,0,15,0"/>
+                    <TextBlock x:Name="CurrentDateText" 
+                               FontSize="16" 
+                               Foreground="#E8F8F5" 
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <Button Grid.Column="2" 
+                        Content="🚪 Déconnexion"
+                        Click="Logout_Click"
+                        Style="{StaticResource ActionButtonStyle}"
+                        Background="#C0392B"/>
+            </Grid>
+        </Border>
+
+        <!-- Main Content -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="270"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left Sidebar Menu -->
+            <Border Grid.Column="0" Background="#1E8449" Padding="0,20">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="📊 VUE D'ENSEMBLE" 
+                                   Foreground="#D5F4E6" 
+                                   FontSize="12" 
+                                   FontWeight="Bold" 
+                                   Margin="20,0,0,10"/>
+
+                        <Button Content="🏠 Tableau de Bord" 
+                                Click="Dashboard_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+
+                        <Separator Background="#16A085" Margin="10,15"/>
+
+                        <TextBlock Text="✅ VALIDATIONS" 
+                                   Foreground="#D5F4E6" 
+                                   FontSize="12" 
+                                   FontWeight="Bold" 
+                                   Margin="20,0,0,10"/>
+
+                        <Button Content="👤 Nouveaux Comptes" 
+                                Click="ValidateAccounts_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+
+                        <Button Content="💰 Approbation Prêts" 
+                                Click="ApproveLoan_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+
+                        <Button Content="📄 Documents en Attente" 
+                                Click="PendingDocuments_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+
+                        <Separator Background="#16A085" Margin="10,15"/>
+
+                        <TextBlock Text="👁️ SUPERVISION" 
+                                   Foreground="#D5F4E6" 
+                                   FontSize="12" 
+                                   FontWeight="Bold" 
+                                   Margin="20,0,0,10"/>
+
+                        <Button Content="🔍 Opérations Quotidiennes" 
+                                Click="DailyOperations_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+
+                        <Button Content="💵 Rapport Caisse" 
+                                Click="CashReport_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+
+                        <Button Content="🔒 Clôture Caisse" 
+                                Click="CloseCash_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+
+                        <Separator Background="#16A085" Margin="10,15"/>
+
+                        <TextBlock Text="👥 PERSONNEL" 
+                                   Foreground="#D5F4E6" 
+                                   FontSize="12" 
+                                   FontWeight="Bold" 
+                                   Margin="20,0,0,10"/>
+
+                        <Button Content="📅 Présences" 
+                                Click="Attendance_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+
+                        <Button Content="⏰ Horaires" 
+                                Click="Schedules_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+
+                        <Button Content="📊 Performance Équipe" 
+                                Click="TeamPerformance_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+
+                        <Separator Background="#16A085" Margin="10,15"/>
+
+                        <TextBlock Text="💱 DEVISES" 
+                                   Foreground="#D5F4E6" 
+                                   FontSize="12" 
+                                   FontWeight="Bold" 
+                                   Margin="20,0,0,10"/>
+
+                        <Button Content="💱 Gestion Change" 
+                                Click="ExchangeManagement_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+
+                        <Button Content="📈 Taux du Jour" 
+                                Click="ExchangeRates_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+
+                        <Separator Background="#16A085" Margin="10,15"/>
+
+                        <TextBlock Text="📈 RAPPORTS" 
+                                   Foreground="#D5F4E6" 
+                                   FontSize="12" 
+                                   FontWeight="Bold" 
+                                   Margin="20,0,0,10"/>
+
+                        <Button Content="📊 Rapport Journalier" 
+                                Click="DailyReport_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+
+                        <Button Content="📅 Rapport Hebdomadaire" 
+                                Click="WeeklyReport_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+
+                        <Button Content="📈 Rapport Mensuel" 
+                                Click="MonthlyReport_Click"
+                                Style="{StaticResource MenuButtonStyle}"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Main Content Area -->
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="30">
+                    <!-- Welcome Section -->
+                    <TextBlock Text="Tableau de Bord - Chef de Succursale" 
+                               Style="{StaticResource HeaderTextStyle}" 
+                               Margin="0,0,0,20"/>
+
+                    <!-- Statistics Cards Row 1 -->
+                    <Grid Margin="0,0,0,20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Total Transactions Today -->
+                        <Border Grid.Column="0" Style="{StaticResource StatCardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="💰 Transactions Aujourd'hui" 
+                                           FontSize="14" 
+                                           Foreground="#7F8C8D" 
+                                           Margin="0,0,0,10"/>
+                                <TextBlock x:Name="TotalTransactionsText" 
+                                           Text="247" 
+                                           FontSize="36" 
+                                           FontWeight="Bold" 
+                                           Foreground="#16A085"/>
+                                <TextBlock Text="Volume: 2,450,000 HTG" 
+                                           FontSize="12" 
+                                           Foreground="#95A5A6" 
+                                           Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Active Cashiers -->
+                        <Border Grid.Column="1" Style="{StaticResource StatCardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="👥 Caissiers Actifs" 
+                                           FontSize="14" 
+                                           Foreground="#7F8C8D" 
+                                           Margin="0,0,0,10"/>
+                                <TextBlock x:Name="ActiveCashiersText" 
+                                           Text="5/8" 
+                                           FontSize="36" 
+                                           FontWeight="Bold" 
+                                           Foreground="#3498DB"/>
+                                <TextBlock Text="Sessions ouvertes" 
+                                           FontSize="12" 
+                                           Foreground="#95A5A6" 
+                                           Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Pending Approvals -->
+                        <Border Grid.Column="2" Style="{StaticResource StatCardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="⏳ En Attente Validation" 
+                                           FontSize="14" 
+                                           Foreground="#7F8C8D" 
+                                           Margin="0,0,0,10"/>
+                                <TextBlock x:Name="PendingApprovalsText" 
+                                           Text="12" 
+                                           FontSize="36" 
+                                           FontWeight="Bold" 
+                                           Foreground="#F39C12"/>
+                                <TextBlock Text="Comptes + Prêts" 
+                                           FontSize="12" 
+                                           Foreground="#95A5A6" 
+                                           Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Branch Performance -->
+                        <Border Grid.Column="3" Style="{StaticResource StatCardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="📊 Performance" 
+                                           FontSize="14" 
+                                           Foreground="#7F8C8D" 
+                                           Margin="0,0,0,10"/>
+                                <TextBlock x:Name="PerformanceScoreText" 
+                                           Text="92%" 
+                                           FontSize="36" 
+                                           FontWeight="Bold" 
+                                           Foreground="#27AE60"/>
+                                <TextBlock Text="Objectifs atteints" 
+                                           FontSize="12" 
+                                           Foreground="#27AE60" 
+                                           Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- Statistics Cards Row 2 -->
+                    <Grid Margin="0,0,0,20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Cash Balance -->
+                        <Border Grid.Column="0" Style="{StaticResource StatCardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="💵 Solde Caisse Total" 
+                                           FontSize="14" 
+                                           Foreground="#7F8C8D" 
+                                           Margin="0,0,0,10"/>
+                                <TextBlock x:Name="CashBalanceHTGText" 
+                                           Text="850,500 HTG" 
+                                           FontSize="28" 
+                                           FontWeight="Bold" 
+                                           Foreground="#16A085"/>
+                                <TextBlock x:Name="CashBalanceUSDText"
+                                           Text="12,340 USD" 
+                                           FontSize="14" 
+                                           Foreground="#95A5A6" 
+                                           Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- New Accounts -->
+                        <Border Grid.Column="1" Style="{StaticResource StatCardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="👤 Nouveaux Comptes" 
+                                           FontSize="14" 
+                                           Foreground="#7F8C8D" 
+                                           Margin="0,0,0,10"/>
+                                <TextBlock x:Name="NewAccountsText" 
+                                           Text="18" 
+                                           FontSize="36" 
+                                           FontWeight="Bold" 
+                                           Foreground="#9B59B6"/>
+                                <TextBlock Text="Cette semaine" 
+                                           FontSize="12" 
+                                           Foreground="#95A5A6" 
+                                           Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Active Loans -->
+                        <Border Grid.Column="2" Style="{StaticResource StatCardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="💳 Crédits Actifs" 
+                                           FontSize="14" 
+                                           Foreground="#7F8C8D" 
+                                           Margin="0,0,0,10"/>
+                                <TextBlock x:Name="ActiveLoansText" 
+                                           Text="156" 
+                                           FontSize="36" 
+                                           FontWeight="Bold" 
+                                           Foreground="#E67E22"/>
+                                <TextBlock Text="4,750,000 HTG encours" 
+                                           FontSize="12" 
+                                           Foreground="#95A5A6" 
+                                           Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Staff Present -->
+                        <Border Grid.Column="3" Style="{StaticResource StatCardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="👥 Personnel Présent" 
+                                           FontSize="14" 
+                                           Foreground="#7F8C8D" 
+                                           Margin="0,0,0,10"/>
+                                <TextBlock x:Name="StaffPresentText" 
+                                           Text="12/15" 
+                                           FontSize="36" 
+                                           FontWeight="Bold" 
+                                           Foreground="#1ABC9C"/>
+                                <TextBlock Text="80% présence" 
+                                           FontSize="12" 
+                                           Foreground="#95A5A6" 
+                                           Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- Alerts Section -->
+                    <Border Background="#FFF3CD" 
+                            BorderBrush="#FFC107" 
+                            BorderThickness="2"
+                            CornerRadius="10" 
+                            Padding="20" 
+                            Margin="10,0,10,20">
+                        <StackPanel>
+                            <TextBlock Text="⚠️ Alertes Importantes" 
+                                       FontSize="16" 
+                                       FontWeight="Bold" 
+                                       Foreground="#856404" 
+                                       Margin="0,0,0,10"/>
+                            <StackPanel x:Name="AlertsPanel">
+                                <TextBlock Text="• 5 demandes de prêt en attente d'approbation (>48h)" 
+                                           FontSize="13" 
+                                           Foreground="#856404" 
+                                           Margin="0,3"/>
+                                <TextBlock Text="• 3 nouveaux comptes nécessitent validation" 
+                                           FontSize="13" 
+                                           Foreground="#856404" 
+                                           Margin="0,3"/>
+                                <TextBlock Text="• Caisse #3 non clôturée hier (15 Oct)" 
+                                           FontSize="13" 
+                                           Foreground="#856404" 
+                                           Margin="0,3"/>
+                                <TextBlock Text="• Taux de change USD doit être mis à jour" 
+                                           FontSize="13" 
+                                           Foreground="#856404" 
+                                           Margin="0,3"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Three Column Layout -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Pending Validations -->
+                        <Border Grid.Column="0" 
+                                Background="White" 
+                                CornerRadius="10" 
+                                Padding="20" 
+                                Margin="10,0">
+                            <StackPanel>
+                                <TextBlock Text="✅ Validations en Attente" 
+                                           Style="{StaticResource SubHeaderTextStyle}" 
+                                           Margin="0,0,0,15"/>
+                                
+                                <ListBox x:Name="PendingValidationsList"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Height="300"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#F0F8FF" 
+                                                    CornerRadius="5" 
+                                                    Padding="12" 
+                                                    Margin="0,0,0,8">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Type}" 
+                                                               FontWeight="Bold" 
+                                                               FontSize="13" 
+                                                               Foreground="#2C3E50"/>
+                                                    <TextBlock Text="{Binding Description}" 
+                                                               FontSize="12" 
+                                                               Foreground="#7F8C8D" 
+                                                               Margin="0,3,0,5"/>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Button Content="✅ Approuver" 
+                                                                Background="#27AE60"
+                                                                Foreground="White"
+                                                                BorderThickness="0"
+                                                                Padding="8,4"
+                                                                FontSize="11"
+                                                                Margin="0,0,5,0"
+                                                                Cursor="Hand"/>
+                                                        <Button Content="❌ Rejeter" 
+                                                                Background="#E74C3C"
+                                                                Foreground="White"
+                                                                BorderThickness="0"
+                                                                Padding="8,4"
+                                                                FontSize="11"
+                                                                Cursor="Hand"/>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Active Cash Sessions -->
+                        <Border Grid.Column="1" 
+                                Background="White" 
+                                CornerRadius="10" 
+                                Padding="20" 
+                                Margin="10,0">
+                            <StackPanel>
+                                <TextBlock Text="💵 Sessions Caisse Actives" 
+                                           Style="{StaticResource SubHeaderTextStyle}" 
+                                           Margin="0,0,0,15"/>
+                                
+                                <DataGrid x:Name="ActiveCashSessionsGrid"
+                                          AutoGenerateColumns="False"
+                                          HeadersVisibility="Column"
+                                          GridLinesVisibility="None"
+                                          Background="White"
+                                          RowBackground="White"
+                                          AlternatingRowBackground="#F8F9FA"
+                                          BorderThickness="0"
+                                          CanUserAddRows="False"
+                                          IsReadOnly="True"
+                                          Height="300">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Caissier" 
+                                                          Binding="{Binding Cashier}" 
+                                                          Width="*"/>
+                                        <DataGridTextColumn Header="Début" 
+                                                          Binding="{Binding StartTime}" 
+                                                          Width="Auto"/>
+                                        <DataGridTextColumn Header="Transactions" 
+                                                          Binding="{Binding TransCount}" 
+                                                          Width="Auto"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Team Performance -->
+                        <Border Grid.Column="2" 
+                                Background="White" 
+                                CornerRadius="10" 
+                                Padding="20" 
+                                Margin="10,0">
+                            <StackPanel>
+                                <TextBlock Text="📊 Performance de l'Équipe" 
+                                           Style="{StaticResource SubHeaderTextStyle}" 
+                                           Margin="0,0,0,15"/>
+                                
+                                <ListBox x:Name="TeamPerformanceList"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Height="300"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#F8F9FA" 
+                                                    CornerRadius="5" 
+                                                    Padding="12" 
+                                                    Margin="0,0,0,8">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="{Binding Name}" 
+                                                                   FontWeight="SemiBold" 
+                                                                   FontSize="13"/>
+                                                        <TextBlock Text="{Binding Role}" 
+                                                                   FontSize="11" 
+                                                                   Foreground="#7F8C8D"/>
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="1" 
+                                                               Text="{Binding Score}" 
+                                                               FontWeight="Bold" 
+                                                               FontSize="16" 
+                                                               Foreground="#27AE60"
+                                                               VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</Window>

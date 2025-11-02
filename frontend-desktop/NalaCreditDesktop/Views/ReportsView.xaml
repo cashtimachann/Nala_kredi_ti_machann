@@ -1,0 +1,268 @@
+<UserControl x:Class="NalaCreditDesktop.Views.ReportsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="800">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <TextBlock Grid.Row="0" 
+                      Text="Rapports et Statistiques" 
+                      FontSize="24" 
+                      FontWeight="Bold" 
+                      Margin="0,0,0,20"/>
+
+            <!-- Report Options -->
+            <Border Grid.Row="1" 
+                   Background="White" 
+                   BorderBrush="#e2e8f0" 
+                   BorderThickness="1" 
+                   CornerRadius="8" 
+                   Padding="20" 
+                   Margin="0,0,0,20">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Daily Report -->
+                    <StackPanel Grid.Column="0" 
+                               Margin="0,0,15,0">
+                        <TextBlock Text="Rapport Journalier" 
+                                  FontSize="16" 
+                                  FontWeight="SemiBold" 
+                                  Margin="0,0,0,10"/>
+                        <TextBlock Text="Résumé des activités de la journée" 
+                                  FontSize="12" 
+                                  Foreground="#64748b" 
+                                  Margin="0,0,0,15"/>
+                        <Button Content="Générer Rapport" 
+                               Background="#3b82f6" 
+                               Foreground="White" 
+                               Padding="0,10" 
+                               BorderThickness="0"/>
+                    </StackPanel>
+
+                    <!-- Weekly Report -->
+                    <StackPanel Grid.Column="1" 
+                               Margin="15,0">
+                        <TextBlock Text="Rapport Hebdomadaire" 
+                                  FontSize="16" 
+                                  FontWeight="SemiBold" 
+                                  Margin="0,0,0,10"/>
+                        <TextBlock Text="Analyse des performances de la semaine" 
+                                  FontSize="12" 
+                                  Foreground="#64748b" 
+                                  Margin="0,0,0,15"/>
+                        <Button Content="Générer Rapport" 
+                               Background="#22c55e" 
+                               Foreground="White" 
+                               Padding="0,10" 
+                               BorderThickness="0"/>
+                    </StackPanel>
+
+                    <!-- Monthly Report -->
+                    <StackPanel Grid.Column="2" 
+                               Margin="15,0,0,0">
+                        <TextBlock Text="Rapport Mensuel" 
+                                  FontSize="16" 
+                                  FontWeight="SemiBold" 
+                                  Margin="0,0,0,10"/>
+                        <TextBlock Text="Synthèse mensuelle complète" 
+                                  FontSize="12" 
+                                  Foreground="#64748b" 
+                                  Margin="0,0,0,15"/>
+                        <Button Content="Générer Rapport" 
+                               Background="#f59e0b" 
+                               Foreground="White" 
+                               Padding="0,10" 
+                               BorderThickness="0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Statistics Summary -->
+            <Border Grid.Row="2" 
+                   Background="White" 
+                   BorderBrush="#e2e8f0" 
+                   BorderThickness="1" 
+                   CornerRadius="8" 
+                   Padding="20">
+                <StackPanel>
+                    <TextBlock Text="Statistiques Rapides" 
+                              FontSize="18" 
+                              FontWeight="SemiBold" 
+                              Margin="0,0,0,20"/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Today's Stats -->
+                        <StackPanel Grid.Column="0" 
+                                   Margin="0,0,20,0">
+                            <TextBlock Text="Aujourd'hui" 
+                                      FontSize="16" 
+                                      FontWeight="Medium" 
+                                      Margin="0,0,0,15"/>
+                            
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" 
+                                          Text="Transactions:" 
+                                          Width="120"/>
+                                <TextBlock Grid.Column="1" 
+                                          Text="47" 
+                                          FontWeight="Bold"/>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" 
+                                          Text="Total dépôts:" 
+                                          Width="120"/>
+                                <TextBlock Grid.Column="1" 
+                                          Text="485,000 HTG" 
+                                          FontWeight="Bold" 
+                                          Foreground="#22c55e"/>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" 
+                                          Text="Total retraits:" 
+                                          Width="120"/>
+                                <TextBlock Grid.Column="1" 
+                                          Text="235,000 HTG" 
+                                          FontWeight="Bold" 
+                                          Foreground="#ef4444"/>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" 
+                                          Text="Clients servis:" 
+                                          Width="120"/>
+                                <TextBlock Grid.Column="1" 
+                                          Text="32" 
+                                          FontWeight="Bold"/>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- This Month's Stats -->
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Ce Mois" 
+                                      FontSize="16" 
+                                      FontWeight="Medium" 
+                                      Margin="0,0,0,15"/>
+                            
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" 
+                                          Text="Transactions:" 
+                                          Width="120"/>
+                                <TextBlock Grid.Column="1" 
+                                          Text="1,247" 
+                                          FontWeight="Bold"/>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" 
+                                          Text="Total dépôts:" 
+                                          Width="120"/>
+                                <TextBlock Grid.Column="1" 
+                                          Text="12,485,000 HTG" 
+                                          FontWeight="Bold" 
+                                          Foreground="#22c55e"/>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" 
+                                          Text="Total retraits:" 
+                                          Width="120"/>
+                                <TextBlock Grid.Column="1" 
+                                          Text="8,235,000 HTG" 
+                                          FontWeight="Bold" 
+                                          Foreground="#ef4444"/>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" 
+                                          Text="Clients actifs:" 
+                                          Width="120"/>
+                                <TextBlock Grid.Column="1" 
+                                          Text="412" 
+                                          FontWeight="Bold"/>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Export Options -->
+                    <Border Background="#f8fafc" 
+                           BorderBrush="#e2e8f0" 
+                           BorderThickness="1" 
+                           CornerRadius="6" 
+                           Padding="15" 
+                           Margin="0,30,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Options d'Export" 
+                                      FontSize="14" 
+                                      FontWeight="Medium" 
+                                      Margin="0,0,0,10"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="📄 Export PDF" 
+                                       Padding="10,5" 
+                                       Margin="0,0,10,0"/>
+                                <Button Content="📊 Export Excel" 
+                                       Padding="10,5" 
+                                       Margin="0,0,10,0"/>
+                                <Button Content="📋 Copier dans le presse-papier" 
+                                       Padding="10,5"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

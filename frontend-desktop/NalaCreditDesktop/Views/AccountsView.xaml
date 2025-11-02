@@ -1,0 +1,356 @@
+<UserControl x:Class="NalaCreditDesktop.Views.AccountsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="800">
+
+    <Grid Background="#F8F9FA">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- En-tête -->
+        <Border Grid.Row="0" Background="White" BorderBrush="#e2e8f0" BorderThickness="0,0,0,1" Padding="20">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="👥 Comptes Clients" FontSize="24" FontWeight="Bold"/>
+                    <TextBlock Text="Consultation et gestion des comptes clients" 
+                              FontSize="14" Foreground="#64748b" Margin="0,5,0,0"/>
+                </StackPanel>
+                
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content=" Actualiser" 
+                           x:Name="ActualiserListeButton"
+                           Background="#22c55e" 
+                           Foreground="White"
+                           Padding="15,10" 
+                           Margin="5"
+                           BorderThickness="0"
+                           FontWeight="SemiBold"
+                           Cursor="Hand"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Contenu principal -->
+        <Grid Grid.Row="1" Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Section de recherche -->
+            <Border Grid.Row="0" Background="White" CornerRadius="8" Padding="20" Margin="0,0,0,20">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="8" ShadowDepth="2" Color="#20000000" Opacity="0.5"/>
+                </Border.Effect>
+                
+                <StackPanel>
+                    <TextBlock Text="🔍 RECHERCHE RAPIDE" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/>
+                    
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,15,0">
+                            <TextBlock Text="Numéro de compte ou nom client" FontSize="12" Margin="0,0,0,5"/>
+                            <TextBox x:Name="SearchTextBox" 
+                                    Padding="10" 
+                                    FontSize="14"
+                                    ToolTip="Rechercher par numéro de compte ou nom du client"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Margin="0,0,15,0">
+                            <TextBlock Text="Statut" FontSize="12" Margin="0,0,0,5"/>
+                            <ComboBox x:Name="StatutComboBox" Padding="10" FontSize="14">
+                                <ComboBoxItem Content="Tous" IsSelected="True"/>
+                                <ComboBoxItem Content="Actif"/>
+                                <ComboBoxItem Content="Inactif"/>
+                                <ComboBoxItem Content="Suspendu"/>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" 
+                               Content="Rechercher" 
+                               x:Name="SearchButton"
+                               Background="#3b82f6" 
+                               Foreground="White"
+                               Padding="20,10" 
+                               BorderThickness="0"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Bottom"
+                               Cursor="Hand"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Liste des comptes -->
+            <Border Grid.Row="1" Background="White" CornerRadius="8" Padding="20">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="8" ShadowDepth="2" Color="#20000000" Opacity="0.5"/>
+                </Border.Effect>
+                
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" 
+                              Text="📋 LISTE DES COMPTES" 
+                              FontSize="16" 
+                              FontWeight="Bold" 
+                              Margin="0,0,0,15"/>
+
+                    <DataGrid Grid.Row="1"
+                             x:Name="ComptesDataGrid"
+                             AutoGenerateColumns="False"
+                             IsReadOnly="True"
+                             GridLinesVisibility="Horizontal"
+                             HeadersVisibility="Column"
+                             CanUserReorderColumns="False"
+                             SelectionMode="Single"
+                             AlternatingRowBackground="#f8fafc"
+                             FontSize="12">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="N° Compte" Binding="{Binding NumeroCompte}" Width="120"/>
+                            <DataGridTextColumn Header="Nom Client" Binding="{Binding NomClient}" Width="200"/>
+                            <DataGridTextColumn Header="Téléphone" Binding="{Binding Telephone}" Width="120"/>
+                            <DataGridTextColumn Header="Solde HTG" Binding="{Binding SoldeHTG, StringFormat='{}{0:N2}'}" Width="120"/>
+                            <DataGridTextColumn Header="Solde USD" Binding="{Binding SoldeUSD, StringFormat='${0:N2}'}" Width="120"/>
+                            <DataGridTextColumn Header="Statut" Binding="{Binding Statut}" Width="100"/>
+                            <DataGridTemplateColumn Header="Actions" Width="*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <Button Content="👁️ Consulter" 
+                                                   x:Name="ConsulterButton"
+                                                   Background="#3b82f6" 
+                                                   Foreground="White"
+                                                   Padding="8,4" 
+                                                   Margin="2"
+                                                   BorderThickness="0"
+                                                   FontSize="11"
+                                                   Cursor="Hand"
+                                                   ToolTip="Voir les détails du compte"/>
+                                            <Button Content="💰 Dépôt" 
+                                                   x:Name="DepotButton"
+                                                   Background="#22c55e" 
+                                                   Foreground="White"
+                                                   Padding="8,4" 
+                                                   Margin="2"
+                                                   BorderThickness="0"
+                                                   FontSize="11"
+                                                   Cursor="Hand"
+                                                   ToolTip="Effectuer un dépôt"/>
+                                            <Button Content="💸 Retrait" 
+                                                   x:Name="RetraitButton"
+                                                   Background="#ef4444" 
+                                                   Foreground="White"
+                                                   Padding="8,4" 
+                                                   Margin="2"
+                                                   BorderThickness="0"
+                                                   FontSize="11"
+                                                   Cursor="Hand"
+                                                   ToolTip="Effectuer un retrait"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                        
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Consulter le compte" Icon="👁️"/>
+                                <MenuItem Header="Effectuer un dépôt" Icon="💰"/>
+                                <MenuItem Header="Effectuer un retrait" Icon="💸"/>
+                                <Separator/>
+                                <MenuItem Header="Historique des transactions" Icon="📋"/>
+                                <MenuItem Header="Imprimer relevé" Icon="🖨️"/>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
+                    </DataGrid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Overlay de consultation détaillée -->
+        <Border x:Name="ConsultationOverlay" 
+               Grid.RowSpan="2"
+               Background="#80000000" 
+               Visibility="Collapsed">
+            <Border Background="White" 
+                   Width="700" 
+                   Height="600"
+                   CornerRadius="10"
+                   Padding="30">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="20" ShadowDepth="5" Color="#40000000"/>
+                </Border.Effect>
+                
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- En-tête de la consultation -->
+                    <Grid Grid.Row="0">
+                        <TextBlock Text="👁️ CONSULTATION DE COMPTE" 
+                                  FontSize="20" 
+                                  FontWeight="Bold" 
+                                  VerticalAlignment="Center"/>
+                        
+                        <Button x:Name="FermerConsultationButton" 
+                               Content="✕" 
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Top"
+                               Background="Transparent"
+                               BorderThickness="0"
+                               FontSize="20"
+                               Foreground="#64748b"
+                               Padding="10"
+                               Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#f1f5f9"/>
+                                            <Setter Property="Foreground" Value="#ef4444"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+
+                    <!-- Contenu de la consultation -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,20,0,20">
+                        <StackPanel>
+                            <!-- Informations du client -->
+                            <Border Background="#f8fafc" CornerRadius="8" Padding="15" Margin="0,0,0,15">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition/>
+                                        <RowDefinition/>
+                                        <RowDefinition/>
+                                        <RowDefinition/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="N° Compte:" FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="DetailNumeroCompte" Text="--"/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Nom Client:" FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="DetailNomClient" Text="--"/>
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Téléphone:" FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="DetailTelephone" Text="--"/>
+
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Statut:" FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="DetailStatut" Text="--"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Soldes -->
+                            <Grid Margin="0,0,0,15">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="15"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Border Grid.Column="0" Background="#FEF3C7" BorderBrush="#F59E0B" 
+                                       BorderThickness="1" CornerRadius="8" Padding="15">
+                                    <StackPanel>
+                                        <TextBlock Text="💰 SOLDE HTG" FontWeight="SemiBold" FontSize="12" 
+                                                  Foreground="#D97706" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock x:Name="DetailSoldeHTG" 
+                                                  Text="0.00" 
+                                                  FontSize="20" 
+                                                  FontWeight="Bold" 
+                                                  Foreground="#F59E0B" 
+                                                  HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Grid.Column="2" Background="#EBF4FF" BorderBrush="#3B82F6" 
+                                       BorderThickness="1" CornerRadius="8" Padding="15">
+                                    <StackPanel>
+                                        <TextBlock Text="💲 SOLDE USD" FontWeight="SemiBold" FontSize="12" 
+                                                  Foreground="#1D4ED8" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock x:Name="DetailSoldeUSD" 
+                                                  Text="$0.00" 
+                                                  FontSize="20" 
+                                                  FontWeight="Bold" 
+                                                  Foreground="#3B82F6" 
+                                                  HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <!-- Dernières transactions -->
+                            <TextBlock Text="📋 DERNIÈRES TRANSACTIONS" 
+                                      FontSize="14" 
+                                      FontWeight="Bold" 
+                                      Margin="0,0,0,10"/>
+                            <DataGrid x:Name="DetailTransactionsGrid"
+                                     AutoGenerateColumns="False"
+                                     IsReadOnly="True"
+                                     Height="200"
+                                     FontSize="11">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Date" Width="100"/>
+                                    <DataGridTextColumn Header="Type" Width="80"/>
+                                    <DataGridTextColumn Header="Montant" Width="100"/>
+                                    <DataGridTextColumn Header="Devise" Width="60"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Actions -->
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Content="💰 Effectuer Dépôt" 
+                               Background="#22c55e" 
+                               Foreground="White"
+                               Padding="15,10" 
+                               Margin="5"
+                               BorderThickness="0"
+                               FontWeight="SemiBold"/>
+                        <Button Content="💸 Effectuer Retrait" 
+                               Background="#ef4444" 
+                               Foreground="White"
+                               Padding="15,10" 
+                               Margin="5"
+                               BorderThickness="0"
+                               FontWeight="SemiBold"/>
+                        <Button Content="🖨️ Imprimer Relevé" 
+                               Background="#8b5cf6" 
+                               Foreground="White"
+                               Padding="15,10" 
+                               Margin="5"
+                               BorderThickness="0"
+                               FontWeight="SemiBold"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Border>
+    </Grid>
+</UserControl>

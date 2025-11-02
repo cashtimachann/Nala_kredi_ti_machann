@@ -1,0 +1,583 @@
+<Window x:Class="NalaCreditDesktop.Views.CashierDashboard"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:converters="clr-namespace:NalaCreditDesktop.Converters"
+        Title="Dashboard Caissier - Nala Kredi" Height="1000" Width="1400"
+        WindowStartupLocation="CenterScreen">
+    
+    <Window.Resources>
+        <!-- Convertisseurs -->
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <converters:CurrencyFormatConverter x:Key="CurrencyFormatConverter"/>
+        <!-- Styles personnalisés -->
+        <Style x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="15"/>
+            <Setter Property="Margin" Value="10"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="#E0E0E0" Direction="270" ShadowDepth="3" BlurRadius="6"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <Style x:Key="ActionButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#4A90E2"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="15,10"/>
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" 
+                                            VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#357ABD"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <Style x:Key="HeaderTextStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="#2C3E50"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+        
+        <Style x:Key="ValueTextStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="5,0"/>
+        </Style>
+        
+        <Style x:Key="CurrencyHTGStyle" TargetType="TextBlock" BasedOn="{StaticResource ValueTextStyle}">
+            <Setter Property="Foreground" Value="#27AE60"/>
+        </Style>
+        
+        <Style x:Key="CurrencyUSDStyle" TargetType="TextBlock" BasedOn="{StaticResource ValueTextStyle}">
+            <Setter Property="Foreground" Value="#3498DB"/>
+        </Style>
+        
+        <Style x:Key="AlertWarningStyle" TargetType="Border">
+            <Setter Property="Background" Value="#FFF3CD"/>
+            <Setter Property="BorderBrush" Value="#FFC107"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="CornerRadius" Value="5"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="Margin" Value="5"/>
+        </Style>
+        
+        <Style x:Key="AlertCriticalStyle" TargetType="Border">
+            <Setter Property="Background" Value="#F8D7DA"/>
+            <Setter Property="BorderBrush" Value="#DC3545"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="CornerRadius" Value="5"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="Margin" Value="5"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="#F8F9FA">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- En-tête avec actions rapides -->
+        <Border Grid.Row="0" Background="#2C3E50" Padding="20">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- Titre et informations session -->
+                <StackPanel Grid.Column="0" Orientation="Vertical">
+                    <TextBlock Text="Dashboard Caissier" 
+                               FontSize="24" FontWeight="Bold" 
+                               Foreground="White"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <TextBlock Text="{Binding CashierName}" 
+                                   Foreground="#BDC3C7" FontSize="14"/>
+                        <TextBlock Text=" • " Foreground="#BDC3C7" FontSize="14"/>
+                        <TextBlock Text="{Binding SessionStartTime, StringFormat='Ouvert à {0:HH:mm}'}" 
+                                   Foreground="#BDC3C7" FontSize="14"/>
+                        <TextBlock Text=" • " Foreground="#BDC3C7" FontSize="14"/>
+                        <TextBlock Text="{Binding CurrentTime, StringFormat='Maintenant: {0:HH:mm:ss}'}" 
+                                   Foreground="#BDC3C7" FontSize="14"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Statut de session -->
+                <Border Grid.Column="1" 
+                        Background="{Binding SessionStatusColor}" 
+                        CornerRadius="20" 
+                        Padding="15,8" 
+                        Margin="20,0">
+                    <TextBlock Text="{Binding SessionStatusText}" 
+                               Foreground="White" 
+                               FontWeight="Bold" 
+                               FontSize="14"/>
+                </Border>
+
+                <!-- Actions rapides -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button Style="{StaticResource ActionButtonStyle}" 
+                            Command="{Binding NewDepositCommand}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="➕" FontSize="16" Margin="0,0,5,0"/>
+                            <TextBlock Text="Dépôt"/>
+                        </StackPanel>
+                    </Button>
+                    
+                    <Button Style="{StaticResource ActionButtonStyle}" 
+                            Command="{Binding NewWithdrawalCommand}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="➖" FontSize="16" Margin="0,0,5,0"/>
+                            <TextBlock Text="Retrait"/>
+                        </StackPanel>
+                    </Button>
+                    
+                    <Button Style="{StaticResource ActionButtonStyle}" 
+                            Command="{Binding ExchangeOperationCommand}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🔄" FontSize="16" Margin="0,0,5,0"/>
+                            <TextBlock Text="Change"/>
+                        </StackPanel>
+                    </Button>
+                    
+                    <Button Style="{StaticResource ActionButtonStyle}" 
+                            Background="#9B59B6"
+                            Click="TransactionsButton_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="📋" FontSize="16" Margin="0,0,5,0"/>
+                            <TextBlock Text="Transactions"/>
+                        </StackPanel>
+                    </Button>
+                    
+                    <Button Style="{StaticResource ActionButtonStyle}" 
+                            Background="#E74C3C"
+                            Command="{Binding CloseCashierCommand}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🔒" FontSize="16" Margin="0,0,5,0"/>
+                            <TextBlock Text="Clôture"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Contenu principal -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Alertes -->
+                <StackPanel Grid.Row="0" x:Name="AlertsPanel">
+                    <!-- Alerte warning -->
+                    <Border Style="{StaticResource AlertWarningStyle}" 
+                            Visibility="{Binding HasWarningAlerts, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="⚠️" FontSize="16" Margin="0,0,10,0"/>
+                            <TextBlock Text="{Binding WarningMessage}" FontWeight="SemiBold" Foreground="#856404"/>
+                        </StackPanel>
+                    </Border>
+                    
+                    <!-- Alerte critique -->
+                    <Border Style="{StaticResource AlertCriticalStyle}" 
+                            Visibility="{Binding HasCriticalAlerts, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🚨" FontSize="16" Margin="0,0,10,0"/>
+                            <TextBlock Text="{Binding CriticalMessage}" FontWeight="SemiBold" Foreground="#721C24"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Première ligne : Soldes et graphique -->
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="3*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Suivi soldes caisse -->
+                    <Border Grid.Column="0" Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="💰 Soldes de Caisse" Style="{StaticResource HeaderTextStyle}"/>
+                            
+                            <!-- Soldes actuels -->
+                            <Grid Margin="0,10">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- HTG -->
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="HTG:" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" 
+                                           Text="{Binding CurrentBalanceHTG, StringFormat='{}{0:N0}'}" 
+                                           Style="{StaticResource CurrencyHTGStyle}" 
+                                           HorizontalAlignment="Right"/>
+
+                                <!-- USD -->
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="USD:" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" 
+                                           Text="{Binding CurrentBalanceUSD, StringFormat='${0:N2}'}" 
+                                           Style="{StaticResource CurrencyUSDStyle}" 
+                                           HorizontalAlignment="Right"/>
+
+                                <Separator Grid.Row="2" Grid.ColumnSpan="2" Margin="0,10"/>
+
+                                <!-- Détails -->
+                                <StackPanel Grid.Row="3" Grid.ColumnSpan="2">
+                                    <Grid Margin="0,5">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Solde d'ouverture HTG:"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding OpeningBalanceHTG, StringFormat='{}{0:N0}'}" FontWeight="SemiBold"/>
+                                    </Grid>
+                                    <Grid Margin="0,5">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Solde d'ouverture USD:"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding OpeningBalanceUSD, StringFormat='${0:N2}'}" FontWeight="SemiBold"/>
+                                    </Grid>
+                                    <Grid Margin="0,5">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Total entrées:"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding TotalIncoming, StringFormat='{}{0:N0}'}" Foreground="#27AE60" FontWeight="SemiBold"/>
+                                    </Grid>
+                                    <Grid Margin="0,5">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Total sorties:"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding TotalOutgoing, StringFormat='{}{0:N0}'}" Foreground="#E74C3C" FontWeight="SemiBold"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Indicateur d'équilibre -->
+                            <Border Background="{Binding BalanceIndicatorColor}" 
+                                    CornerRadius="5" 
+                                    Padding="10" 
+                                    Margin="0,10,0,0">
+                                <TextBlock Text="{Binding BalanceIndicatorText}" 
+                                           Foreground="White" 
+                                           FontWeight="SemiBold" 
+                                           HorizontalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Graphique évolution -->
+                    <Border Grid.Column="1" Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="📈 Évolution des Soldes" Style="{StaticResource HeaderTextStyle}"/>
+                            <Canvas x:Name="BalanceChart" Height="300" Margin="0,10" Background="#F8F9FA">
+                                <TextBlock Canvas.Left="50" Canvas.Top="50" 
+                                           Text="Graphique des soldes HTG/USD" 
+                                           FontStyle="Italic" 
+                                           Foreground="#7F8C8D"/>
+                                
+                                <!-- Simulation d'un graphique simple -->
+                                <Rectangle Canvas.Left="50" Canvas.Top="200" Width="200" Height="4" Fill="#27AE60" Opacity="0.8"/>
+                                <TextBlock Canvas.Left="50" Canvas.Top="210" Text="HTG: 2,580,750" FontSize="12" Foreground="#27AE60"/>
+                                
+                                <Rectangle Canvas.Left="50" Canvas.Top="230" Width="150" Height="4" Fill="#3498DB" Opacity="0.8"/>
+                                <TextBlock Canvas.Left="50" Canvas.Top="240" Text="USD: $12,450" FontSize="12" Foreground="#3498DB"/>
+                                
+                                <!-- Indicateurs temporels -->
+                                <TextBlock Canvas.Left="270" Canvas.Top="100" Text="📊 Données en temps réel" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Canvas.Left="270" Canvas.Top="120" Text="🔄 Mise à jour: 30s" FontSize="11" Foreground="#7F8C8D"/>
+                                <TextBlock Canvas.Left="270" Canvas.Top="140" Text="📈 Tendance: Stable" FontSize="11" Foreground="#27AE60"/>
+                            </Canvas>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Deuxième ligne : Résumé transactions et statistiques -->
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Résumé des transactions -->
+                    <Border Grid.Column="0" Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="📊 Résumé du Jour" Style="{StaticResource HeaderTextStyle}"/>
+                            
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Dépôts -->
+                                <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                    <TextBlock Text="💵 Dépôts" FontWeight="SemiBold" Foreground="#27AE60" Margin="0,0,0,5"/>
+                                    <TextBlock Text="{Binding DepositsCount, StringFormat='Nombre: {0}'}" FontSize="12"/>
+                                    <TextBlock Text="{Binding DepositsAmountHTG, StringFormat='HTG: {0:N0}'}" FontSize="12"/>
+                                    <TextBlock Text="{Binding DepositsAmountUSD, StringFormat='USD: ${0:N2}'}" FontSize="12"/>
+                                </StackPanel>
+
+                                <!-- Retraits -->
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="💸 Retraits" FontWeight="SemiBold" Foreground="#E74C3C" Margin="0,0,0,5"/>
+                                    <TextBlock Text="{Binding WithdrawalsCount, StringFormat='Nombre: {0}'}" FontSize="12"/>
+                                    <TextBlock Text="{Binding WithdrawalsAmountHTG, StringFormat='HTG: {0:N0}'}" FontSize="12"/>
+                                    <TextBlock Text="{Binding WithdrawalsAmountUSD, StringFormat='USD: ${0:N2}'}" FontSize="12"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Separator Margin="0,10"/>
+
+                            <!-- Opérations de change -->
+                            <TextBlock Text="🔄 Opérations de Change" FontWeight="SemiBold" Foreground="#3498DB" Margin="0,0,0,5"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                    <TextBlock Text="Vente USD:" FontSize="12"/>
+                                    <TextBlock Text="{Binding UsdSalesAmount, StringFormat='HTG: {0:N0}'}" FontSize="12" FontWeight="SemiBold"/>
+                                </StackPanel>
+                                
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="Achat USD:" FontSize="12"/>
+                                    <TextBlock Text="{Binding UsdPurchaseAmount, StringFormat='USD: ${0:N2}'}" FontSize="12" FontWeight="SemiBold"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Statistiques personnelles -->
+                    <Border Grid.Column="1" Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="👤 Mes Statistiques" Style="{StaticResource HeaderTextStyle}"/>
+                            
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Clients servis:"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ClientsServedCount}" FontWeight="SemiBold"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Transactions traitées:"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TransactionsProcessedCount}" FontWeight="SemiBold"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Temps moyen/transaction:"/>
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding AverageTransactionTime}" FontWeight="SemiBold"/>
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Taux d'erreur:"/>
+                                <TextBlock Grid.Row="3" Grid.Column="1" 
+                                           Text="{Binding ErrorRate, StringFormat='{}{0:P1}'}" 
+                                           FontWeight="SemiBold"
+                                           Foreground="{Binding ErrorRateColor}"/>
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Objectif journalier:"/>
+                                <ProgressBar Grid.Row="5" Grid.ColumnSpan="2" 
+                                             Value="{Binding DailyGoalProgress}" 
+                                             Maximum="100" 
+                                             Height="20" 
+                                             Margin="0,5"/>
+                            </Grid>
+
+                            <TextBlock Text="{Binding DailyGoalText}" 
+                                       HorizontalAlignment="Center" 
+                                       FontSize="12" 
+                                       Margin="0,5"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Troisième ligne : Dernières transactions et actions -->
+                <Grid Grid.Row="3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Liste des dernières transactions -->
+                    <Border Grid.Column="0" Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <Grid>
+                                <TextBlock Text="🕒 Dernières Transactions" Style="{StaticResource HeaderTextStyle}"/>
+                                <Button HorizontalAlignment="Right" 
+                                        Content="Actualiser" 
+                                        Padding="10,5"
+                                        Background="Transparent"
+                                        BorderBrush="#BDC3C7"
+                                        Command="{Binding RefreshTransactionsCommand}"/>
+                            </Grid>
+                            
+                            <DataGrid ItemsSource="{Binding RecentTransactions}" 
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      GridLinesVisibility="Horizontal"
+                                      HeadersVisibility="Column"
+                                      CanUserReorderColumns="False"
+                                      CanUserResizeColumns="True"
+                                      Height="300"
+                                      Margin="0,10">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Heure" 
+                                                        Binding="{Binding Time, StringFormat='{}{0:HH:mm:ss}'}" 
+                                                        Width="80"/>
+                                    <DataGridTextColumn Header="Type" 
+                                                        Binding="{Binding Type}" 
+                                                        Width="80"/>
+                                    <DataGridTextColumn Header="Client/Compte" 
+                                                        Binding="{Binding ClientAccount}" 
+                                                        Width="*"/>
+                                    <DataGridTextColumn Header="Montant" 
+                                                        Binding="{Binding Amount}" 
+                                                        Width="120"/>
+                                    <DataGridTemplateColumn Header="Statut" Width="100">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{Binding StatusColor}" 
+                                                        CornerRadius="3" 
+                                                        Padding="5,2">
+                                                    <TextBlock Text="{Binding Status}" 
+                                                               Foreground="White" 
+                                                               FontSize="11" 
+                                                               HorizontalAlignment="Center"/>
+                                                </Border>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Actions et consultation -->
+                    <Border Grid.Column="1" Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="🔍 Actions Rapides" Style="{StaticResource HeaderTextStyle}"/>
+                            
+                            <!-- Consultation compte -->
+                            <StackPanel Margin="0,10">
+                                <TextBlock Text="Consultation Compte" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                <TextBox x:Name="AccountSearchBox" 
+                                         Text="{Binding AccountSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                         Padding="10,8"
+                                         FontSize="14"
+                                         Margin="0,0,0,5"/>
+                                <Button Content="👤 Consulter" 
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Command="{Binding ConsultAccountCommand}"/>
+                            </StackPanel>
+
+                            <Separator Margin="0,15"/>
+
+                            <!-- Génération rapport -->
+                            <StackPanel Margin="0,10">
+                                <TextBlock Text="Rapports" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                <Button Content="📊 Rapport Journalier" 
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Background="#17A2B8"
+                                        Command="{Binding GenerateDailyReportCommand}"/>
+                                <Button Content="📈 Export Excel" 
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Background="#28A745"
+                                        Command="{Binding ExportToExcelCommand}"/>
+                            </StackPanel>
+
+                            <Separator Margin="0,15"/>
+
+                            <!-- Autres actions -->
+                            <StackPanel Margin="0,10">
+                                <TextBlock Text="Autres Actions" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                <Button Content="⚙️ Configuration" 
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Background="#6C757D"
+                                        Command="{Binding ConfigurationCommand}"/>
+                                <Button Content="📞 Support" 
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Background="#FFC107"
+                                        Command="{Binding SupportCommand}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- Barre de statut -->
+        <Border Grid.Row="2" Background="#34495E" Padding="15,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock Text="💼" Foreground="White" FontSize="14" Margin="0,0,10,0"/>
+                    <TextBlock Text="{Binding BranchName}" Foreground="White" FontSize="14"/>
+                    <TextBlock Text=" • " Foreground="#BDC3C7" FontSize="14"/>
+                    <TextBlock Text="{Binding SessionId, StringFormat='Session: {0}'}" Foreground="#BDC3C7" FontSize="14"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,20,0">
+                    <Ellipse Width="12" Height="12" Fill="{Binding ConnectionStatusColor}" Margin="0,0,5,0"/>
+                    <TextBlock Text="{Binding ConnectionStatus}" Foreground="White" FontSize="14"/>
+                </StackPanel>
+
+                <TextBlock Grid.Column="2" 
+                           Text="{Binding LastTransactionTime, StringFormat='Dernière transaction: {0:HH:mm:ss}'}" 
+                           Foreground="#BDC3C7" 
+                           FontSize="14"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

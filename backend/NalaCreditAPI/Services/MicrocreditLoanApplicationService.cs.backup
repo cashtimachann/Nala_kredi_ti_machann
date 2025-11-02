@@ -1,0 +1,933 @@
+using NalaCreditAPI.Models;
+using NalaCreditAPI.DTOs;
+using NalaCreditAPI.Data;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+
+namespace NalaCreditAPI.Services
+{
+    public interface IMicrocreditLoanApplicationService
+    {
+        // Gestion des demandes de crédit
+        Task<MicrocreditLoanApplicationDto?> GetApplicationAsync(Guid id);
+        Task<MicrocreditApplicationListResponseDto> GetApplicationsAsync(
+            int page = 1, 
+            int pageSize = 10, 
+            MicrocreditApplicationStatus? status = null,
+            MicrocreditLoanType? loanType = null,
+            int? branchId = null);
+        Task<MicrocreditLoanApplicationDto> CreateApplicationAsync(CreateMicrocreditLoanApplicationDto dto, string userId);
+        Task<MicrocreditLoanApplicationDto> UpdateApplicationAsync(Guid id, CreateMicrocreditLoanApplicationDto dto);
+        Task<MicrocreditLoanApplicationDto> SubmitApplicationAsync(Guid id);
+        Task<MicrocreditLoanApplicationDto> ReviewApplicationAsync(Guid id, string reviewerId, string comments);
+        Task<MicrocreditLoanApplicationDto> ApproveApplicationAsync(Guid id, string approverId, string comments, decimal? approvedAmount = null);
+        Task<MicrocreditLoanApplicationDto> RejectApplicationAsync(Guid id, string rejectedBy, string reason);
+        Task<RiskAssessmentDto> CalculateRiskAssessmentAsync(Guid applicationId);
+        Task<bool> ValidateApplicationAsync(Guid id);
+
+        // Gestion des prêts
+        Task<MicrocreditLoanDto?> GetLoanAsync(Guid id);
+        Task<MicrocreditLoanListResponseDto> GetLoansAsync(int page, int pageSize, 
+            MicrocreditLoanStatus? status = null, MicrocreditLoanType? loanType = null, 
+            int? branchId = null, bool? isOverdue = null);
+        Task<List<MicrocreditLoanDto>> GetCustomerLoansAsync(int customerId);
+        Task<MicrocreditLoanDto> DisburseLoanAsync(Guid loanId, string disbursedBy, DateTime disbursementDate, string? notes = null);
+        Task<List<MicrocreditPaymentScheduleDto>> GetPaymentScheduleAsync(Guid loanId);
+        Task<MicrocreditLoanDto> MarkLoanAsDefaultAsync(Guid loanId, string markedBy, string reason);
+        Task<MicrocreditLoanDto> RehabilitateLoanAsync(Guid loanId, string rehabilitatedBy, string? notes = null);
+        Task<LoanSummaryDto?> GetLoanSummaryAsync(Guid loanId);
+        Task<List<MicrocreditPaymentDto>> GetLoanTransactionsAsync(Guid loanId);
+        Task<List<OverdueLoanDto>> GetOverdueLoansAsync(int daysOverdue = 1);
+
+        // Gestion des paiements
+        Task<MicrocreditPaymentDto?> GetPaymentAsync(Guid id);
+        Task<MicrocreditPaymentDto> RecordPaymentAsync(CreateMicrocreditPaymentDto dto, string recordedBy);
+        Task<List<MicrocreditPaymentDto>> GetLoanPaymentsAsync(Guid loanId);
+        Task<MicrocreditPaymentDto> ConfirmPaymentAsync(Guid paymentId, string confirmedBy, string? notes = null);
+        Task<MicrocreditPaymentDto> CancelPaymentAsync(Guid paymentId, string cancelledBy, string reason);
+        Task<List<MicrocreditPaymentDto>> GetPendingPaymentsAsync(int? branchId = null);
+        Task<PaymentHistoryResponseDto> GetPaymentHistoryAsync(int page, int pageSize, 
+            DateTime? fromDate = null, DateTime? toDate = null, 
+            MicrocreditPaymentStatus? status = null, int? branchId = null);
+        Task<PaymentStatisticsDto> GetPaymentStatisticsAsync(DateTime? fromDate = null, 
+            DateTime? toDate = null, int? branchId = null);
+        Task<PaymentReceiptDto?> GeneratePaymentReceiptAsync(Guid paymentId);
+        Task<MicrocreditPaymentDto> ProcessEarlyPayoffAsync(EarlyPayoffDto dto, string processedBy);
+    }
+
+    public class MicrocreditLoanApplicationService : IMicrocreditLoanApplicationService
+    {
+        private readonly ApplicationDbContext _context;
+        private readonly IMicrocreditFinancialCalculatorService _calculator;
+
+        public MicrocreditLoanApplicationService(ApplicationDbContext context, IMicrocreditFinancialCalculatorService calculator)
+        {
+            _context = context;
+            _calculator = calculator;
+        }
+
+        public async Task<MicrocreditLoanApplicationDto?> GetApplicationAsync(Guid id)
+        {
+            var application = await _context.MicrocreditLoanApplications
+                .Include(a => a.Borrower)
+                .Include(a => a.Documents)
+                .Include(a => a.Guarantees)
+                .Include(a => a.ApprovalSteps)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (application == null) return null;
+
+            return MapToDto(application);
+        }
+
+        public async Task<MicrocreditApplicationListResponseDto> GetApplicationsAsync(
+            int page = 1, 
+            int pageSize = 10, 
+            MicrocreditApplicationStatus? status = null,
+            MicrocreditLoanType? loanType = null,
+            int? branchId = null)
+        {
+            var query = _context.MicrocreditLoanApplications
+                .Include(a => a.Borrower)
+                .AsQueryable();
+
+            if (status.HasValue)
+                query = query.Where(a => a.Status == status.Value);
+
+            if (loanType.HasValue)
+                query = query.Where(a => a.LoanType == loanType.Value);
+
+            if (branchId.HasValue)
+                query = query.Where(a => a.BranchId == branchId.Value);
+
+            var totalCount = await query.CountAsync();
+            var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+            var applications = await query
+                .OrderByDescending(a => a.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return new MicrocreditApplicationListResponseDto
+            {
+                Applications = applications.Select(MapToDto).ToList(),
+                TotalCount = totalCount,
+                TotalPages = totalPages,
+                CurrentPage = page,
+                PageSize = pageSize
+            };
+        }
+
+        public async Task<MicrocreditLoanApplicationDto> CreateApplicationAsync(CreateMicrocreditLoanApplicationDto dto, string userId)
+        {
+            var borrower = await _context.MicrocreditBorrowers.FindAsync(dto.BorrowerId);
+            if (borrower == null)
+                throw new ArgumentException("Borrower not found");
+
+            // Calculer le ratio dette/revenu
+            var debtToIncomeRatio = (dto.ExistingDebts + _calculator.CalculateMonthlyPayment(dto.RequestedAmount, 0.025m, dto.RequestedDurationMonths)) / dto.MonthlyIncome;
+
+            var application = new MicrocreditLoanApplication
+            {
+                Id = Guid.NewGuid(),
+                ApplicationNumber = await GenerateApplicationNumberAsync(),
+                BorrowerId = dto.BorrowerId,
+                LoanType = dto.LoanType,
+                RequestedAmount = dto.RequestedAmount,
+                RequestedDurationMonths = dto.RequestedDurationMonths,
+                Purpose = dto.Purpose,
+                BusinessPlan = dto.BusinessPlan,
+                Currency = dto.Currency,
+                BranchId = dto.BranchId,
+                BranchName = await GetBranchNameAsync(dto.BranchId),
+                MonthlyIncome = dto.MonthlyIncome,
+                MonthlyExpenses = dto.MonthlyExpenses,
+                ExistingDebts = dto.ExistingDebts,
+                CollateralValue = dto.CollateralValue,
+                DebtToIncomeRatio = debtToIncomeRatio,
+                Status = MicrocreditApplicationStatus.Draft,
+                LoanOfficerId = userId,
+                LoanOfficerName = await GetUserNameAsync(userId)
+            };
+
+            _context.MicrocreditLoanApplications.Add(application);
+
+            // Ajouter les garanties
+            foreach (var guaranteeDto in dto.Guarantees)
+            {
+                var guarantee = new MicrocreditGuarantee
+                {
+                    Id = Guid.NewGuid(),
+                    ApplicationId = application.Id,
+                    Type = guaranteeDto.Type,
+                    Description = guaranteeDto.Description,
+                    Value = guaranteeDto.Value,
+                    Currency = guaranteeDto.Currency,
+                    GuarantorInfo = guaranteeDto.GuarantorInfo != null ? JsonSerializer.Serialize(guaranteeDto.GuarantorInfo) : null
+                };
+                _context.MicrocreditGuarantees.Add(guarantee);
+            }
+
+            await _context.SaveChangesAsync();
+
+            return await GetApplicationAsync(application.Id) ?? throw new InvalidOperationException("Failed to retrieve created application");
+        }
+
+        public async Task<MicrocreditLoanApplicationDto> SubmitApplicationAsync(Guid id)
+        {
+            var application = await _context.MicrocreditLoanApplications
+                .Include(a => a.Guarantees)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (application == null)
+                throw new ArgumentException("Application not found");
+
+            if (application.Status != MicrocreditApplicationStatus.Draft)
+                throw new InvalidOperationException("Only draft applications can be submitted");
+
+            // Valider l'application avant soumission
+            var isValid = await ValidateApplicationAsync(id);
+            if (!isValid)
+                throw new InvalidOperationException("Application validation failed");
+
+            application.Status = MicrocreditApplicationStatus.Submitted;
+            application.SubmittedAt = DateTime.UtcNow;
+            application.UpdatedAt = DateTime.UtcNow;
+
+            // Créer l'étape d'approbation initiale
+            var initialApproval = new MicrocreditApprovalStep
+            {
+                Id = Guid.NewGuid(),
+                ApplicationId = application.Id,
+                Level = MicrocreditApprovalLevel.LoanOfficer,
+                ApproverId = application.LoanOfficerId,
+                ApproverName = application.LoanOfficerName,
+                Status = "PENDING"
+            };
+
+            _context.MicrocreditApprovalSteps.Add(initialApproval);
+            await _context.SaveChangesAsync();
+
+            return await GetApplicationAsync(id) ?? throw new InvalidOperationException("Failed to retrieve updated application");
+        }
+
+        public async Task<MicrocreditLoanApplicationDto> ReviewApplicationAsync(Guid id, string reviewerId, string comments)
+        {
+            var application = await _context.MicrocreditLoanApplications
+                .FirstOrDefaultAsync(a => a.Id == id);
+            
+            if (application == null)
+                throw new ArgumentException("Application not found");
+            
+            if (application.Status != MicrocreditApplicationStatus.Submitted)
+                throw new InvalidOperationException("Can only review submitted applications");
+            
+            application.Status = MicrocreditApplicationStatus.UnderReview;
+            application.ReviewedAt = DateTime.UtcNow;
+            application.UpdatedAt = DateTime.UtcNow;
+            
+            await _context.SaveChangesAsync();
+            
+            return await GetApplicationAsync(id) ?? throw new InvalidOperationException("Failed to retrieve reviewed application");
+        }
+
+        public async Task<MicrocreditLoanApplicationDto> ApproveApplicationAsync(Guid id, string approverId, string comments, decimal? approvedAmount = null)
+        {
+            var application = await _context.MicrocreditLoanApplications
+                .Include(a => a.ApprovalSteps)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (application == null)
+                throw new ArgumentException("Application not found");
+
+            if (application.Status != MicrocreditApplicationStatus.Submitted && 
+                application.Status != MicrocreditApplicationStatus.UnderReview)
+                throw new InvalidOperationException("Application is not in a reviewable state");
+
+            // Mettre à jour l'étape d'approbation actuelle
+            var currentStep = application.ApprovalSteps
+                .Where(s => s.Level == application.CurrentApprovalLevel && s.Status == "PENDING")
+                .FirstOrDefault();
+
+            if (currentStep != null)
+            {
+                currentStep.Status = "APPROVED";
+                currentStep.Comments = comments;
+                currentStep.RequiredAmount = approvedAmount ?? application.RequestedAmount;
+                currentStep.ProcessedAt = DateTime.UtcNow;
+            }
+
+            // Déterminer le niveau d'approbation suivant
+            var nextLevel = GetNextApprovalLevel(application.CurrentApprovalLevel, application.RequestedAmount);
+            
+            if (nextLevel == null)
+            {
+                // Approbation finale
+                application.Status = MicrocreditApplicationStatus.Approved;
+                application.ApprovedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                // Passer au niveau suivant
+                application.Status = MicrocreditApplicationStatus.UnderReview;
+                application.CurrentApprovalLevel = nextLevel.Value;
+                
+                // Créer la prochaine étape d'approbation
+                var nextStep = new MicrocreditApprovalStep
+                {
+                    Id = Guid.NewGuid(),
+                    ApplicationId = application.Id,
+                    Level = nextLevel.Value,
+                    ApproverId = "", // À assigner par le système
+                    ApproverName = GetApproverNameForLevel(nextLevel.Value),
+                    Status = "PENDING"
+                };
+                _context.MicrocreditApprovalSteps.Add(nextStep);
+            }
+
+            application.ReviewedAt = DateTime.UtcNow;
+            application.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return await GetApplicationAsync(id) ?? throw new InvalidOperationException("Failed to retrieve updated application");
+        }
+
+        public async Task<MicrocreditLoanApplicationDto> RejectApplicationAsync(Guid id, string rejectedBy, string reason)
+        {
+            var application = await _context.MicrocreditLoanApplications
+                .Include(a => a.ApprovalSteps)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (application == null)
+                throw new ArgumentException("Application not found");
+
+            application.Status = MicrocreditApplicationStatus.Rejected;
+            application.RejectedAt = DateTime.UtcNow;
+            application.RejectionReason = reason;
+            application.UpdatedAt = DateTime.UtcNow;
+
+            // Mettre à jour l'étape d'approbation actuelle
+            var currentStep = application.ApprovalSteps
+                .Where(s => s.Level == application.CurrentApprovalLevel && s.Status == "PENDING")
+                .FirstOrDefault();
+
+            if (currentStep != null)
+            {
+                currentStep.Status = "REJECTED";
+                currentStep.Comments = reason;
+                currentStep.ProcessedAt = DateTime.UtcNow;
+            }
+
+            await _context.SaveChangesAsync();
+
+            return await GetApplicationAsync(id) ?? throw new InvalidOperationException("Failed to retrieve updated application");
+        }
+
+        public async Task<RiskAssessmentDto> CalculateRiskAssessmentAsync(Guid applicationId)
+        {
+            var application = await _context.MicrocreditLoanApplications
+                .Include(a => a.Borrower)
+                .FirstOrDefaultAsync(a => a.Id == applicationId);
+
+            if (application == null)
+                throw new ArgumentException("Application not found");
+
+            var factors = new List<RiskFactorDto>();
+            var score = 500; // Score de base
+
+            // Facteur 1: Ratio dette/revenu
+            if (application.DebtToIncomeRatio <= 0.3m)
+            {
+                factors.Add(new RiskFactorDto { Factor = "Debt-to-Income Ratio", Impact = "POSITIVE", Weight = 0.25m, Description = "Low debt-to-income ratio" });
+                score += 100;
+            }
+            else if (application.DebtToIncomeRatio > 0.5m)
+            {
+                factors.Add(new RiskFactorDto { Factor = "Debt-to-Income Ratio", Impact = "NEGATIVE", Weight = 0.25m, Description = "High debt-to-income ratio" });
+                score -= 150;
+            }
+
+            // Facteur 2: Garanties
+            var guaranteeValue = await _context.MicrocreditGuarantees
+                .Where(g => g.ApplicationId == applicationId)
+                .SumAsync(g => g.Value);
+
+            var guaranteeCoverage = guaranteeValue / application.RequestedAmount;
+            if (guaranteeCoverage >= 1.0m)
+            {
+                factors.Add(new RiskFactorDto { Factor = "Collateral Coverage", Impact = "POSITIVE", Weight = 0.20m, Description = "Full collateral coverage" });
+                score += 80;
+            }
+            else if (guaranteeCoverage < 0.5m)
+            {
+                factors.Add(new RiskFactorDto { Factor = "Collateral Coverage", Impact = "NEGATIVE", Weight = 0.20m, Description = "Low collateral coverage" });
+                score -= 100;
+            }
+
+            // Facteur 3: Historique de crédit
+            if (application.Borrower.CreditScore.HasValue)
+            {
+                if (application.Borrower.CreditScore >= 700)
+                {
+                    factors.Add(new RiskFactorDto { Factor = "Credit History", Impact = "POSITIVE", Weight = 0.30m, Description = "Excellent credit history" });
+                    score += 120;
+                }
+                else if (application.Borrower.CreditScore < 500)
+                {
+                    factors.Add(new RiskFactorDto { Factor = "Credit History", Impact = "NEGATIVE", Weight = 0.30m, Description = "Poor credit history" });
+                    score -= 200;
+                }
+            }
+
+            // Facteur 4: Stabilité d'emploi/business
+            if (application.Borrower.YearsInBusiness.HasValue && application.Borrower.YearsInBusiness >= 3)
+            {
+                factors.Add(new RiskFactorDto { Factor = "Business Stability", Impact = "POSITIVE", Weight = 0.15m, Description = "Established business" });
+                score += 60;
+            }
+
+            // Déterminer le niveau de risque
+            var riskLevel = score switch
+            {
+                >= 700 => "LOW",
+                >= 600 => "MEDIUM", 
+                >= 400 => "HIGH",
+                _ => "VERY_HIGH"
+            };
+
+            var recommendation = riskLevel switch
+            {
+                "LOW" => "Recommend approval with standard terms",
+                "MEDIUM" => "Recommend approval with additional monitoring",
+                "HIGH" => "Recommend approval with enhanced terms or additional guarantees",
+                _ => "Recommend rejection or require significant risk mitigation"
+            };
+
+            return new RiskAssessmentDto
+            {
+                Score = score,
+                Level = riskLevel,
+                Factors = factors,
+                Recommendation = recommendation,
+                AssessedBy = "System",
+                AssessedAt = DateTime.UtcNow
+            };
+        }
+
+        public async Task<bool> ValidateApplicationAsync(Guid id)
+        {
+            var application = await _context.MicrocreditLoanApplications
+                .Include(a => a.Borrower)
+                .Include(a => a.Guarantees)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (application == null) return false;
+
+            // Validation des montants
+            if (application.RequestedAmount <= 0) return false;
+            if (application.RequestedDurationMonths <= 0) return false;
+
+            // Validation du ratio dette/revenu
+            if (application.DebtToIncomeRatio > 0.6m) return false; // Maximum 60%
+
+            // Validation des garanties (minimum 50% de couverture pour les gros montants)
+            if (application.RequestedAmount > 100000) // Pour les prêts > 100k
+            {
+                var guaranteeValue = application.Guarantees.Sum(g => g.Value);
+                if (guaranteeValue < application.RequestedAmount * 0.5m) return false;
+            }
+
+            return true;
+        }
+
+        // Méthodes utilitaires
+        private async Task<string> GenerateApplicationNumberAsync()
+        {
+            var today = DateTime.Today;
+            var prefix = $"APP-{today:yyyyMMdd}";
+            
+            var lastApplication = await _context.MicrocreditLoanApplications
+                .Where(a => a.ApplicationNumber.StartsWith(prefix))
+                .OrderByDescending(a => a.ApplicationNumber)
+                .FirstOrDefaultAsync();
+
+            var sequence = 1;
+            if (lastApplication != null)
+            {
+                var lastSequence = lastApplication.ApplicationNumber.Split('-').Last();
+                if (int.TryParse(lastSequence, out var last))
+                {
+                    sequence = last + 1;
+                }
+            }
+
+            return $"{prefix}-{sequence:D3}";
+        }
+
+        private async Task<string> GetBranchNameAsync(int branchId)
+        {
+            var branch = await _context.Branches.FindAsync(branchId);
+            return branch?.Name ?? "Unknown Branch";
+        }
+
+        private async Task<string> GetUserNameAsync(string userId)
+        {
+            var user = await _context.Users.FindAsync(userId);
+            return user != null ? $"{user.FirstName} {user.LastName}" : "Unknown User";
+        }
+
+        private MicrocreditApprovalLevel? GetNextApprovalLevel(MicrocreditApprovalLevel currentLevel, decimal amount)
+        {
+            return currentLevel switch
+            {
+                MicrocreditApprovalLevel.LoanOfficer when amount > 50000 => MicrocreditApprovalLevel.BranchManager,
+                MicrocreditApprovalLevel.BranchManager when amount > 200000 => MicrocreditApprovalLevel.RegionalManager,
+                MicrocreditApprovalLevel.RegionalManager when amount > 500000 => MicrocreditApprovalLevel.CreditCommittee,
+                _ => null
+            };
+        }
+
+        private string GetApproverNameForLevel(MicrocreditApprovalLevel level)
+        {
+            return level switch
+            {
+                MicrocreditApprovalLevel.LoanOfficer => "Loan Officer",
+                MicrocreditApprovalLevel.BranchManager => "Branch Manager",
+                MicrocreditApprovalLevel.RegionalManager => "Regional Manager",
+                MicrocreditApprovalLevel.CreditCommittee => "Credit Committee",
+                _ => "Unknown"
+            };
+        }
+
+        private MicrocreditLoanApplicationDto MapToDto(MicrocreditLoanApplication application)
+        {
+            var dto = new MicrocreditLoanApplicationDto
+            {
+                Id = application.Id,
+                ApplicationNumber = application.ApplicationNumber,
+                BorrowerId = application.BorrowerId,
+                LoanType = application.LoanType.ToString(),
+                RequestedAmount = application.RequestedAmount,
+                RequestedDurationMonths = application.RequestedDurationMonths,
+                Purpose = application.Purpose,
+                BusinessPlan = application.BusinessPlan,
+                Currency = application.Currency.ToString(),
+                BranchId = application.BranchId,
+                BranchName = application.BranchName,
+                MonthlyIncome = application.MonthlyIncome,
+                MonthlyExpenses = application.MonthlyExpenses,
+                ExistingDebts = application.ExistingDebts,
+                CollateralValue = application.CollateralValue,
+                DebtToIncomeRatio = application.DebtToIncomeRatio,
+                CurrentApprovalLevel = application.CurrentApprovalLevel.ToString(),
+                Status = application.Status.ToString(),
+                SubmittedAt = application.SubmittedAt,
+                ReviewedAt = application.ReviewedAt,
+                ApprovedAt = application.ApprovedAt,
+                RejectedAt = application.RejectedAt,
+                RejectionReason = application.RejectionReason,
+                CreatedAt = application.CreatedAt,
+                UpdatedAt = application.UpdatedAt,
+                LoanOfficerId = application.LoanOfficerId,
+                LoanOfficerName = application.LoanOfficerName
+            };
+
+            // Mapper l'emprunteur si chargé
+            if (application.Borrower != null)
+            {
+                dto.Borrower = new MicrocreditBorrowerDto
+                {
+                    Id = application.Borrower.Id,
+                    FirstName = application.Borrower.FirstName,
+                    LastName = application.Borrower.LastName,
+                    FullName = application.Borrower.FullName,
+                    DateOfBirth = application.Borrower.DateOfBirth,
+                    Gender = application.Borrower.Gender,
+                    Occupation = application.Borrower.Occupation,
+                    MonthlyIncome = application.Borrower.MonthlyIncome,
+                    EmploymentType = application.Borrower.EmploymentType,
+                    YearsInBusiness = application.Borrower.YearsInBusiness,
+                    CreditScore = application.Borrower.CreditScore,
+                    CreatedAt = application.Borrower.CreatedAt,
+                    UpdatedAt = application.Borrower.UpdatedAt
+                };
+
+                // Désérialiser les données JSON
+                if (!string.IsNullOrEmpty(application.Borrower.Address))
+                {
+                    dto.Borrower.Address = JsonSerializer.Deserialize<BorrowerAddressDto>(application.Borrower.Address) ?? new();
+                }
+
+                if (!string.IsNullOrEmpty(application.Borrower.Contact))
+                {
+                    dto.Borrower.Contact = JsonSerializer.Deserialize<BorrowerContactDto>(application.Borrower.Contact) ?? new();
+                }
+
+                if (!string.IsNullOrEmpty(application.Borrower.Identity))
+                {
+                    dto.Borrower.Identity = JsonSerializer.Deserialize<BorrowerIdentityDto>(application.Borrower.Identity) ?? new();
+                }
+
+                if (!string.IsNullOrEmpty(application.Borrower.References))
+                {
+                    dto.Borrower.References = JsonSerializer.Deserialize<List<ReferenceDto>>(application.Borrower.References) ?? new();
+                }
+
+                if (!string.IsNullOrEmpty(application.Borrower.PreviousLoans))
+                {
+                    dto.Borrower.PreviousLoans = JsonSerializer.Deserialize<List<PreviousLoanDto>>(application.Borrower.PreviousLoans);
+                }
+            }
+
+            return dto;
+        }
+
+        public async Task<MicrocreditLoanApplicationDto> UpdateApplicationAsync(Guid id, CreateMicrocreditLoanApplicationDto dto)
+        {
+            var application = await _context.MicrocreditLoanApplications
+                .Include(a => a.Borrower)
+                .FirstOrDefaultAsync(a => a.Id == id);
+            
+            if (application == null)
+                throw new ArgumentException("Application not found");
+            
+            if (application.Status != MicrocreditApplicationStatus.Draft)
+                throw new InvalidOperationException("Can only update applications in Draft status");
+            
+            // Update application properties
+            application.LoanType = dto.LoanType;
+            application.RequestedAmount = dto.RequestedAmount;
+            application.Purpose = dto.Purpose;
+            application.RequestedTermMonths = dto.RequestedTermMonths;
+            application.BusinessDescription = dto.BusinessDescription;
+            application.UpdatedAt = DateTime.UtcNow;
+            
+            // Update borrower information if provided
+            if (dto.Borrower != null)
+            {
+                application.Borrower.FirstName = dto.Borrower.FirstName;
+                application.Borrower.LastName = dto.Borrower.LastName;
+                application.Borrower.DateOfBirth = dto.Borrower.DateOfBirth;
+                application.Borrower.Gender = dto.Borrower.Gender;
+                application.Borrower.Occupation = dto.Borrower.Occupation;
+                application.Borrower.MonthlyIncome = dto.Borrower.MonthlyIncome;
+                application.Borrower.EmploymentType = dto.Borrower.EmploymentType;
+                application.Borrower.YearsInBusiness = dto.Borrower.YearsInBusiness;
+                
+                // Serialize complex objects
+                application.Borrower.Address = JsonSerializer.Serialize(dto.Borrower.Address);
+                application.Borrower.Contact = JsonSerializer.Serialize(dto.Borrower.Contact);
+                application.Borrower.Identity = JsonSerializer.Serialize(dto.Borrower.Identity);
+                application.Borrower.References = JsonSerializer.Serialize(dto.Borrower.References);
+                
+                application.Borrower.UpdatedAt = DateTime.UtcNow;
+            }
+            
+            await _context.SaveChangesAsync();
+            
+            return await GetApplicationAsync(id) ?? throw new InvalidOperationException("Failed to retrieve updated application");
+        }
+
+
+
+        // Implémentations temporaires des méthodes manquantes
+        public async Task<MicrocreditLoanDto?> GetLoanAsync(Guid id)
+        {
+            var loan = await _context.MicrocreditLoans
+                .Include(l => l.Application)
+                    .ThenInclude(a => a.Borrower)
+                .Include(l => l.PaymentSchedules)
+                .Include(l => l.Payments)
+                .FirstOrDefaultAsync(l => l.Id == id);
+
+            if (loan == null)
+                return null;
+
+            return new MicrocreditLoanDto
+            {
+                Id = loan.Id,
+                ApplicationId = loan.ApplicationId,
+                LoanNumber = loan.LoanNumber,
+                PrincipalAmount = loan.PrincipalAmount,
+                InterestRate = loan.InterestRate,
+                OutstandingPrincipal = loan.OutstandingPrincipal,
+                OutstandingInterest = loan.OutstandingInterest,
+                TotalOutstanding = loan.OutstandingPrincipal + loan.OutstandingInterest,
+                Status = loan.Status,
+                DisbursedAt = loan.DisbursedAt,
+                DueDate = loan.DueDate,
+                Currency = loan.Currency,
+                CreatedAt = loan.CreatedAt,
+                UpdatedAt = loan.UpdatedAt,
+                BorrowerName = loan.Application?.Borrower != null ? 
+                    $"{loan.Application.Borrower.FirstName} {loan.Application.Borrower.LastName}" : "",
+                PaymentsMade = loan.Payments.Count(p => p.Status == MicrocreditPaymentStatus.Confirmed),
+                NextPaymentDate = loan.PaymentSchedules
+                    .Where(s => s.Status == MicrocreditPaymentScheduleStatus.Pending)
+                    .OrderBy(s => s.DueDate)
+                    .FirstOrDefault()?.DueDate
+            };
+        }
+
+        public async Task<MicrocreditLoanListResponseDto> GetLoansAsync(int page, int pageSize, MicrocreditLoanStatus? status = null, MicrocreditLoanType? loanType = null, int? branchId = null, bool? isOverdue = null)
+        {
+            var query = _context.MicrocreditLoans
+                .Include(l => l.Application)
+                    .ThenInclude(a => a.Borrower)
+                .Include(l => l.PaymentSchedules)
+                .Include(l => l.Payments)
+                .AsQueryable();
+
+            // Apply filters
+            if (status.HasValue)
+                query = query.Where(l => l.Status == status.Value);
+
+            if (loanType.HasValue)
+                query = query.Where(l => l.Application.LoanType == loanType.Value);
+
+            if (branchId.HasValue)
+                query = query.Where(l => l.Application.BranchId == branchId.Value);
+
+            if (isOverdue == true)
+            {
+                var today = DateTime.UtcNow.Date;
+                query = query.Where(l => l.PaymentSchedules
+                    .Any(s => s.DueDate.Date < today && s.Status == MicrocreditPaymentScheduleStatus.Pending));
+            }
+
+            var totalCount = await query.CountAsync();
+            var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+            var loans = await query
+                .OrderByDescending(l => l.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            var loanDtos = new List<MicrocreditLoanDto>();
+            foreach (var loan in loans)
+            {
+                var dto = await GetLoanAsync(loan.Id);
+                if (dto != null)
+                    loanDtos.Add(dto);
+            }
+
+            return new MicrocreditLoanListResponseDto
+            {
+                Loans = loanDtos,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize,
+                TotalPages = totalPages
+            };
+        }
+
+        public Task<List<MicrocreditLoanDto>> GetCustomerLoansAsync(int customerId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public async Task<MicrocreditLoanDto> DisburseLoanAsync(Guid loanId, string disbursedBy, DateTime disbursementDate, string? notes = null)
+        {
+            // Find the approved application first
+            var application = await _context.MicrocreditLoanApplications
+                .Include(a => a.Borrower)
+                .FirstOrDefaultAsync(a => a.Id == loanId && a.Status == MicrocreditApplicationStatus.Approved);
+
+            if (application == null)
+                throw new ArgumentException("Approved application not found");
+
+            // Check if loan already exists
+            var existingLoan = await _context.MicrocreditLoans
+                .FirstOrDefaultAsync(l => l.ApplicationId == application.Id);
+
+            if (existingLoan != null)
+                throw new InvalidOperationException("Loan already disbursed for this application");
+
+            // Create the loan
+            var loan = new MicrocreditLoan
+            {
+                Id = Guid.NewGuid(),
+                ApplicationId = application.Id,
+                LoanNumber = await GenerateLoanNumberAsync(),
+                PrincipalAmount = application.ApprovedAmount ?? application.RequestedAmount,
+                InterestRate = await GetInterestRateForLoanType(application.LoanType),
+                OutstandingPrincipal = application.ApprovedAmount ?? application.RequestedAmount,
+                OutstandingInterest = 0,
+                Status = MicrocreditLoanStatus.Active,
+                DisbursedAt = disbursementDate,
+                DisbursedBy = disbursedBy,
+                DueDate = disbursementDate.AddMonths(application.RequestedTermMonths ?? 12),
+                Currency = "HTG",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _context.MicrocreditLoans.Add(loan);
+
+            // Generate payment schedule
+            await GeneratePaymentScheduleAsync(loan.Id, loan.PrincipalAmount, loan.InterestRate, 
+                application.RequestedTermMonths ?? 12, disbursementDate);
+
+            // Update application status
+            application.Status = MicrocreditApplicationStatus.Disbursed;
+            application.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return await GetLoanAsync(loan.Id) ?? throw new InvalidOperationException("Failed to retrieve disbursed loan");
+        }
+
+        public async Task<List<MicrocreditPaymentScheduleDto>> GetPaymentScheduleAsync(Guid loanId)
+        {
+            var schedules = await _context.MicrocreditPaymentSchedules
+                .Where(s => s.LoanId == loanId)
+                .OrderBy(s => s.DueDate)
+                .ToListAsync();
+
+            return schedules.Select(s => new MicrocreditPaymentScheduleDto
+            {
+                Id = s.Id,
+                LoanId = s.LoanId,
+                InstallmentNumber = s.InstallmentNumber,
+                DueDate = s.DueDate,
+                PrincipalAmount = s.PrincipalAmount,
+                InterestAmount = s.InterestAmount,
+                TotalAmount = s.TotalAmount,
+                PaidAmount = s.PaidAmount,
+                Status = s.Status,
+                CreatedAt = s.CreatedAt
+            }).ToList();
+        }
+
+        public Task<MicrocreditLoanDto> MarkLoanAsDefaultAsync(Guid loanId, string markedBy, string reason)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<MicrocreditLoanDto> RehabilitateLoanAsync(Guid loanId, string rehabilitatedBy, string? notes = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<LoanSummaryDto?> GetLoanSummaryAsync(Guid loanId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<List<MicrocreditPaymentDto>> GetLoanTransactionsAsync(Guid loanId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<List<OverdueLoanDto>> GetOverdueLoansAsync(int daysOverdue = 1)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<MicrocreditPaymentDto?> GetPaymentAsync(Guid id)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<MicrocreditPaymentDto> RecordPaymentAsync(CreateMicrocreditPaymentDto dto, string recordedBy)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<List<MicrocreditPaymentDto>> GetLoanPaymentsAsync(Guid loanId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<MicrocreditPaymentDto> ConfirmPaymentAsync(Guid paymentId, string confirmedBy, string? notes = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<MicrocreditPaymentDto> CancelPaymentAsync(Guid paymentId, string cancelledBy, string reason)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<List<MicrocreditPaymentDto>> GetPendingPaymentsAsync(int? branchId = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<PaymentHistoryResponseDto> GetPaymentHistoryAsync(int page, int pageSize, DateTime? fromDate = null, DateTime? toDate = null, MicrocreditPaymentStatus? status = null, int? branchId = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<PaymentStatisticsDto> GetPaymentStatisticsAsync(DateTime? fromDate = null, DateTime? toDate = null, int? branchId = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<PaymentReceiptDto?> GeneratePaymentReceiptAsync(Guid paymentId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<MicrocreditPaymentDto> ProcessEarlyPayoffAsync(EarlyPayoffDto dto, string processedBy)
+        {
+            throw new NotImplementedException();
+        }
+
+        // Méthodes utilitaires privées
+        private async Task<string> GenerateLoanNumberAsync()
+        {
+            var year = DateTime.Now.Year;
+            var count = await _context.MicrocreditLoans
+                .Where(l => l.CreatedAt.Year == year)
+                .CountAsync();
+            
+            return $"ML{year}{(count + 1):D6}";
+        }
+
+        private async Task<decimal> GetInterestRateForLoanType(MicrocreditLoanType loanType)
+        {
+            // Business logic for interest rates based on loan type
+            return loanType switch
+            {
+                MicrocreditLoanType.Business => 18.0m,
+                MicrocreditLoanType.Agriculture => 15.0m,
+                MicrocreditLoanType.Personal => 20.0m,
+                MicrocreditLoanType.Emergency => 22.0m,
+                _ => 18.0m
+            };
+        }
+
+        private async Task GeneratePaymentScheduleAsync(Guid loanId, decimal principalAmount, decimal annualInterestRate, 
+            int termInMonths, DateTime startDate)
+        {
+            var monthlyInterestRate = annualInterestRate / 100 / 12;
+            var monthlyPayment = _calculator.CalculateMonthlyPayment(principalAmount, annualInterestRate, termInMonths);
+            
+            var schedules = _calculator.GeneratePaymentSchedule(principalAmount, annualInterestRate, termInMonths, startDate);
+            
+            foreach (var schedule in schedules)
+            {
+                var paymentSchedule = new MicrocreditPaymentSchedule
+                {
+                    Id = Guid.NewGuid(),
+                    LoanId = loanId,
+                    InstallmentNumber = schedule.InstallmentNumber,
+                    DueDate = schedule.DueDate,
+                    PrincipalAmount = schedule.PrincipalAmount,
+                    InterestAmount = schedule.InterestAmount,
+                    TotalAmount = schedule.TotalAmount,
+                    PaidAmount = 0,
+                    Status = MicrocreditPaymentScheduleStatus.Pending,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                
+                _context.MicrocreditPaymentSchedules.Add(paymentSchedule);
+            }
+        }
+    }
+}

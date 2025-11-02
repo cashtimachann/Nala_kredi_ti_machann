@@ -1,0 +1,262 @@
+<Window x:Class="NalaCreditDesktop.LoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Nala Kredi Ti Machann - Connexion" 
+        Height="650" 
+        Width="450"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="#1a1a1a">
+    
+    <Window.Resources>
+        <Style x:Key="ModernTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#1e293b"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="15,12"/>
+        </Style>
+        
+        <Style x:Key="ModernPasswordBox" TargetType="PasswordBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#1e293b"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="15,12"/>
+        </Style>
+        
+        <Style x:Key="ModernButton" TargetType="Button">
+            <Setter Property="Background" Value="#dc2626"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Height" Value="50"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" 
+                                Background="{TemplateBinding Background}" 
+                                CornerRadius="8"
+                                Padding="20,12">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#991b1b"/>
+                                <Setter TargetName="border" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect Color="#dc2626" Opacity="0.7" ShadowDepth="4" BlurRadius="12"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#7f1d1d"/>
+                                <Setter TargetName="border" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.98" ScaleY="0.98"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    
+    <Grid>
+        <!-- Background Animation -->
+        <Rectangle>
+            <Rectangle.Fill>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#000000" Offset="0"/>
+                    <GradientStop Color="#1a1a1a" Offset="1"/>
+                </LinearGradientBrush>
+            </Rectangle.Fill>
+        </Rectangle>
+
+        <!-- Main Content -->
+        <Border VerticalAlignment="Center" 
+                HorizontalAlignment="Center" 
+                Width="380" 
+                CornerRadius="16"
+                Background="#ffffff"
+                Margin="20">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000" Opacity="0.2" ShadowDepth="10" BlurRadius="20"/>
+            </Border.Effect>
+            
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="120"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="70"/>
+                </Grid.RowDefinitions>
+                
+                <!-- Header with Logo -->
+                <Border Grid.Row="0" 
+                        CornerRadius="16,16,0,0">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#dc2626" Offset="0"/>
+                            <GradientStop Color="#991b1b" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Border.Effect>
+                        <DropShadowEffect Color="#0f172a" Opacity="0.4" ShadowDepth="5" BlurRadius="10"/>
+                    </Border.Effect>
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <!-- Logo/Icon -->
+                        <Viewbox Width="40" Height="40" Margin="0,0,0,5">
+                            <Canvas Width="24" Height="24">
+                                <Path Fill="#fbbf24" Data="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 5.5V7H9V5.5L3 7V9L9 10.5V12H15V10.5L21 9Z"/>
+                                <Path Fill="#34d399" Data="M12 22C13.1 22 14 21.1 14 20C14 18.9 13.1 18 12 18C10.9 18 10 18.9 10 20C10 21.1 10.9 22 12 22ZM3 15V13L9 11.5V13H15V11.5L21 13V15L15 16.5V18H9V16.5L3 15Z"/>
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Text="NALA KREDI TI MACHANN" 
+                                  FontSize="24" 
+                                  FontWeight="Bold" 
+                                  Foreground="#f1f5f9" 
+                                  HorizontalAlignment="Center"/>
+                        <TextBlock Text="System" 
+                                  FontSize="11" 
+                                  FontWeight="Light" 
+                                  Foreground="#94a3b8" 
+                                  HorizontalAlignment="Center"
+                                  Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Login Form -->
+                <Border Grid.Row="1" 
+                        Background="#ffffff" 
+                        Padding="35,30,35,20">
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Connexion" 
+                                  FontSize="20" 
+                                  FontWeight="Bold" 
+                                  Foreground="#1e293b"
+                                  Margin="0,0,0,25" 
+                                  HorizontalAlignment="Center"/>
+                        
+                        <!-- Email Input -->
+                        <StackPanel Margin="0,0,0,15">
+                            <TextBlock Text="Email" 
+                                      FontSize="12" 
+                                      FontWeight="SemiBold" 
+                                      Foreground="#475569" 
+                                      Margin="0,0,0,5"/>
+                            <Border Background="#f8fafc" 
+                                   BorderBrush="#e2e8f0" 
+                                   BorderThickness="2" 
+                                   CornerRadius="8"
+                                   Padding="0">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#64748b" Opacity="0.08" ShadowDepth="1" BlurRadius="3"/>
+                                </Border.Effect>
+                                <TextBox x:Name="EmailTextBox" 
+                                        Text="cashier@nalacredit.com"
+                                        Style="{StaticResource ModernTextBox}"
+                                        GotFocus="EmailTextBox_GotFocus"
+                                        LostFocus="EmailTextBox_LostFocus"/>
+                            </Border>
+                        </StackPanel>
+                        
+                        <!-- Password Input -->
+                        <StackPanel Margin="0,0,0,25">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Mot de passe" 
+                                          FontSize="12" 
+                                          FontWeight="SemiBold" 
+                                          Foreground="#475569" 
+                                          Margin="0,0,0,5"/>
+                                <TextBlock Grid.Column="1" 
+                                          Text="Oublié?" 
+                                          FontSize="11" 
+                                          Foreground="#3b82f6" 
+                                          Cursor="Hand"
+                                          MouseLeftButtonDown="ForgotPassword_MouseLeftButtonDown"/>
+                            </Grid>
+                            <Border Background="#f8fafc" 
+                                   BorderBrush="#e2e8f0" 
+                                   BorderThickness="2" 
+                                   CornerRadius="8"
+                                   Padding="0">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#64748b" Opacity="0.08" ShadowDepth="1" BlurRadius="3"/>
+                                </Border.Effect>
+                                <PasswordBox x:Name="PasswordBox" 
+                                            Password="Cashier123!"
+                                            Style="{StaticResource ModernPasswordBox}"
+                                            GotFocus="PasswordBox_GotFocus"
+                                            LostFocus="PasswordBox_LostFocus"/>
+                            </Border>
+                        </StackPanel>
+                        
+                        <!-- Login Button -->
+                        <Button x:Name="LoginButton" 
+                               Content="SE CONNECTER" 
+                               Style="{StaticResource ModernButton}"
+                               Click="LoginButton_Click">
+                            <Button.Effect>
+                                <DropShadowEffect Color="#dc2626" Opacity="0.4" ShadowDepth="4" BlurRadius="10"/>
+                            </Button.Effect>
+                        </Button>
+                        
+                        <!-- Progress Indicator -->
+                        <Border x:Name="ProgressIndicator" 
+                               Background="#dc2626" 
+                               Height="3" 
+                               Margin="0,15,0,0"
+                               Visibility="Collapsed"
+                               HorizontalAlignment="Stretch">
+                            <Border.Triggers>
+                                <EventTrigger RoutedEvent="Border.Loaded">
+                                    <BeginStoryboard>
+                                        <Storyboard RepeatBehavior="Forever">
+                                            <DoubleAnimation From="0" To="380" Duration="0:0:1.5"
+                                                           Storyboard.TargetProperty="(Border.RenderTransform).(TranslateTransform.X)"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </EventTrigger>
+                            </Border.Triggers>
+                            <Border.RenderTransform>
+                                <TranslateTransform X="-380"/>
+                            </Border.RenderTransform>
+                        </Border>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Footer -->
+                <Border Grid.Row="2" 
+                        Background="#f8fafc" 
+                        CornerRadius="0,0,16,16" 
+                        BorderThickness="0,1,0,0"
+                        BorderBrush="#e2e8f0">
+                    <Grid>
+                        <TextBlock x:Name="StatusText" 
+                                  Text="Prêt à se connecter..." 
+                                  FontSize="11" 
+                                  Foreground="#64748b"
+                                  VerticalAlignment="Center"
+                                  HorizontalAlignment="Center"/>
+                        
+                        <!-- Version Info -->
+                        <TextBlock Text="v2.1.0" 
+                                  FontSize="10" 
+                                  Foreground="#94a3b8"
+                                  VerticalAlignment="Center"
+                                  HorizontalAlignment="Right"
+                                  Margin="0,0,15,0"/>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

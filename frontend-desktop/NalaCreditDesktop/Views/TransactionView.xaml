@@ -1,0 +1,499 @@
+<UserControl x:Class="NalaCreditDesktop.Views.TransactionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:vm="clr-namespace:NalaCreditDesktop.ViewModels"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="800">
+
+    <UserControl.DataContext>
+        <vm:TransactionViewModel/>
+    </UserControl.DataContext>
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        
+        <Style x:Key="ActionButtonStyle" TargetType="Button">
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Padding" Value="15,10"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" 
+               Background="White" 
+               BorderBrush="#e2e8f0" 
+               BorderThickness="0,0,0,1" 
+               Padding="20">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Gestion des Transactions" 
+                              FontSize="24" 
+                              FontWeight="Bold"/>
+                    <TextBlock Text="Gérez les dépôts, retraits et consultez l'historique" 
+                              FontSize="14" 
+                              Foreground="#64748b" 
+                              Margin="0,5,0,0"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <TextBlock Text="Total: " FontWeight="Bold" Foreground="#475569"/>
+                        <TextBlock Text="{Binding TotalTransactions}" FontWeight="Bold" Foreground="#3b82f6" Margin="5,0"/>
+                        <TextBlock Text="transactions" Foreground="#64748b" Margin="5,0"/>
+                    </StackPanel>
+                </StackPanel>
+                
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="💰 Nouveau Dépôt" 
+                           Command="{Binding OpenQuickDepositCommand}"
+                           Background="#22c55e" 
+                           Style="{StaticResource ActionButtonStyle}"/>
+                    <Button Content="💸 Nouveau Retrait" 
+                           Command="{Binding OpenQuickWithdrawalCommand}"
+                           Background="#ef4444" 
+                           Style="{StaticResource ActionButtonStyle}"/>
+                    <Button Content="🔄 Actualiser" 
+                           Command="{Binding RefreshTransactionsCommand}"
+                           Background="#3b82f6" 
+                           Style="{StaticResource ActionButtonStyle}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Search and Filters -->
+        <Border Grid.Row="1" 
+               Background="#f8fafc" 
+               Padding="20">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBox Grid.Column="0" 
+                            Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                            Margin="0,0,10,0" 
+                            Padding="10"
+                            ToolTip="Rechercher par numéro de compte, nom du client ou référence..."/>
+
+                    <ComboBox Grid.Column="1" 
+                             SelectedValue="{Binding SelectedType}"
+                             Margin="0,0,10,0" 
+                             Padding="10">
+                        <ComboBoxItem Content="Tous" IsSelected="True"/>
+                        <ComboBoxItem Content="Dépôt"/>
+                        <ComboBoxItem Content="Retrait"/>
+                        <ComboBoxItem Content="Change"/>
+                    </ComboBox>
+
+                    <ComboBox Grid.Column="2" 
+                             SelectedValue="{Binding SelectedCurrency}"
+                             Margin="0,0,10,0" 
+                             Padding="10">
+                        <ComboBoxItem Content="Toutes" IsSelected="True"/>
+                        <ComboBoxItem Content="HTG"/>
+                        <ComboBoxItem Content="USD"/>
+                    </ComboBox>
+
+                    <ComboBox Grid.Column="3" 
+                             SelectedValue="{Binding SelectedStatus}"
+                             Padding="10">
+                        <ComboBoxItem Content="Tous" IsSelected="True"/>
+                        <ComboBoxItem Content="Complété"/>
+                        <ComboBoxItem Content="En attente"/>
+                        <ComboBoxItem Content="Annulé"/>
+                    </ComboBox>
+                </Grid>
+
+                <!-- Date Range -->
+                <StackPanel Orientation="Horizontal" 
+                           Margin="0,15,0,0">
+                    <TextBlock Text="Période:" 
+                              VerticalAlignment="Center" 
+                              Margin="0,0,10,0"
+                              FontWeight="SemiBold"/>
+                    <DatePicker SelectedDate="{Binding DateFrom}" 
+                               Margin="0,0,10,0"
+                               Width="120"/>
+                    <TextBlock Text="à" 
+                              VerticalAlignment="Center" 
+                              Margin="0,0,10,0"/>
+                    <DatePicker SelectedDate="{Binding DateTo}" 
+                               Margin="0,0,15,0"
+                               Width="120"/>
+                    <Button Content="Aujourd'hui" 
+                           Command="{Binding SetDateTodayCommand}"
+                           Padding="10,5" 
+                           Margin="0,0,5,0"/>
+                    <Button Content="Cette semaine" 
+                           Command="{Binding SetDateThisWeekCommand}"
+                           Padding="10,5" 
+                           Margin="0,0,5,0"/>
+                    <Button Content="Ce mois" 
+                           Command="{Binding SetDateThisMonthCommand}"
+                           Padding="10,5"
+                           Margin="0,0,5,0"/>
+                    <Button Content="🔄 Réinitialiser" 
+                           Command="{Binding ClearFiltersCommand}"
+                           Padding="10,5"
+                           Background="#f1f5f9"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Transaction List -->
+        <Grid Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Statistics Bar -->
+            <Border Grid.Row="0" Background="White" BorderBrush="#e2e8f0" BorderThickness="0,1" Padding="20,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Dépôts HTG" FontSize="11" Foreground="#64748b"/>
+                        <TextBlock Text="{Binding TotalDepositsHTG, StringFormat='{}{0:N2} HTG'}" 
+                                  FontSize="16" FontWeight="Bold" Foreground="#22c55e"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Retraits HTG" FontSize="11" Foreground="#64748b"/>
+                        <TextBlock Text="{Binding TotalWithdrawalsHTG, StringFormat='{}{0:N2} HTG'}" 
+                                  FontSize="16" FontWeight="Bold" Foreground="#ef4444"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Dépôts USD" FontSize="11" Foreground="#64748b"/>
+                        <TextBlock Text="{Binding TotalDepositsUSD, StringFormat='${}{0:N2}'}" 
+                                  FontSize="16" FontWeight="Bold" Foreground="#22c55e"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="3">
+                        <TextBlock Text="Retraits USD" FontSize="11" Foreground="#64748b"/>
+                        <TextBlock Text="{Binding TotalWithdrawalsUSD, StringFormat='${}{0:N2}'}" 
+                                  FontSize="16" FontWeight="Bold" Foreground="#ef4444"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- DataGrid with Loading Overlay -->
+            <Grid Grid.Row="1">
+                <DataGrid ItemsSource="{Binding FilteredTransactions}"
+                         SelectedItem="{Binding SelectedTransaction}"
+                         Margin="20"
+                         Background="White"
+                         GridLinesVisibility="Horizontal"
+                         HeadersVisibility="Column"
+                         CanUserAddRows="False"
+                         CanUserDeleteRows="False"
+                         IsReadOnly="True"
+                         SelectionMode="Extended"
+                         ClipboardCopyMode="IncludeHeader"
+                         AutoGenerateColumns="False"
+                         AlternatingRowBackground="#f8fafc"
+                         x:Name="TransactionsDataGrid">
+                    <DataGrid.InputBindings>
+                        <KeyBinding Command="ApplicationCommands.Copy" Key="C" Modifiers="Control"/>
+                        <KeyBinding Command="ApplicationCommands.SelectAll" Key="A" Modifiers="Control"/>
+                    </DataGrid.InputBindings>
+                    <DataGrid.CommandBindings>
+                        <CommandBinding Command="ApplicationCommands.Copy"
+                                        Executed="OnCopyExecuted"
+                                        CanExecute="OnCopyCanExecute"/>
+                        <CommandBinding Command="ApplicationCommands.SelectAll"
+                                        Executed="OnSelectAllExecuted"
+                                        CanExecute="OnSelectAllCanExecute"/>
+                    </DataGrid.CommandBindings>
+                    <DataGrid.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Copier"
+                                      Command="ApplicationCommands.Copy"
+                                      CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <MenuItem Header="Tout sélectionner"
+                                      Command="ApplicationCommands.SelectAll"
+                                      CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                        </ContextMenu>
+                    </DataGrid.ContextMenu>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Date/Heure" 
+                                          Binding="{Binding CreatedAt, StringFormat='dd/MM/yyyy HH:mm'}"
+                                          Width="130"/>
+                        <DataGridTextColumn Header="Type" 
+                                          Binding="{Binding TransactionType}"
+                                          Width="90"/>
+                        <DataGridTextColumn Header="Compte" 
+                                          Binding="{Binding AccountId}"
+                                          Width="130"/>
+                        <DataGridTextColumn Header="Client" 
+                                          Binding="{Binding CustomerName}"
+                                          Width="150"/>
+                        <DataGridTextColumn Header="Montant" 
+                                          Binding="{Binding Amount, StringFormat='{}{0:N2}'}"
+                                          Width="110"/>
+                        <DataGridTextColumn Header="Devise" 
+                                          Binding="{Binding Currency}"
+                                          Width="70"/>
+                        <DataGridTextColumn Header="Statut" 
+                                          Binding="{Binding Status}"
+                                          Width="90"/>
+                        <DataGridTextColumn Header="Référence" 
+                                          Binding="{Binding ReferenceNumber}"
+                                          Width="130"/>
+                        <DataGridTemplateColumn Header="Actions" Width="120">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <Button Content="👁" 
+                                               Command="{Binding DataContext.ViewTransactionDetailsCommand, 
+                                                        RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                               ToolTip="Voir détails"
+                                               Margin="2" Padding="5,2" FontSize="14"/>
+                                        <Button Content="🖨" 
+                                               Command="{Binding DataContext.PrintReceiptCommand, 
+                                                        RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                               ToolTip="Imprimer reçu"
+                                               Margin="2" Padding="5,2" FontSize="14"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- Loading Overlay -->
+                <Border Background="#80FFFFFF" 
+                       Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}"
+                       HorizontalAlignment="Stretch"
+                       VerticalAlignment="Stretch">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="⏳" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                        <TextBlock Text="Chargement des transactions..." 
+                                  FontSize="16" 
+                                  FontWeight="SemiBold"
+                                  HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- Quick Deposit Dialog -->
+        <Border Grid.RowSpan="3"
+               Background="#80000000"
+               Visibility="{Binding ShowQuickDepositDialog, Converter={StaticResource BoolToVis}}">
+            <Border Background="White" 
+                   Width="500" 
+                   MaxHeight="600"
+                   CornerRadius="10"
+                   Padding="0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <!-- Header avec bouton fermer -->
+                    <Border Grid.Row="0" 
+                            Background="#22c55e" 
+                            CornerRadius="10,10,0,0" 
+                            Padding="20,15">
+                        <Grid>
+                            <TextBlock Text="💰 Nouveau Dépôt" 
+                                      FontSize="20" 
+                                      FontWeight="Bold"
+                                      Foreground="White"
+                                      VerticalAlignment="Center"/>
+                            <Button Content="✕" 
+                                   Command="{Binding CancelQuickTransactionCommand}"
+                                   HorizontalAlignment="Right"
+                                   Background="Transparent"
+                                   Foreground="White"
+                                   BorderThickness="0"
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   Padding="10,0"
+                                   Cursor="Hand"
+                                   ToolTip="Fermer"/>
+                        </Grid>
+                    </Border>
+                    
+                    <!-- Contenu avec ScrollViewer -->
+                    <ScrollViewer Grid.Row="1" 
+                                 VerticalScrollBarVisibility="Auto"
+                                 Padding="30,20">
+                        <StackPanel>
+
+                    <TextBlock Text="Numéro de compte *" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding QuickAccountNumber}" Padding="10" Margin="0,0,0,15"/>
+
+                    <TextBlock Text="Montant *" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding QuickAmount}" Padding="10" Margin="0,0,0,15"/>
+
+                    <TextBlock Text="Devise *" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                    <ComboBox SelectedValue="{Binding QuickCurrency}" Padding="10" Margin="0,0,0,15">
+                        <ComboBoxItem Content="HTG" IsSelected="True"/>
+                        <ComboBoxItem Content="USD"/>
+                    </ComboBox>
+
+                    <TextBlock Text="Description (optionnel)" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding QuickDescription}" 
+                            Padding="10" 
+                            Height="60" 
+                            TextWrapping="Wrap" 
+                            AcceptsReturn="True"
+                            Margin="0,0,0,20"/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" 
+                               Content="Annuler" 
+                               Command="{Binding CancelQuickTransactionCommand}"
+                               Background="#e5e7eb" 
+                               Foreground="#1f2937"
+                               Padding="15,10" 
+                               Margin="0,0,5,0"
+                               BorderThickness="0"/>
+
+                        <Button Grid.Column="1" 
+                               Content="Confirmer le Dépôt" 
+                               Command="{Binding ProcessQuickDepositCommand}"
+                               Background="#22c55e" 
+                               Foreground="White"
+                               Padding="15,10" 
+                               Margin="5,0,0,0"
+                               BorderThickness="0"
+                               FontWeight="Bold"/>
+                    </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Border>
+
+        <!-- Quick Withdrawal Dialog -->
+        <Border Grid.RowSpan="3"
+               Background="#80000000"
+               Visibility="{Binding ShowQuickWithdrawalDialog, Converter={StaticResource BoolToVis}}">
+            <Border Background="White" 
+                   Width="500" 
+                   MaxHeight="600"
+                   CornerRadius="10"
+                   Padding="0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <!-- Header avec bouton fermer -->
+                    <Border Grid.Row="0" 
+                            Background="#ef4444" 
+                            CornerRadius="10,10,0,0" 
+                            Padding="20,15">
+                        <Grid>
+                            <TextBlock Text="💸 Nouveau Retrait" 
+                                      FontSize="20" 
+                                      FontWeight="Bold"
+                                      Foreground="White"
+                                      VerticalAlignment="Center"/>
+                            <Button Content="✕" 
+                                   Command="{Binding CancelQuickTransactionCommand}"
+                                   HorizontalAlignment="Right"
+                                   Background="Transparent"
+                                   Foreground="White"
+                                   BorderThickness="0"
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   Padding="10,0"
+                                   Cursor="Hand"
+                                   ToolTip="Fermer"/>
+                        </Grid>
+                    </Border>
+                    
+                    <!-- Contenu avec ScrollViewer -->
+                    <ScrollViewer Grid.Row="1" 
+                                 VerticalScrollBarVisibility="Auto"
+                                 Padding="30,20">
+                        <StackPanel>
+
+                    <TextBlock Text="Numéro de compte *" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding QuickAccountNumber}" Padding="10" Margin="0,0,0,15"/>
+
+                    <TextBlock Text="Montant *" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding QuickAmount}" Padding="10" Margin="0,0,0,15"/>
+
+                    <TextBlock Text="Devise *" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                    <ComboBox SelectedValue="{Binding QuickCurrency}" Padding="10" Margin="0,0,0,15">
+                        <ComboBoxItem Content="HTG" IsSelected="True"/>
+                        <ComboBoxItem Content="USD"/>
+                    </ComboBox>
+
+                    <TextBlock Text="Description (optionnel)" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding QuickDescription}" 
+                            Padding="10" 
+                            Height="60" 
+                            TextWrapping="Wrap" 
+                            AcceptsReturn="True"
+                            Margin="0,0,0,20"/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" 
+                               Content="Annuler" 
+                               Command="{Binding CancelQuickTransactionCommand}"
+                               Background="#e5e7eb" 
+                               Foreground="#1f2937"
+                               Padding="15,10" 
+                               Margin="0,0,5,0"
+                               BorderThickness="0"/>
+
+                        <Button Grid.Column="1" 
+                               Content="Confirmer le Retrait" 
+                               Command="{Binding ProcessQuickWithdrawalCommand}"
+                               Background="#ef4444" 
+                               Foreground="White"
+                               Padding="15,10" 
+                               Margin="5,0,0,0"
+                               BorderThickness="0"
+                               FontWeight="Bold"/>
+                    </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Border>
+    </Grid>
+</UserControl>
