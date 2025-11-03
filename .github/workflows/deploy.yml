@@ -47,6 +47,7 @@ jobs:
       - name: 🧹 Prepare deployment files
         run: |
           # Create deployment package excluding unnecessary files
+          # Using --warning=no-file-changed to ignore file changes during packaging
           tar czf deploy.tar.gz \
             --exclude='.git' \
             --exclude='.github' \
@@ -57,7 +58,8 @@ jobs:
             --exclude='*.md' \
             --exclude='*.sh' \
             --exclude='deploy.tar.gz' \
-            .
+            --warning=no-file-changed \
+            . || { [[ $? -eq 1 ]] && echo "Warning: Some files changed during tar (expected)"; }
       
       - name: 📤 Upload code to server
         run: |
