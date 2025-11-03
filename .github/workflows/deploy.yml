@@ -1,0 +1,159 @@
+name: Deploy to Digital Ocean
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allow manual trigger
+
+env:
+  SERVER_IP: 142.93.78.111
+  DEPLOY_PATH: /var/www/nala-credit
+  DOMAIN: admin.nalakreditimachann.com
+
+jobs:
+  deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔐 Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      
+      - name: 🔑 Add server to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SERVER_IP }} >> ~/.ssh/known_hosts
+      
+      - name: 📋 Display deployment info
+        run: |
+          echo "🚀 Deploying to: ${{ env.SERVER_IP }}"
+          echo "📁 Deploy path: ${{ env.DEPLOY_PATH }}"
+          echo "🌐 Domain: ${{ env.DOMAIN }}"
+          echo "📦 Commit: ${{ github.sha }}"
+          echo "👤 Author: ${{ github.actor }}"
+      
+      - name: 🧹 Prepare deployment files
+        run: |
+          # Remove files that shouldn't be deployed
+          rm -rf .git
+          rm -rf .github
+          rm -rf node_modules
+          rm -rf frontend-web/node_modules
+          rm -rf backend/NalaCreditAPI/bin
+          rm -rf backend/NalaCreditAPI/obj
+          
+          # Create deployment package
+          tar czf deploy.tar.gz .
+      
+      - name: 📤 Upload code to server
+        run: |
+          scp deploy.tar.gz root@${{ env.SERVER_IP }}:/tmp/
+      
+      - name: 🔄 Deploy on server
+        run: |
+          ssh root@${{ env.SERVER_IP }} << 'ENDSSH'
+            set -e
+            
+            echo "📦 Extracting new code..."
+            cd ${{ env.DEPLOY_PATH }}
+            
+            # Backup current deployment
+            BACKUP_DIR="/var/backups/nala-credit/deploy-$(date +%Y%m%d-%H%M%S)"
+            mkdir -p "$BACKUP_DIR"
+            
+            # Backup critical files
+            if [ -f .env ]; then
+              cp .env "$BACKUP_DIR/"
+            fi
+            if [ -f nginx.conf ]; then
+              cp nginx.conf "$BACKUP_DIR/"
+            fi
+            
+            echo "💾 Backup saved to: $BACKUP_DIR"
+            
+            # Extract new code
+            tar xzf /tmp/deploy.tar.gz -C ${{ env.DEPLOY_PATH }}
+            rm /tmp/deploy.tar.gz
+            
+            # Restore .env if it doesn't exist
+            if [ ! -f .env ] && [ -f "$BACKUP_DIR/.env" ]; then
+              cp "$BACKUP_DIR/.env" .env
+            fi
+            
+            # Restore nginx.conf if it doesn't exist
+            if [ ! -f nginx.conf ] && [ -f "$BACKUP_DIR/nginx.conf" ]; then
+              cp "$BACKUP_DIR/nginx.conf" nginx.conf
+            fi
+            
+            echo "🏗️  Building Docker images..."
+            docker compose build --no-cache
+            
+            echo "🔄 Restarting services..."
+            docker compose up -d
+            
+            echo "⏳ Waiting for services to start..."
+            sleep 10
+            
+            echo "✅ Deployment complete!"
+            
+            # Show status
+            echo ""
+            echo "📊 Container Status:"
+            docker compose ps
+            
+            echo ""
+            echo "🌐 Application available at:"
+            echo "   https://${{ env.DOMAIN }}"
+          ENDSSH
+      
+      - name: 🧪 Health check
+        run: |
+          echo "🏥 Performing health check..."
+          
+          # Wait a bit more for services to fully start
+          sleep 15
+          
+          # Check HTTP redirect
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ env.DOMAIN }})
+          echo "HTTP Status: $HTTP_STATUS"
+          
+          if [ "$HTTP_STATUS" != "301" ] && [ "$HTTP_STATUS" != "200" ]; then
+            echo "❌ HTTP health check failed!"
+            exit 1
+          fi
+          
+          # Check HTTPS
+          HTTPS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://${{ env.DOMAIN }})
+          echo "HTTPS Status: $HTTPS_STATUS"
+          
+          if [ "$HTTPS_STATUS" != "200" ]; then
+            echo "❌ HTTPS health check failed!"
+            exit 1
+          fi
+          
+          echo "✅ All health checks passed!"
+      
+      - name: 🔔 Deployment summary
+        if: always()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Deployment Summary"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Status: ${{ job.status }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Author: ${{ github.actor }}"
+          echo "URL: https://${{ env.DOMAIN }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      
+      - name: 💬 Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Check the logs above for details."
+          # You can add Slack/Discord webhook notification here
