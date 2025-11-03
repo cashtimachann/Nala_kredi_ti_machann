@@ -46,16 +46,18 @@ jobs:
       
       - name: 🧹 Prepare deployment files
         run: |
-          # Remove files that shouldn't be deployed
-          rm -rf .git
-          rm -rf .github
-          rm -rf node_modules
-          rm -rf frontend-web/node_modules
-          rm -rf backend/NalaCreditAPI/bin
-          rm -rf backend/NalaCreditAPI/obj
-          
-          # Create deployment package
-          tar czf deploy.tar.gz .
+          # Create deployment package excluding unnecessary files
+          tar czf deploy.tar.gz \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='frontend-web/node_modules' \
+            --exclude='backend/NalaCreditAPI/bin' \
+            --exclude='backend/NalaCreditAPI/obj' \
+            --exclude='*.md' \
+            --exclude='*.sh' \
+            --exclude='deploy.tar.gz' \
+            .
       
       - name: 📤 Upload code to server
         run: |
