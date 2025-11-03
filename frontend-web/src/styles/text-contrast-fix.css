@@ -1,0 +1,62 @@
+/* Correction du contraste de texte - Texte plus noir et visible */
+
+/* Labels et titres plus foncés pour une meilleure lisibilité */
+label,
+.label,
+h1, h2, h3, h4, h5, h6,
+.text-gray-700 {
+  color: #1f2937 !important; /* gray-800 */
+}
+
+/* Texte secondaire un peu plus foncé mais toujours gris */
+.text-gray-600 {
+  color: #4b5563 !important; /* gray-700 */
+}
+
+.text-gray-500 {
+  color: #6b7280 !important; /* gray-600 */
+}
+
+/* Texte des inputs/textarea/select en noir */
+input:not([type="checkbox"]):not([type="radio"]),
+textarea,
+select,
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+input[type="date"] {
+  color: #111827 !important; /* gray-900 - presque noir */
+}
+
+/* Placeholder reste gris clair */
+input::placeholder,
+textarea::placeholder,
+select::placeholder {
+  color: #9ca3af !important; /* gray-400 */
+  opacity: 1;
+}
+
+/* Texte dans les inputs focus reste noir */
+input:focus,
+textarea:focus,
+select:focus {
+  color: #111827 !important;
+}
+
+/* Texte dans les boutons garde leurs couleurs définies */
+
+/* Paragraphes et texte général */
+p,
+span:not([class*="text-"]) {
+  color: #1f2937; /* gray-800 */
+}
+
+/* Titres principaux en noir pur pour maximum de contraste */
+h1,
+.text-2xl,
+.text-3xl,
+.font-bold.text-gray-900 {
+  color: #000000 !important;
+}

@@ -11,6 +11,15 @@ Password: SuperAdmin123!
 ---
 
 ## 🚀 DEPLOY UPDATES
+
+### Auto-Deploy (GitHub Actions): ✅ CONFIGURED
+```bash
+git commit -m "Your changes"
+git push origin main
+# Deployment happens automatically! 🎉
+```
+
+### Manual Deploy (if needed):
 ```bash
 ./deploy-to-digitalocean.sh
 ```
