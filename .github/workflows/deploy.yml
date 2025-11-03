@@ -91,14 +91,15 @@ jobs:
             tar xzf /tmp/deploy.tar.gz -C ${{ env.DEPLOY_PATH }}
             rm /tmp/deploy.tar.gz
             
-            # Restore .env if it doesn't exist
-            if [ ! -f .env ] && [ -f "$BACKUP_DIR/.env" ]; then
+            # Always restore critical files from backup (don't overwrite)
+            if [ -f "$BACKUP_DIR/.env" ]; then
               cp "$BACKUP_DIR/.env" .env
+              echo "✅ Restored .env from backup"
             fi
             
-            # Restore nginx.conf if it doesn't exist
-            if [ ! -f nginx.conf ] && [ -f "$BACKUP_DIR/nginx.conf" ]; then
+            if [ -f "$BACKUP_DIR/nginx.conf" ]; then
               cp "$BACKUP_DIR/nginx.conf" nginx.conf
+              echo "✅ Restored nginx.conf with SSL config from backup"
             fi
             
             echo "🏗️  Building Docker images..."
