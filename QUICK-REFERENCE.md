@@ -12,12 +12,14 @@ Password: SuperAdmin123!
 
 ## 🚀 DEPLOY UPDATES
 
-### Auto-Deploy (GitHub Actions): ✅ CONFIGURED
+### Auto-Deploy (GitHub Actions): ✅ CONFIGURED & WORKING
 ```bash
 git commit -m "Your changes"
 git push origin main
 # Deployment happens automatically! 🎉
 ```
+
+**Watch deployment:** https://github.com/cashtimachann/Nala_kredi_ti_machann/actions
 
 ### Manual Deploy (if needed):
 ```bash
