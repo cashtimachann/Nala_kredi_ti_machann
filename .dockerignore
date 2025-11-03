@@ -1,0 +1,97 @@
+# Nala Credit Ti Machann - Docker ignore file
+# Exclut les fichiers inutiles lors du build Docker
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+GUIDE-*.md
+README.md
+
+# Scripts et configuration locale
+*.sh
+*.ps1
+*.bat
+.env
+.env.*
+
+# Logs et données temporaires
+logs/
+*.log
+tmp/
+temp/
+
+# IDE et éditeurs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node.js (garde node_modules pour le context de build)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll.config
+*.exe.config
+
+# Build artifacts (sauf ceux nécessaires au runtime)
+publish/
+dist/
+build/
+
+# Tests
+TestResults/
+coverage/
+*.trx
+*.coverage
+
+# Database
+*.db
+*.sqlite
+*.mdf
+*.ldf
+
+# SSL et certificates
+*.pfx
+*.p12
+ssl/
+certificates/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Docker files (éviter la récursion)
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Monitoring et outils
+monitoring/
+tools/
+scripts/
+
+# Fichiers volumineux
+uploads/
+data/
+backups/

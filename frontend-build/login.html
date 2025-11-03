@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ht">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Nala Credit Ti Machann</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 450px;
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .login-header h1 {
+            color: #2d3748;
+            font-size: 2.2em;
+            margin-bottom: 10px;
+        }
+        .login-header p {
+            color: #718096;
+            font-size: 1.1em;
+        }
+        .form-group {
+            margin-bottom: 25px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #4a5568;
+            font-weight: 500;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1em;
+            transition: all 0.3s ease;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .login-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+        .login-btn:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+        .demo-accounts {
+            background: #f7fafc;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .demo-accounts h4 {
+            color: #2d3748;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .demo-account {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+        .demo-account .role { color: #4a5568; font-weight: 500; }
+        .demo-account .credentials { color: #718096; }
+        .back-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .back-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h1>🔐 Koneksyon</h1>
+            <p>Nala Credit Ti Machann</p>
+        </div>
+
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label for="email">Email oswa Non Itilizatè</label>
+                <input type="text" id="email" name="email" value="superadmin@nala.com" required>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Modpas</label>
+                <input type="password" id="password" name="password" value="SuperAdmin123!" required>
+            </div>
+
+            <button type="submit" class="login-btn">
+                Konekte
+            </button>
+        </form>
+
+        <div class="demo-accounts">
+            <h4>📋 Kont Demo yo</h4>
+            <div class="demo-account">
+                <span class="role">SuperAdmin:</span>
+                <span class="credentials">superadmin@nala.com / SuperAdmin123!</span>
+            </div>
+            <div class="demo-account">
+                <span class="role">SystemAdmin:</span>
+                <span class="credentials">systemadmin@nala.com / SystemAdmin123!</span>
+            </div>
+            <div class="demo-account">
+                <span class="role">BranchSupervisor:</span>
+                <span class="credentials">supervisor@nala.com / Supervisor123!</span>
+            </div>
+            <div class="demo-account">
+                <span class="role">Cashier:</span>
+                <span class="credentials">cashier@nala.com / Cashier123!</span>
+            </div>
+        </div>
+
+        <div class="back-link">
+            <a href="/">← Retounen nan paj prensipal la</a>
+        </div>
+    </div>
+
+    <script>
+        function handleLogin(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            // Simule yon koneksyon ak redireksyon
+            console.log('Koneksyon ak:', { email, password });
+            
+            // Redirije nan dashboard la selon wòl la
+            if (email.includes('superadmin')) {
+                window.location.href = '/dashboard?role=superadmin';
+            } else if (email.includes('systemadmin')) {
+                window.location.href = '/dashboard?role=systemadmin';
+            } else if (email.includes('supervisor')) {
+                window.location.href = '/dashboard?role=supervisor';
+            } else if (email.includes('cashier')) {
+                window.location.href = '/dashboard?role=cashier';
+            } else {
+                window.location.href = '/dashboard';
+            }
+        }
+    </script>
+</body>
+</html>

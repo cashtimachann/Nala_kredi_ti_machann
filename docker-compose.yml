@@ -1,0 +1,203 @@
+# Nala Credit Ti Machann - Docker Compose Configuration
+# Orchestration complète de tous les services
+
+services:
+  # Base de données PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: nala-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nalakreditimachann_db
+      POSTGRES_USER: nalauser
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-NalaCredit2024!@#}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    networks:
+      - nala-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nalauser -d nalakreditimachann_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Cache Redis
+  redis:
+    image: redis:7-alpine
+    container_name: nala-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+    networks:
+      - nala-network
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Message Queue RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: nala-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-nalauser}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-NalaCredit2024}
+      RABBITMQ_DEFAULT_VHOST: nala
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - nala-network
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 30s
+      retries: 3
+
+  # API Backend .NET
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nala-api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5000
+      ConnectionStrings__DefaultConnection: "Host=postgres;Database=nalakreditimachann_db;Username=nalauser;Password=${DB_PASSWORD:-NalaCredit2024!@#}"
+      ConnectionStrings__Redis: "redis:6379"
+      ConnectionStrings__RabbitMQ: "rabbitmq"
+      JwtSettings__SecretKey: ${JWT_SECRET:-NalaCreditSecretKeyForJWT2024Production}
+      JwtSettings__Issuer: "NalaCreditAPI"
+      JwtSettings__Audience: "NalaCreditClients"
+      JwtSettings__ExpiryMinutes: "60"
+    ports:
+      - "5000:5000"
+    volumes:
+      - api_uploads:/app/uploads
+      - api_logs:/app/logs
+    networks:
+      - nala-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend React
+  frontend:
+    build:
+      context: ./frontend-web
+      dockerfile: Dockerfile
+    container_name: nala-frontend
+    restart: unless-stopped
+    # Frontend is internal; nginx will proxy requests to this service.
+    # Do NOT publish frontend port to the host in production.
+    networks:
+      - nala-network
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Proxy Reverse - Serving React App + API Proxy
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: nala-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # Frontend files are served by the frontend container; nginx will proxy to it.
+      - api_uploads:/var/www/uploads:ro
+    networks:
+      - nala-network
+    depends_on:
+      - api
+      - frontend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Monitoring avec Prometheus (Optionnel)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: nala-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - nala-network
+    profiles:
+      - monitoring
+
+  # Grafana pour visualisation (Optionnel)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: nala-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - nala-network
+    profiles:
+      - monitoring
+
+# Volumes persistants
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  api_uploads:
+    driver: local
+  api_logs:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# Réseau Docker
+networks:
+  nala-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
