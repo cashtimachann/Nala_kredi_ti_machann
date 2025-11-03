@@ -23,9 +23,15 @@ jobs:
       - name: 🔐 Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          # Decode base64 SSH key and write to file
+          echo "${{ secrets.SSH_PRIVATE_KEY_BASE64 }}" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ env.SERVER_IP }} >> ~/.ssh/known_hosts
+          
+          # Verify key format
+          echo "Checking SSH key format..."
+          head -1 ~/.ssh/deploy_key
+          tail -1 ~/.ssh/deploy_key
           
           # Test SSH connection
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@${{ env.SERVER_IP }} 'echo "SSH connection successful!"'
