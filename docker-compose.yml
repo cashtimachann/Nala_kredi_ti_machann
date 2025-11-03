@@ -135,6 +135,9 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       # Frontend files are served by the frontend container; nginx will proxy to it.
       - api_uploads:/var/www/uploads:ro
+      # SSL certificates from Let's Encrypt
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/lib/letsencrypt:/var/lib/letsencrypt:ro
     networks:
       - nala-network
     depends_on:

@@ -2,7 +2,8 @@
 
 ## 🌐 ACCESS
 ```
-URL:      http://142.93.78.111
+URL:      https://admin.nalakreditimachann.com 🔒
+Alt URL:  http://142.93.78.111 (redirects to HTTPS)
 Login:    superadmin@nalacredit.com
 Password: SuperAdmin123!
 ```
@@ -113,12 +114,14 @@ ufw allow 22 && ufw allow 80 && ufw allow 443 && ufw enable
 ```
 Frontend:    ✅ Running (healthy)
 API:         ✅ Running (unhealthy but working)
-Nginx:       ✅ Running (unhealthy but working)
+Nginx:       ✅ Running (healthy) with SSL/HTTPS 🔒
 PostgreSQL:  ✅ Running (healthy)
 Redis:       ✅ Running (healthy)
 RabbitMQ:    ✅ Running (healthy)
 
 Application: 🟢 ONLINE
+Domain:      admin.nalakreditimachann.com
+SSL:         ✅ Valid Let's Encrypt Certificate
 ```
 
 ---
