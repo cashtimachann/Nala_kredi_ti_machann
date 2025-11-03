@@ -680,4 +680,27 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         [Required]
         public bool IsActive { get; set; }
     }
+
+    // DTOs for pending account validations
+    public class ClientAccountPendingDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string AccountNumber { get; set; } = string.Empty;
+        public string ClientName { get; set; } = string.Empty;
+        public string AccountType { get; set; } = string.Empty;
+        public string SubmittedBy { get; set; } = string.Empty;
+        public string SubmittedDate { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public string Currency { get; set; } = string.Empty;
+        public int BranchId { get; set; }
+    }
+
+    public class ValidateAccountDto
+    {
+        [Required]
+        public bool Approved { get; set; }
+
+        [StringLength(500)]
+        public string? RejectionReason { get; set; }
+    }
 }

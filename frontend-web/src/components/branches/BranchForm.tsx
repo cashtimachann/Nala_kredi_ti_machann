@@ -45,7 +45,7 @@ const BranchForm: React.FC<BranchFormProps> = ({
     watch,
     setValue,
     reset,
-    formState: { errors }
+    formState: { errors, isDirty }
   } = useForm<BranchFormData>({
     resolver: zodResolver(branchSchema),
     defaultValues: {
@@ -82,16 +82,30 @@ const BranchForm: React.FC<BranchFormProps> = ({
       if (branch && isEditing) {
         populateForm(branch);
       } else {
+        // Reset form and clear department/commune states for new branch
         reset();
+        setSelectedDepartment('');
+        setAvailableCommunes([]);
       }
     }
   }, [isOpen, branch, isEditing, reset]);
+
+  // Handle close with confirmation if form is dirty
+  const handleClose = () => {
+    if (isDirty && !isLoading) {
+      if (window.confirm('Vous avez des modifications non enregistrées. Voulez-vous vraiment fermer?')) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  };
 
   // Handle ESC key to close modal
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen && !isLoading) {
-        onClose();
+        handleClose();
       }
     };
     
@@ -102,14 +116,36 @@ const BranchForm: React.FC<BranchFormProps> = ({
     return () => {
       window.removeEventListener('keydown', handleEsc);
     };
-  }, [isOpen, isLoading, onClose]);
+  }, [isOpen, isLoading, isDirty]);
 
   useEffect(() => {
     if (watchedDepartment) {
-      setSelectedDepartment(watchedDepartment);
-      setAvailableCommunes(COMMUNES_BY_DEPARTMENT[watchedDepartment] || []);
+      const newCommunes = COMMUNES_BY_DEPARTMENT[watchedDepartment] || [];
+      
+      // Only update if department actually changed (not just being set during form population)
+      if (selectedDepartment !== watchedDepartment) {
+        setSelectedDepartment(watchedDepartment);
+        setAvailableCommunes(newCommunes);
+        
+        // Reset commune only if it's not in the new department's communes
+        const currentCommune = watch('commune');
+        if (currentCommune && !newCommunes.includes(currentCommune)) {
+          setValue('commune', '', { shouldValidate: false });
+        }
+      } else if (availableCommunes.length === 0 && newCommunes.length > 0) {
+        // Edge case: if availableCommunes is empty but should have values, update it
+        // This can happen during initial form population
+        setAvailableCommunes(newCommunes);
+      }
+    } else {
+      setSelectedDepartment('');
+      setAvailableCommunes([]);
+      const currentCommune = watch('commune');
+      if (currentCommune) {
+        setValue('commune', '', { shouldValidate: false });
+      }
     }
-  }, [watchedDepartment]);
+  }, [watchedDepartment, selectedDepartment, availableCommunes.length, watch, setValue]);
 
   useEffect(() => {
     if (watchedName && !isEditing) {
@@ -139,11 +175,20 @@ const BranchForm: React.FC<BranchFormProps> = ({
 
   const populateForm = (branchData: Branch) => {
     const phones = branchData.phones || ['', '', ''];
+    
+    // CRITICAL: Set department and commune states BEFORE calling setValue
+    // This prevents the useEffect from resetting the commune
+    const deptCommunes = COMMUNES_BY_DEPARTMENT[branchData.department] || [];
+    setSelectedDepartment(branchData.department);
+    setAvailableCommunes(deptCommunes);
+    
+    // Now set all form values - department and commune together
     setValue('name', branchData.name);
     setValue('code', branchData.code);
     setValue('address', branchData.address);
-    setValue('commune', branchData.commune);
-    setValue('department', branchData.department);
+    setValue('department', branchData.department, { shouldValidate: false });
+    // Set commune immediately after department with shouldValidate: false to avoid triggering validation
+    setValue('commune', branchData.commune, { shouldValidate: false });
     setValue('phone1', phones[0] || '');
     setValue('phone2', phones[1] || '');
     setValue('phone3', phones[2] || '');
@@ -229,7 +274,7 @@ const BranchForm: React.FC<BranchFormProps> = ({
             </h2>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
           >
             <X className="h-5 w-5 text-gray-500" />
@@ -436,7 +481,7 @@ const BranchForm: React.FC<BranchFormProps> = ({
                     Nombre d'employés autorisés *
                   </label>
                   <input
-                    {...register('maxEmployees')}
+                    {...register('maxEmployees', { valueAsNumber: true })}
                     type="number"
                     min="1"
                     max="100"
@@ -570,7 +615,7 @@ const BranchForm: React.FC<BranchFormProps> = ({
                     Limite de retrait journalier (HTG) *
                   </label>
                   <input
-                    {...register('dailyWithdrawalLimit')}
+                    {...register('dailyWithdrawalLimit', { valueAsNumber: true })}
                     type="number"
                     min="0"
                     step="1000"
@@ -587,7 +632,7 @@ const BranchForm: React.FC<BranchFormProps> = ({
                     Limite de dépôt journalier (HTG) *
                   </label>
                   <input
-                    {...register('dailyDepositLimit')}
+                    {...register('dailyDepositLimit', { valueAsNumber: true })}
                     type="number"
                     min="0"
                     step="1000"
@@ -604,7 +649,7 @@ const BranchForm: React.FC<BranchFormProps> = ({
                     Montant max crédit approuvable (HTG) *
                   </label>
                   <input
-                    {...register('maxLocalCreditApproval')}
+                    {...register('maxLocalCreditApproval', { valueAsNumber: true })}
                     type="number"
                     min="0"
                     step="1000"
@@ -621,7 +666,7 @@ const BranchForm: React.FC<BranchFormProps> = ({
                     Réserve minimum caisse HTG *
                   </label>
                   <input
-                    {...register('minCashReserveHTG')}
+                    {...register('minCashReserveHTG', { valueAsNumber: true })}
                     type="number"
                     min="0"
                     step="1000"
@@ -638,7 +683,7 @@ const BranchForm: React.FC<BranchFormProps> = ({
                     Réserve minimum caisse USD *
                   </label>
                   <input
-                    {...register('minCashReserveUSD')}
+                    {...register('minCashReserveUSD', { valueAsNumber: true })}
                     type="number"
                     min="0"
                     step="100"
@@ -658,7 +703,7 @@ const BranchForm: React.FC<BranchFormProps> = ({
         <div className="flex items-center justify-end space-x-4 p-6 border-t border-gray-200 bg-gray-50">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
           >
             Annuler

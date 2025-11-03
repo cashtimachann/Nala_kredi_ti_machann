@@ -85,6 +85,10 @@ public class ApplicationDbContext : IdentityDbContext<User>
         builder.Entity<Branch>(entity =>
         {
             entity.HasIndex(b => b.Name).IsUnique();
+            entity.HasOne(b => b.Manager)
+                  .WithMany()
+                  .HasForeignKey(b => b.ManagerId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // Customer configurations

@@ -609,4 +609,30 @@ namespace NalaCreditAPI.DTOs
         public string? TransactionReference { get; set; }
         public string? Notes { get; set; }
     }
+
+    // DTOs pour les statistiques du tableau de bord
+    public class MicrocreditDashboardStatsDto
+    {
+        public int TotalClients { get; set; }
+        public int ActiveLoans { get; set; }
+        public CurrencyAmountDto TotalOutstanding { get; set; } = new();
+        public decimal RepaymentRate { get; set; }
+        public OverdueStatsDto OverdueLoans { get; set; } = new();
+        public CurrencyAmountDto InterestRevenue { get; set; } = new();
+        public int LoansCompletedThisMonth { get; set; }
+        public int NewLoansThisMonth { get; set; }
+        public DateTime GeneratedAt { get; set; }
+    }
+
+    public class CurrencyAmountDto
+    {
+        public decimal HTG { get; set; }
+        public decimal USD { get; set; }
+    }
+
+    public class OverdueStatsDto
+    {
+        public int Count { get; set; }
+        public CurrencyAmountDto Amount { get; set; } = new();
+    }
 }

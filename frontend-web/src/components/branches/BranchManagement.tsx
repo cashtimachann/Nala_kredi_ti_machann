@@ -124,12 +124,9 @@ const BranchManagement: React.FC<BranchManagementProps> = () => {
     }
   };
 
-  const handleBranchSaved = (savedBranch: Branch) => {
-    if (isEditing) {
-      setBranches(branches.map(b => b.id === savedBranch.id ? savedBranch : b));
-    } else {
-      setBranches([...branches, savedBranch]);
-    }
+  const handleBranchSaved = async (savedBranch: Branch) => {
+    // Reload all branches from API to ensure we have the latest data
+    await loadBranches();
   };
 
   const handleSort = (column: typeof sortBy) => {
@@ -883,7 +880,11 @@ const BranchManagement: React.FC<BranchManagementProps> = () => {
       {/* Branch Form Modal */}
       <BranchForm
         isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
+        onClose={() => {
+          setIsFormOpen(false);
+          setSelectedBranch(null);
+          setIsEditing(false);
+        }}
         onSave={handleBranchSaved}
         branch={selectedBranch}
         isEditing={isEditing}

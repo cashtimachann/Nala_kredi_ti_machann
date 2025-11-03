@@ -17,15 +17,26 @@ const num = (min?: number, max?: number) => {
   return schema;
 };
 
+// Phone validation helper for Haitian numbers
+const haitiPhoneRegex = /^(\+?509\s?)?[234579]\d{7}$/;
+
 export const branchSchema = z.object({
   name: z.string().min(3, 'Minimum 3 caractères').nonempty("Le nom de la succursale est requis"),
   code: z.string().min(2, 'Minimum 2 caractères').nonempty('Le code succursale est requis'),
   address: z.string().nonempty("L'adresse est requise"),
   commune: z.string().nonempty('La commune est requise'),
   department: z.string().nonempty('Le département est requis'),
-  phone1: z.string().nonempty('Au moins un téléphone est requis'),
-  phone2: z.string().optional().default(''),
-  phone3: z.string().optional().default(''),
+  phone1: z.string()
+    .nonempty('Au moins un téléphone est requis')
+    .regex(haitiPhoneRegex, 'Format de numéro haïtien invalide'),
+  phone2: z.string()
+    .optional()
+    .default('')
+    .refine((val) => !val || haitiPhoneRegex.test(val), 'Format de numéro haïtien invalide'),
+  phone3: z.string()
+    .optional()
+    .default('')
+    .refine((val) => !val || haitiPhoneRegex.test(val), 'Format de numéro haïtien invalide'),
   email: z.string().email('Email invalide'),
   openingDate: z.string().nonempty("La date d'ouverture est requise"),
   managerId: z.string().optional(),

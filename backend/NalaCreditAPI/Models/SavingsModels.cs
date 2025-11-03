@@ -602,7 +602,8 @@ namespace NalaCreditAPI.Models
         Inactive = 1,
         Closed = 2,
         Suspended = 3,
-        Locked = 4
+        Locked = 4,
+        PendingApproval = 5
     }
 
     public enum ClientCurrency

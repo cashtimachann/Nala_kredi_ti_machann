@@ -215,6 +215,68 @@ public class TransactionController : ControllerBase
 
         return Ok(new { message = "Cash session closed successfully" });
     }
+
+    [HttpGet("branch/{branchId}/history")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor")]
+    public async Task<ActionResult> GetBranchTransactionHistory(
+        int branchId,
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate,
+        [FromQuery] TransactionType? transactionType,
+        [FromQuery] string? cashierId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
+    {
+        var query = _context.Transactions
+            .Where(t => t.BranchId == branchId)
+            .Include(t => t.User)
+            .Include(t => t.Account)
+                .ThenInclude(a => a.Customer)
+            .AsQueryable();
+
+        if (startDate.HasValue)
+            query = query.Where(t => t.CreatedAt.Date >= startDate.Value.Date);
+
+        if (endDate.HasValue)
+            query = query.Where(t => t.CreatedAt.Date <= endDate.Value.Date);
+
+        if (transactionType.HasValue)
+            query = query.Where(t => t.Type == transactionType.Value);
+
+        if (!string.IsNullOrEmpty(cashierId))
+            query = query.Where(t => t.UserId == cashierId);
+
+        var totalCount = await query.CountAsync();
+        var transactions = await query
+            .OrderByDescending(t => t.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(t => new
+            {
+                t.Id,
+                t.TransactionNumber,
+                t.Type,
+                t.Currency,
+                t.Amount,
+                t.CreatedAt,
+                Customer = $"{t.Account.Customer.FirstName} {t.Account.Customer.LastName}",
+                Cashier = $"{t.User.FirstName} {t.User.LastName}",
+                t.Description,
+                t.BalanceAfter
+            })
+            .ToListAsync();
+
+        var summary = new
+        {
+            TotalTransactions = totalCount,
+            Page = page,
+            PageSize = pageSize,
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize),
+            Transactions = transactions
+        };
+
+        return Ok(summary);
+    }
 }
 
 public class OpenCashSessionDto

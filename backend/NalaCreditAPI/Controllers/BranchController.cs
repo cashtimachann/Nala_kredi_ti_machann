@@ -24,11 +24,10 @@ namespace NalaCreditAPI.Controllers
         {
             try
             {
-                var branches = await _context.Branches
-                    .Include(b => b.Users.Where(u => u.Role == UserRole.Manager))
-                    .ToListAsync();
-
-                var branchDtos = branches.Select(MapToBranchDto).ToList();
+            var branches = await _context.Branches
+                .Include(b => b.Users)
+                .Include(b => b.Manager)
+                .ToListAsync();                var branchDtos = branches.Select(MapToBranchDto).ToList();
                 return Ok(branchDtos);
             }
             catch (Exception ex)
@@ -43,7 +42,7 @@ namespace NalaCreditAPI.Controllers
             try
             {
                 var branch = await _context.Branches
-                    .Include(b => b.Users.Where(u => u.Role == UserRole.Manager))
+                    .Include(b => b.Users)
                     .FirstOrDefaultAsync(b => b.Id == id);
 
                 if (branch == null)
@@ -71,7 +70,7 @@ namespace NalaCreditAPI.Controllers
                 }
 
                 // Check if code already exists
-                var existingBranch = await _context.Branches.FirstOrDefaultAsync(b => b.Name == createBranchDto.Code);
+                var existingBranch = await _context.Branches.FirstOrDefaultAsync(b => b.Code == createBranchDto.Code);
                 if (existingBranch != null)
                 {
                     return BadRequest(new { message = "Ce code de succursale existe déjà" });
@@ -80,12 +79,24 @@ namespace NalaCreditAPI.Controllers
                 var branch = new Branch
                 {
                     Name = createBranchDto.Name,
+                    Code = createBranchDto.Code,
                     Address = createBranchDto.Address,
+                    Commune = createBranchDto.Commune,
                     Phones = createBranchDto.Phones,
                     Region = createBranchDto.Department,
+                    Email = createBranchDto.Email,
+                    OpeningDate = DateTime.TryParse(createBranchDto.OpeningDate, out var openingDate) ? openingDate : DateTime.UtcNow,
+                    ManagerId = createBranchDto.ManagerId,
+                    MaxEmployees = createBranchDto.MaxEmployees,
                     PrimaryCurrency = Currency.HTG,
-                    DailyTransactionLimit = createBranchDto.Limits.DailyWithdrawalLimit,
-                    CashLimit = createBranchDto.Limits.MinCashReserveHTG,
+                    DailyWithdrawalLimit = createBranchDto.Limits.DailyWithdrawalLimit,
+                    DailyDepositLimit = createBranchDto.Limits.DailyDepositLimit,
+                    MaxLocalCreditApproval = createBranchDto.Limits.MaxLocalCreditApproval,
+                    MinCashReserveHTG = createBranchDto.Limits.MinCashReserveHTG,
+                    MinCashReserveUSD = createBranchDto.Limits.MinCashReserveUSD,
+                    OpenTime = TimeSpan.TryParse(createBranchDto.OperatingHours.OpenTime, out var openTime) ? openTime : new TimeSpan(8, 0, 0),
+                    CloseTime = TimeSpan.TryParse(createBranchDto.OperatingHours.CloseTime, out var closeTime) ? closeTime : new TimeSpan(17, 0, 0),
+                    ClosedDays = createBranchDto.OperatingHours.ClosedDays ?? new List<int>(),
                     IsActive = createBranchDto.Status == "Active",
                     CreatedAt = DateTime.UtcNow
                 };
@@ -115,13 +126,36 @@ namespace NalaCreditAPI.Controllers
                     return NotFound(new { message = "Succursale non trouvée" });
                 }
 
+                // Check if code is already used by another branch
+                if (!string.IsNullOrEmpty(updateBranchDto.Code))
+                {
+                    var existingBranch = await _context.Branches.FirstOrDefaultAsync(b => b.Code == updateBranchDto.Code && b.Id != id);
+                    if (existingBranch != null)
+                    {
+                        return BadRequest(new { message = "Ce code de succursale est déjà utilisé par une autre succursale" });
+                    }
+                }
+
                 branch.Name = updateBranchDto.Name;
+                branch.Code = updateBranchDto.Code;
                 branch.Address = updateBranchDto.Address;
+                branch.Commune = updateBranchDto.Commune;
                 branch.Phones = updateBranchDto.Phones;
                 branch.Region = updateBranchDto.Department;
-                branch.DailyTransactionLimit = updateBranchDto.Limits.DailyWithdrawalLimit;
-                branch.CashLimit = updateBranchDto.Limits.MinCashReserveHTG;
+                branch.Email = updateBranchDto.Email;
+                branch.OpeningDate = DateTime.TryParse(updateBranchDto.OpeningDate, out var openingDate) ? openingDate : branch.OpeningDate;
+                branch.ManagerId = updateBranchDto.ManagerId;
+                branch.MaxEmployees = updateBranchDto.MaxEmployees;
+                branch.DailyWithdrawalLimit = updateBranchDto.Limits.DailyWithdrawalLimit;
+                branch.DailyDepositLimit = updateBranchDto.Limits.DailyDepositLimit;
+                branch.MaxLocalCreditApproval = updateBranchDto.Limits.MaxLocalCreditApproval;
+                branch.MinCashReserveHTG = updateBranchDto.Limits.MinCashReserveHTG;
+                branch.MinCashReserveUSD = updateBranchDto.Limits.MinCashReserveUSD;
+                branch.OpenTime = TimeSpan.TryParse(updateBranchDto.OperatingHours.OpenTime, out var openTime) ? openTime : branch.OpenTime;
+                branch.CloseTime = TimeSpan.TryParse(updateBranchDto.OperatingHours.CloseTime, out var closeTime) ? closeTime : branch.CloseTime;
+                branch.ClosedDays = updateBranchDto.OperatingHours.ClosedDays ?? new List<int>();
                 branch.IsActive = updateBranchDto.Status == "Active";
+                branch.UpdatedAt = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
 
@@ -254,7 +288,7 @@ namespace NalaCreditAPI.Controllers
         {
             try
             {
-                var exists = await _context.Branches.AnyAsync(b => b.Name == request.Code);
+                var exists = await _context.Branches.AnyAsync(b => b.Code == request.Code);
                 return Ok(new ValidateCodeResponseDto { IsValid = !exists });
             }
             catch (Exception ex)
@@ -280,40 +314,76 @@ namespace NalaCreditAPI.Controllers
 
         private BranchDto MapToBranchDto(Branch branch)
         {
-            var manager = branch.Users?.FirstOrDefault(u => u.Role == UserRole.Manager);
-            
-            return new BranchDto
+            try
             {
-                Id = branch.Id,
-                Name = branch.Name,
-                Code = $"BR-{branch.Id:D3}",
-                Address = branch.Address,
-                Commune = ExtractCommune(branch.Address),
-                Department = branch.Region,
-                Phones = branch.Phones,
-                Email = $"succursale{branch.Id}@nalacredit.com",
-                OpeningDate = branch.CreatedAt.ToString("yyyy-MM-dd"),
-                ManagerId = manager?.Id,
-                ManagerName = manager != null ? $"{manager.FirstName} {manager.LastName}" : null,
-                MaxEmployees = 10, // Default for now
-                Status = branch.IsActive ? "Active" : "Inactive",
-                Limits = new BranchLimitsDto
+                // Safely format TimeSpan values
+                string openTime = "08:00";
+                string closeTime = "17:00";
+                try
                 {
-                    DailyWithdrawalLimit = branch.DailyTransactionLimit,
-                    DailyDepositLimit = branch.DailyTransactionLimit * 2,
-                    MaxLocalCreditApproval = 50000,
-                    MinCashReserveHTG = branch.CashLimit,
-                    MinCashReserveUSD = 1000
-                },
-                OperatingHours = new OperatingHoursDto
+                    openTime = branch.OpenTime.ToString(@"HH\:mm");
+                    closeTime = branch.CloseTime.ToString(@"HH\:mm");
+                }
+                catch
                 {
-                    OpenTime = "08:00",
-                    CloseTime = "16:00",
-                    ClosedDays = new List<int> { 0 } // Sunday
-                },
-                CreatedAt = branch.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ"),
-                UpdatedAt = branch.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ")
-            };
+                    // Use defaults if TimeSpan formatting fails
+                }
+
+                // Safely format DateTime values
+                string openingDate = DateTime.UtcNow.ToString("yyyy-MM-dd");
+                string createdAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                string updatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                try
+                {
+                    openingDate = branch.OpeningDate.ToString("yyyy-MM-dd");
+                    createdAt = branch.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                    updatedAt = branch.UpdatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                }
+                catch
+                {
+                    // Use defaults if DateTime formatting fails
+                }
+
+                return new BranchDto
+                {
+                    Id = branch.Id,
+                    Name = branch.Name ?? "Unknown Branch",
+                    Code = branch.Code ?? $"BR-{branch.Id:D3}",
+                    Address = branch.Address ?? "Unknown Address",
+                    Commune = branch.Commune ?? ExtractCommune(branch.Address ?? ""),
+                    Department = branch.Region ?? "Unknown",
+                    Phones = branch.Phones ?? new List<string>(),
+                    Email = branch.Email ?? $"succursale{branch.Id}@nalacredit.com",
+                    OpeningDate = openingDate,
+                    ManagerId = branch.ManagerId,
+                    ManagerName = branch.Manager != null ? $"{branch.Manager.FirstName ?? ""} {branch.Manager.LastName ?? ""}".Trim() : null,
+                    MaxEmployees = branch.MaxEmployees,
+                    Status = branch.IsActive ? "Active" : "Inactive",
+                    Limits = new BranchLimitsDto
+                    {
+                        DailyWithdrawalLimit = branch.DailyWithdrawalLimit,
+                        DailyDepositLimit = branch.DailyDepositLimit,
+                        MaxLocalCreditApproval = branch.MaxLocalCreditApproval,
+                        MinCashReserveHTG = branch.MinCashReserveHTG,
+                        MinCashReserveUSD = branch.MinCashReserveUSD
+                    },
+                    OperatingHours = new OperatingHoursDto
+                    {
+                        OpenTime = openTime,
+                        CloseTime = closeTime,
+                        ClosedDays = branch.ClosedDays ?? new List<int> { 0 }
+                    },
+                    CreatedAt = createdAt,
+                    UpdatedAt = updatedAt
+                };
+            }
+            catch (Exception ex)
+            {
+                // Log the error and return a basic DTO
+                Console.WriteLine($"Error mapping branch {branch?.Id}: {ex.Message}");
+                Console.WriteLine($"Branch data: Name={branch?.Name}, Region={branch?.Region}");
+                throw; // Re-throw to let the controller handle it
+            }
         }
 
         private string ExtractCommune(string address)
@@ -330,7 +400,7 @@ namespace NalaCreditAPI.Controllers
             // Ensure uniqueness
             var counter = 1;
             var baseCode = code;
-            while (await _context.Branches.AnyAsync(b => b.Name == code))
+            while (await _context.Branches.AnyAsync(b => b.Code == code))
             {
                 code = $"{baseCode}{counter:D2}";
                 counter++;

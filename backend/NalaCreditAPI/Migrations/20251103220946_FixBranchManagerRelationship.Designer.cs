@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NalaCreditAPI.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace NalaCreditAPI.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251103220946_FixBranchManagerRelationship")]
+    partial class FixBranchManagerRelationship
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -201,7 +204,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("CustomerId");
 
-                    b.ToTable("Accounts", (string)null);
+                    b.ToTable("Accounts");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.AuditLog", b =>
@@ -252,7 +255,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("UserId", "Timestamp");
 
-                    b.ToTable("AuditLogs", (string)null);
+                    b.ToTable("AuditLogs");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.Branch", b =>
@@ -365,7 +368,7 @@ namespace NalaCreditAPI.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Branches", (string)null);
+                    b.ToTable("Branches");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.CashSession", b =>
@@ -414,7 +417,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("UserId", "SessionStart");
 
-                    b.ToTable("CashSessions", (string)null);
+                    b.ToTable("CashSessions");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.Credit", b =>
@@ -481,7 +484,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("Status", "NextPaymentDate");
 
-                    b.ToTable("Credits", (string)null);
+                    b.ToTable("Credits");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.CreditApplication", b =>
@@ -558,7 +561,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("ReviewedBy");
 
-                    b.ToTable("CreditApplications", (string)null);
+                    b.ToTable("CreditApplications");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.CreditPayment", b =>
@@ -606,7 +609,7 @@ namespace NalaCreditAPI.Migrations
                     b.HasIndex("TransactionId")
                         .IsUnique();
 
-                    b.ToTable("CreditPayments", (string)null);
+                    b.ToTable("CreditPayments");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.CurrencyExchangeRate", b =>
@@ -668,7 +671,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("BaseCurrency", "TargetCurrency", "IsActive");
 
-                    b.ToTable("CurrencyExchangeRates", (string)null);
+                    b.ToTable("CurrencyExchangeRates");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.CurrencyMovement", b =>
@@ -736,7 +739,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("MovementType", "MovementDate");
 
-                    b.ToTable("CurrencyMovements", (string)null);
+                    b.ToTable("CurrencyMovements");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.CurrencyReserve", b =>
@@ -807,7 +810,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("Currency", "IsActive");
 
-                    b.ToTable("CurrencyReserves", (string)null);
+                    b.ToTable("CurrencyReserves");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.CurrentAccount", b =>
@@ -922,7 +925,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("Status", "Currency");
 
-                    b.ToTable("CurrentAccounts", (string)null);
+                    b.ToTable("CurrentAccounts");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.CurrentAccountAuthorizedSigner", b =>
@@ -984,7 +987,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("AccountId", "IsActive");
 
-                    b.ToTable("CurrentAccountAuthorizedSigners", (string)null);
+                    b.ToTable("CurrentAccountAuthorizedSigners");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.CurrentAccountTransaction", b =>
@@ -1063,7 +1066,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("Type", "Status");
 
-                    b.ToTable("CurrentAccountTransactions", (string)null);
+                    b.ToTable("CurrentAccountTransactions");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.Customer", b =>
@@ -1122,7 +1125,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("FirstName", "LastName", "Phone");
 
-                    b.ToTable("Customers", (string)null);
+                    b.ToTable("Customers");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.CustomerContact", b =>
@@ -1158,7 +1161,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("CustomerId");
 
-                    b.ToTable("CustomerContacts", (string)null);
+                    b.ToTable("CustomerContacts");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.Employee", b =>
@@ -1288,7 +1291,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("FirstName", "LastName", "BranchId");
 
-                    b.ToTable("Employees", (string)null);
+                    b.ToTable("Employees");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.ExchangeTransaction", b =>
@@ -1413,7 +1416,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("ExchangeType", "Status");
 
-                    b.ToTable("ExchangeTransactions", (string)null);
+                    b.ToTable("ExchangeTransactions");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.InterBranchTransfer", b =>
@@ -1539,7 +1542,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("ToBranchId", "CreatedAt");
 
-                    b.ToTable("InterBranchTransfers", (string)null);
+                    b.ToTable("InterBranchTransfers");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.InterBranchTransferLog", b =>
@@ -1582,7 +1585,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("TransferId", "PerformedAt");
 
-                    b.ToTable("InterBranchTransferLogs", (string)null);
+                    b.ToTable("InterBranchTransferLogs");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.MicrocreditApplicationDocument", b =>
@@ -1639,7 +1642,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("ApplicationId", "Type");
 
-                    b.ToTable("microcredit_application_documents", (string)null);
+                    b.ToTable("microcredit_application_documents");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.MicrocreditApprovalStep", b =>
@@ -1685,7 +1688,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("ApplicationId", "Level");
 
-                    b.ToTable("microcredit_approval_steps", (string)null);
+                    b.ToTable("microcredit_approval_steps");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.MicrocreditBorrower", b =>
@@ -1762,7 +1765,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("FirstName", "LastName", "DateOfBirth");
 
-                    b.ToTable("microcredit_borrowers", (string)null);
+                    b.ToTable("microcredit_borrowers");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.MicrocreditGuarantee", b =>
@@ -1807,7 +1810,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("ApplicationId", "Type");
 
-                    b.ToTable("microcredit_guarantees", (string)null);
+                    b.ToTable("microcredit_guarantees");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.MicrocreditLoan", b =>
@@ -1940,7 +1943,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("Status", "LoanType");
 
-                    b.ToTable("microcredit_loans", (string)null);
+                    b.ToTable("microcredit_loans");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.MicrocreditLoanApplication", b =>
@@ -2056,7 +2059,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("Status", "LoanType");
 
-                    b.ToTable("microcredit_loan_applications", (string)null);
+                    b.ToTable("microcredit_loan_applications");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.MicrocreditLoanTypeConfiguration", b =>
@@ -2121,7 +2124,7 @@ namespace NalaCreditAPI.Migrations
                     b.HasIndex("Type")
                         .IsUnique();
 
-                    b.ToTable("microcredit_loan_type_configurations", (string)null);
+                    b.ToTable("microcredit_loan_type_configurations");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.MicrocreditPayment", b =>
@@ -2214,7 +2217,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("LoanId", "PaymentDate");
 
-                    b.ToTable("microcredit_payments", (string)null);
+                    b.ToTable("microcredit_payments");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.MicrocreditPaymentSchedule", b =>
@@ -2269,7 +2272,7 @@ namespace NalaCreditAPI.Migrations
                     b.HasIndex("LoanId", "InstallmentNumber")
                         .IsUnique();
 
-                    b.ToTable("microcredit_payment_schedules", (string)null);
+                    b.ToTable("microcredit_payment_schedules");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.PayrollPeriod", b =>
@@ -2352,7 +2355,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("BranchId", "StartDate", "EndDate");
 
-                    b.ToTable("PayrollPeriods", (string)null);
+                    b.ToTable("PayrollPeriods");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.Payslip", b =>
@@ -2474,7 +2477,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("Status", "PayrollPeriodId");
 
-                    b.ToTable("Payslips", (string)null);
+                    b.ToTable("Payslips");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.PayslipDeduction", b =>
@@ -2511,7 +2514,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("PayslipId", "DeductionType");
 
-                    b.ToTable("PayslipDeductions", (string)null);
+                    b.ToTable("PayslipDeductions");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.SalaryAdvance", b =>
@@ -2618,7 +2621,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("Status", "RequestDate");
 
-                    b.ToTable("SalaryAdvances", (string)null);
+                    b.ToTable("SalaryAdvances");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.SalaryAdvanceDeduction", b =>
@@ -2650,7 +2653,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("SalaryAdvanceId", "DeductionDate");
 
-                    b.ToTable("SalaryAdvanceDeductions", (string)null);
+                    b.ToTable("SalaryAdvanceDeductions");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.SavingsAccount", b =>
@@ -2746,7 +2749,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("Status", "Currency");
 
-                    b.ToTable("SavingsAccounts", (string)null);
+                    b.ToTable("SavingsAccounts");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.SavingsCustomer", b =>
@@ -2984,7 +2987,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("FirstName", "LastName", "DateOfBirth");
 
-                    b.ToTable("SavingsCustomers", (string)null);
+                    b.ToTable("SavingsCustomers");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.SavingsCustomerDocument", b =>
@@ -3043,7 +3046,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("CustomerId", "DocumentType");
 
-                    b.ToTable("SavingsCustomerDocuments", (string)null);
+                    b.ToTable("SavingsCustomerDocuments");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.SavingsTransaction", b =>
@@ -3140,7 +3143,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("Type", "Status");
 
-                    b.ToTable("SavingsTransactions", (string)null);
+                    b.ToTable("SavingsTransactions");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.SystemConfiguration", b =>
@@ -3175,7 +3178,7 @@ namespace NalaCreditAPI.Migrations
                     b.HasIndex("Key")
                         .IsUnique();
 
-                    b.ToTable("SystemConfigurations", (string)null);
+                    b.ToTable("SystemConfigurations");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.TermSavingsAccount", b =>
@@ -3261,7 +3264,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("Status", "Currency");
 
-                    b.ToTable("TermSavingsAccounts", (string)null);
+                    b.ToTable("TermSavingsAccounts");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.TermSavingsTransaction", b =>
@@ -3340,7 +3343,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("Type", "Status");
 
-                    b.ToTable("TermSavingsTransactions", (string)null);
+                    b.ToTable("TermSavingsTransactions");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.Transaction", b =>
@@ -3416,7 +3419,7 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("CreatedAt", "BranchId");
 
-                    b.ToTable("Transactions", (string)null);
+                    b.ToTable("Transactions");
                 });
 
             modelBuilder.Entity("NalaCreditAPI.Models.User", b =>
