@@ -25,8 +25,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: 'superadmin@nalacredit.com',
-      password: 'SuperAdmin123!',
+      email: '',
+      password: '',
       rememberMe: false,
     },
   });
@@ -88,6 +88,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               <input
                 {...register('email')}
                 type="email"
+                autoComplete="off"
                 className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition duration-200"
                 placeholder="votre@email.com"
               />
@@ -108,6 +109,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               <input
                 {...register('password')}
                 type={showPassword ? 'text' : 'password'}
+                autoComplete="off"
                 className="block w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition duration-200"
                 placeholder="••••••••"
               />
