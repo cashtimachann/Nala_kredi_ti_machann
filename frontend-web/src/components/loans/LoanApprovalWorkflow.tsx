@@ -20,11 +20,12 @@ import {
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
+import { LoanType } from '../../types/microcredit';
 
 interface LoanApplication {
   id: string;
   loanNumber: string;
-  loanType: 'COMMERCIAL' | 'AGRICULTURAL' | 'PERSONAL' | 'EMERGENCY';
+  loanType: LoanType;
   customerId: string;
   customerCode?: string;
   customerName: string;
@@ -152,10 +153,19 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
 
     // Score de garantie (sur 30 points)
     let collateralScore = 0;
-    if (collateralCoverageRatio >= 150) collateralScore = 30;
-    else if (collateralCoverageRatio >= 120) collateralScore = 25;
-    else if (collateralCoverageRatio >= 100) collateralScore = 15;
-    else collateralScore = 0;
+    // Pour épargne bloquée: critères différents (15% minimum)
+    if (application.collateralType === 'Épargne bloquée') {
+      if (collateralCoverageRatio >= 20) collateralScore = 30; // Excellent (20% ou plus)
+      else if (collateralCoverageRatio >= 15) collateralScore = 25; // Bon (15-20%)
+      else if (collateralCoverageRatio >= 10) collateralScore = 15; // Acceptable (10-15%)
+      else collateralScore = 5; // Faible (moins de 10%)
+    } else {
+      // Pour autres garanties: critères standards (120% minimum)
+      if (collateralCoverageRatio >= 150) collateralScore = 30;
+      else if (collateralCoverageRatio >= 120) collateralScore = 25;
+      else if (collateralCoverageRatio >= 100) collateralScore = 15;
+      else collateralScore = 0;
+    }
 
     // Score d'historique de crédit (sur 25 points) - simulé
     const creditHistoryScore = 20; // GOOD

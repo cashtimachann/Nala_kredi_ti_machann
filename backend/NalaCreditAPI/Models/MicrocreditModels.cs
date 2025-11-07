@@ -6,10 +6,22 @@ namespace NalaCreditAPI.Models
     // Enums pour le microcrédit
     public enum MicrocreditLoanType
     {
+        // Types existants
         Commercial,
         Agricultural, 
         Personal,
-        Emergency
+        Emergency,
+        
+        // Nouveaux types de microcrédit
+        CreditLoyer,           // Crédit Loyer
+        CreditAuto,            // Crédit Auto
+        CreditMoto,            // Crédit Moto
+        CreditPersonnel,       // Crédit Personnel
+        CreditScolaire,        // Crédit Scolaire
+        CreditAgricole,        // Crédit Agricole
+        CreditProfessionnel,   // Crédit Professionnel
+        CreditAppui,           // Crédit d'Appui
+        CreditHypothecaire     // Crédit Hypothécaire
     }
 
     public enum MicrocreditLoanStatus
@@ -269,6 +281,11 @@ namespace NalaCreditAPI.Models
         
         [Column(TypeName = "decimal(18,2)")]
         public decimal? CollateralValue { get; set; }
+        
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal? BlockedGuaranteeAmount { get; set; }
+        
+        public string? BlockedSavingsAccountId { get; set; }
         
         [Required]
         [Column(TypeName = "decimal(5,4)")]

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PaymentRecording from './PaymentRecording';
+import { LoanType, LoanStatus } from '../../types/microcredit';
 
 interface Loan {
   id: string;
@@ -29,7 +30,7 @@ interface Loan {
   customerId: string;
   customerName: string;
   customerCode?: string;
-  loanType: 'COMMERCIAL' | 'AGRICULTURAL' | 'PERSONAL' | 'EMERGENCY';
+  loanType: LoanType;
   principalAmount: number;
   interestRate: number;
   termMonths: number;
@@ -38,7 +39,7 @@ interface Loan {
   maturityDate: string;
   remainingBalance: number;
   paidAmount: number;
-  status: 'PENDING' | 'APPROVED' | 'DISBURSED' | 'ACTIVE' | 'OVERDUE' | 'PAID' | 'REJECTED';
+  status: LoanStatus;
   currency: 'HTG' | 'USD';
   collateral?: string;
   guarantors?: string[];

@@ -355,7 +355,8 @@ namespace NalaCreditAPI.DTOs
     public class CreateMicrocreditLoanApplicationDto
     {
         [Required]
-        public Guid BorrowerId { get; set; }
+        [MaxLength(12)]
+        public string SavingsAccountNumber { get; set; } = string.Empty;
         
         [Required]
         public MicrocreditLoanType LoanType { get; set; }
@@ -634,5 +635,16 @@ namespace NalaCreditAPI.DTOs
     {
         public int Count { get; set; }
         public CurrencyAmountDto Amount { get; set; } = new();
+    }
+
+    public class LoanTypeStatsDto
+    {
+        public MicrocreditLoanType LoanType { get; set; }
+        public int TotalLoans { get; set; }
+        public int ActiveLoans { get; set; }
+        public decimal TotalDisbursed { get; set; }
+        public decimal TotalOutstanding { get; set; }
+        public decimal AverageAmount { get; set; }
+        public int OverdueCount { get; set; }
     }
 }

@@ -325,6 +325,9 @@ namespace NalaCreditAPI.Models
         public decimal AvailableBalance { get; set; } = 0;
 
         [Column(TypeName = "decimal(18,2)")]
+        public decimal BlockedBalance { get; set; } = 0;
+
+        [Column(TypeName = "decimal(18,2)")]
         public decimal MinimumBalance { get; set; } = 0;
 
         [Required]

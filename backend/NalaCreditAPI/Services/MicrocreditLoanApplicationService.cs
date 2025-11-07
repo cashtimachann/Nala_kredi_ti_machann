@@ -22,6 +22,7 @@ namespace NalaCreditAPI.Services
         Task<MicrocreditLoanApplicationDto> ReviewApplicationAsync(Guid id, string reviewerId, string comments);
         Task<MicrocreditLoanApplicationDto> ApproveApplicationAsync(Guid id, string approverId, string comments, decimal? approvedAmount = null);
         Task<MicrocreditLoanApplicationDto> RejectApplicationAsync(Guid id, string rejectedBy, string reason);
+        Task<MicrocreditLoanApplicationDto> CancelApplicationAsync(Guid id, string cancelledBy, string reason);
         Task<RiskAssessmentDto> CalculateRiskAssessmentAsync(Guid applicationId);
         Task<bool> ValidateApplicationAsync(Guid id);
 
@@ -119,18 +120,92 @@ namespace NalaCreditAPI.Services
 
         public async Task<MicrocreditLoanApplicationDto> CreateApplicationAsync(CreateMicrocreditLoanApplicationDto dto, string userId)
         {
-            var borrower = await _context.MicrocreditBorrowers.FindAsync(dto.BorrowerId);
-            if (borrower == null)
-                throw new ArgumentException("Borrower not found");
+            // Find borrower's savings account by account number
+            var savingsAccount = await _context.SavingsAccounts
+                .Include(a => a.Customer)
+                .FirstOrDefaultAsync(a => a.AccountNumber == dto.SavingsAccountNumber && a.Status == SavingsAccountStatus.Active);
+
+            if (savingsAccount == null)
+                throw new ArgumentException("Savings account not found or not active");
+
+            // Get customer from the savings account
+            var savingsCustomer = savingsAccount.Customer;
+            if (savingsCustomer == null)
+                throw new ArgumentException("Customer information not found for this savings account");
+
+            // Check if borrower already exists for this customer
+            var existingBorrower = await _context.MicrocreditBorrowers
+                .FirstOrDefaultAsync(b => b.FirstName == savingsCustomer.FirstName && 
+                                        b.LastName == savingsCustomer.LastName && 
+                                        b.Identity.Contains(savingsCustomer.DocumentNumber));
+
+            MicrocreditBorrower borrower;
+            if (existingBorrower != null)
+            {
+                borrower = existingBorrower;
+            }
+            else
+            {
+                // Create new borrower from savings customer data
+                borrower = new MicrocreditBorrower
+                {
+                    Id = Guid.NewGuid(),
+                    FirstName = savingsCustomer.FirstName,
+                    LastName = savingsCustomer.LastName,
+                    DateOfBirth = DateOnly.FromDateTime(savingsCustomer.DateOfBirth),
+                    Gender = savingsCustomer.Gender == SavingsGender.Male ? "M" : "F",
+                    Address = JsonSerializer.Serialize(new
+                    {
+                        street = savingsCustomer.Street,
+                        commune = savingsCustomer.Commune,
+                        department = savingsCustomer.Department,
+                        country = savingsCustomer.Country ?? "Haiti"
+                    }),
+                    Contact = JsonSerializer.Serialize(new
+                    {
+                        primaryPhone = savingsCustomer.PrimaryPhone,
+                        secondaryPhone = savingsCustomer.SecondaryPhone,
+                        email = savingsCustomer.Email
+                    }),
+                    Identity = JsonSerializer.Serialize(new
+                    {
+                        documentType = savingsCustomer.DocumentType.ToString(),
+                        documentNumber = savingsCustomer.DocumentNumber,
+                        issuedDate = savingsCustomer.IssuedDate,
+                        expiryDate = savingsCustomer.ExpiryDate,
+                        issuingAuthority = savingsCustomer.IssuingAuthority
+                    }),
+                    Occupation = savingsCustomer.Occupation ?? "Non spécifié",
+                    MonthlyIncome = savingsCustomer.MonthlyIncome ?? dto.MonthlyIncome,
+                    EmploymentType = savingsCustomer.IncomeSource ?? "Non spécifié",
+                    YearsInBusiness = null, // Not available in savings customer
+                    CreditScore = null,
+                    PreviousLoans = "[]",
+                    References = JsonSerializer.Serialize(new[]
+                    {
+                        new
+                        {
+                            name = savingsCustomer.ReferencePersonName ?? "",
+                            phone = savingsCustomer.ReferencePersonPhone ?? "",
+                            relationship = "Référence personnelle"
+                        }
+                    })
+                };
+
+                _context.MicrocreditBorrowers.Add(borrower);
+            }
 
             // Calculate debt-to-income ratio
             var debtToIncomeRatio = dto.ExistingDebts / dto.MonthlyIncome;
+
+            // Calculate guarantee amount (15% of requested amount)
+            var guaranteeAmount = dto.RequestedAmount * 0.15m;
 
             var application = new MicrocreditLoanApplication
             {
                 Id = Guid.NewGuid(),
                 ApplicationNumber = await GenerateApplicationNumberAsync(),
-                BorrowerId = dto.BorrowerId,
+                BorrowerId = borrower.Id,
                 LoanType = dto.LoanType,
                 RequestedAmount = dto.RequestedAmount,
                 RequestedDurationMonths = dto.RequestedDurationMonths,
@@ -143,11 +218,31 @@ namespace NalaCreditAPI.Services
                 MonthlyExpenses = dto.MonthlyExpenses,
                 ExistingDebts = dto.ExistingDebts,
                 CollateralValue = dto.CollateralValue,
+                BlockedGuaranteeAmount = guaranteeAmount,
                 DebtToIncomeRatio = debtToIncomeRatio,
                 Status = MicrocreditApplicationStatus.Draft,
                 LoanOfficerId = userId,
                 LoanOfficerName = "Officer" // TODO: Get from user service
             };
+
+            // Block the guarantee amount from the found savings account
+            if (savingsAccount.AvailableBalance >= guaranteeAmount)
+            {
+                // Block the guarantee amount
+                savingsAccount.BlockedBalance += guaranteeAmount;
+                savingsAccount.AvailableBalance -= guaranteeAmount;
+                application.BlockedSavingsAccountId = savingsAccount.Id;
+                
+                // Update application status to indicate guarantee is blocked
+                application.Status = MicrocreditApplicationStatus.Submitted; // "Demann an Atant - Garanti Bloke"
+                application.SubmittedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                // If insufficient funds, still create application but don't block
+                application.BlockedGuaranteeAmount = null;
+                application.BlockedSavingsAccountId = null;
+            }
 
             _context.MicrocreditLoanApplications.Add(application);
             await _context.SaveChangesAsync();
@@ -269,6 +364,24 @@ namespace NalaCreditAPI.Services
                 application.Status != MicrocreditApplicationStatus.Submitted)
                 throw new InvalidOperationException("Only applications under review or submitted can be rejected");
 
+            // Unblock guarantee amount if it was blocked
+            if (application.BlockedSavingsAccountId != null && application.BlockedGuaranteeAmount.HasValue)
+            {
+                var savingsAccount = await _context.SavingsAccounts
+                    .FirstOrDefaultAsync(a => a.Id == application.BlockedSavingsAccountId);
+
+                if (savingsAccount != null)
+                {
+                    // Unblock the guarantee amount
+                    savingsAccount.BlockedBalance -= application.BlockedGuaranteeAmount.Value;
+                    savingsAccount.AvailableBalance += application.BlockedGuaranteeAmount.Value;
+
+                    // Clear the blocked amount references
+                    application.BlockedGuaranteeAmount = null;
+                    application.BlockedSavingsAccountId = null;
+                }
+            }
+
             application.Status = MicrocreditApplicationStatus.Rejected;
             application.RejectedAt = DateTime.UtcNow;
             application.RejectionReason = reason;
@@ -277,6 +390,46 @@ namespace NalaCreditAPI.Services
             await _context.SaveChangesAsync();
 
             return await GetApplicationAsync(id) ?? throw new InvalidOperationException("Failed to retrieve rejected application");
+        }
+
+        public async Task<MicrocreditLoanApplicationDto> CancelApplicationAsync(Guid id, string cancelledBy, string reason)
+        {
+            var application = await _context.MicrocreditLoanApplications
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (application == null)
+                throw new ArgumentException("Application not found");
+
+            if (application.Status != MicrocreditApplicationStatus.Draft &&
+                application.Status != MicrocreditApplicationStatus.Submitted &&
+                application.Status != MicrocreditApplicationStatus.UnderReview)
+                throw new InvalidOperationException("Only draft, submitted, or under review applications can be cancelled");
+
+            // Unblock guarantee amount if it was blocked
+            if (application.BlockedSavingsAccountId != null && application.BlockedGuaranteeAmount.HasValue)
+            {
+                var savingsAccount = await _context.SavingsAccounts
+                    .FirstOrDefaultAsync(a => a.Id == application.BlockedSavingsAccountId);
+
+                if (savingsAccount != null)
+                {
+                    // Unblock the guarantee amount
+                    savingsAccount.BlockedBalance -= application.BlockedGuaranteeAmount.Value;
+                    savingsAccount.AvailableBalance += application.BlockedGuaranteeAmount.Value;
+
+                    // Clear the blocked amount references
+                    application.BlockedGuaranteeAmount = null;
+                    application.BlockedSavingsAccountId = null;
+                }
+            }
+
+            application.Status = MicrocreditApplicationStatus.Cancelled;
+            application.RejectionReason = reason; // Reuse rejection reason field for cancellation
+            application.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return await GetApplicationAsync(id) ?? throw new InvalidOperationException("Failed to retrieve cancelled application");
         }
 
         public async Task<RiskAssessmentDto> CalculateRiskAssessmentAsync(Guid applicationId)
@@ -516,6 +669,26 @@ namespace NalaCreditAPI.Services
 
             if (loan.Status != MicrocreditLoanStatus.Approved)
                 throw new InvalidOperationException("Only approved loans can be disbursed");
+
+            // Release blocked guarantee amount from borrower's savings account
+            if (loan.Application != null && 
+                loan.Application.BlockedSavingsAccountId != null && 
+                loan.Application.BlockedGuaranteeAmount.HasValue)
+            {
+                var savingsAccount = await _context.SavingsAccounts
+                    .FirstOrDefaultAsync(a => a.Id == loan.Application.BlockedSavingsAccountId);
+
+                if (savingsAccount != null)
+                {
+                    // Unblock the guarantee amount - it's now released since loan is disbursed
+                    savingsAccount.BlockedBalance -= loan.Application.BlockedGuaranteeAmount.Value;
+                    savingsAccount.AvailableBalance += loan.Application.BlockedGuaranteeAmount.Value;
+
+                    // Clear the blocked amount references from the application
+                    loan.Application.BlockedGuaranteeAmount = null;
+                    loan.Application.BlockedSavingsAccountId = null;
+                }
+            }
 
             // Update loan status and disbursement info
             loan.Status = MicrocreditLoanStatus.Active;

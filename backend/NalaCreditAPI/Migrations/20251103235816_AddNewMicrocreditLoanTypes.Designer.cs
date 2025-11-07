@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NalaCreditAPI.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace NalaCreditAPI.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251103235816_AddNewMicrocreditLoanTypes")]
+    partial class AddNewMicrocreditLoanTypes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1957,12 +1960,6 @@ namespace NalaCreditAPI.Migrations
                     b.Property<DateTime?>("ApprovedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<decimal?>("BlockedGuaranteeAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("BlockedSavingsAccountId")
-                        .HasColumnType("text");
-
                     b.Property<Guid>("BorrowerId")
                         .HasColumnType("uuid");
 
@@ -2676,9 +2673,6 @@ namespace NalaCreditAPI.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("Balance")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("BlockedBalance")
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("BranchId")

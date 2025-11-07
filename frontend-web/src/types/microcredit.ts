@@ -1,10 +1,22 @@
 // Types et interfaces pour le système de microcrédit
 
 export enum LoanType {
+  // Types existants
   COMMERCIAL = 'COMMERCIAL', // Crédit commercial (petit commerce)
-  AGRICULTURAL = 'AGRICULTURAL', // Crédit agricole
-  PERSONAL = 'PERSONAL', // Crédit personnel
-  EMERGENCY = 'EMERGENCY' // Crédit d'urgence
+  AGRICULTURAL = 'AGRICULTURAL', // Crédit agricole (standard)
+  PERSONAL = 'PERSONAL', // Crédit personnel (standard)
+  EMERGENCY = 'EMERGENCY', // Crédit d'urgence
+  
+  // Nouveaux types de microcrédit
+  CREDIT_LOYER = 'CREDIT_LOYER', // Crédit Loyer
+  CREDIT_AUTO = 'CREDIT_AUTO', // Crédit Auto
+  CREDIT_MOTO = 'CREDIT_MOTO', // Crédit Moto
+  CREDIT_PERSONNEL = 'CREDIT_PERSONNEL', // Crédit Personnel
+  CREDIT_SCOLAIRE = 'CREDIT_SCOLAIRE', // Crédit Scolaire
+  CREDIT_AGRICOLE = 'CREDIT_AGRICOLE', // Crédit Agricole
+  CREDIT_PROFESSIONNEL = 'CREDIT_PROFESSIONNEL', // Crédit Professionnel
+  CREDIT_APPUI = 'CREDIT_APPUI', // Crédit d'Appui
+  CREDIT_HYPOTHECAIRE = 'CREDIT_HYPOTHECAIRE' // Crédit Hypothécaire
 }
 
 export enum LoanStatus {

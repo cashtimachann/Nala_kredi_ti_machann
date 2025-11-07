@@ -2,17 +2,17 @@ import React, { useState, useEffect } from 'react';
 import {
   Plus, Search, Filter, Download, Eye, Calendar, DollarSign,
   TrendingUp, Clock, AlertTriangle, CheckCircle, XCircle,
-  Users, FileText, BarChart3, CreditCard, RefreshCw, Percent
+  Users, FileText, BarChart3, CreditCard, RefreshCw, Percent,
+  User, Shield
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import LoanApplicationForm from './LoanApplicationForm';
 import LoanApprovalWorkflow from './LoanApprovalWorkflow';
 import LoanDetails from './LoanDetails';
 import LoanReports from './LoanReports';
+import { LoanType, LoanStatus } from '../../types/microcredit';
 
 // Types
-type LoanType = 'COMMERCIAL' | 'AGRICULTURAL' | 'PERSONAL' | 'EMERGENCY';
-type LoanStatus = 'PENDING' | 'APPROVED' | 'DISBURSED' | 'ACTIVE' | 'OVERDUE' | 'PAID' | 'REJECTED';
 
 interface Loan {
   id: string;
@@ -73,6 +73,7 @@ const LoanManagement: React.FC = () => {
   const [showDetails, setShowDetails] = useState(false);
   const [showApprovalWorkflow, setShowApprovalWorkflow] = useState(false);
   const [showReports, setShowReports] = useState(false);
+  const [activeTab, setActiveTab] = useState<'loans' | 'applications'>('loans');
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -92,163 +93,23 @@ const LoanManagement: React.FC = () => {
     try {
       setLoading(true);
       
-      // Load dashboard statistics
-      const statsResponse = await fetch('/api/MicrocreditLoan/dashboard/stats', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      // TODO: Call real API endpoint to load loans
+      // const response = await microcreditService.getLoans();
+      // setLoans(response.data.loans);
+      // setStats(response.data.stats);
       
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setStats({
-          totalClients: statsData.totalClients,
-          activeLoans: statsData.activeLoans,
-          totalOutstanding: statsData.totalOutstanding,
-          repaymentRate: statsData.repaymentRate,
-          overdueLoans: statsData.overdueLoans,
-          interestRevenue: statsData.interestRevenue,
-          loansCompletedThisMonth: statsData.loansCompletedThisMonth,
-          newLoansThisMonth: statsData.newLoansThisMonth
-        });
-      } else {
-        // Fallback to demo data if API fails
-        console.warn('Failed to load dashboard stats, using demo data');
-        setStats({
-          totalClients: 247,
-          activeLoans: 89,
-          totalOutstanding: { HTG: 2850000, USD: 45600 },
-          repaymentRate: 92.3,
-          overdueLoans: { count: 5, amount: { HTG: 125000, USD: 2100 } },
-          interestRevenue: { HTG: 485000, USD: 7800 },
-          loansCompletedThisMonth: 12,
-          newLoansThisMonth: 18
-        });
-      }
-
-      // Load loans list
-      const loansResponse = await fetch('/api/MicrocreditLoan', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
+      // For now, initialize with empty data
+      setLoans([]);
+      setStats({
+        totalClients: 0,
+        activeLoans: 0,
+        totalOutstanding: { HTG: 0, USD: 0 },
+        repaymentRate: 0,
+        overdueLoans: { count: 0, amount: { HTG: 0, USD: 0 } },
+        interestRevenue: { HTG: 0, USD: 0 },
+        loansCompletedThisMonth: 0,
+        newLoansThisMonth: 0
       });
-
-      if (loansResponse.ok) {
-        const loansData = await loansResponse.json();
-        setLoans(loansData.loans || []);
-      } else {
-        // Demo data fallback
-        const demoLoans: Loan[] = [
-          {
-            id: '1',
-            loanNumber: 'MC-2025-0001',
-            customerId: 'C001',
-            customerName: 'Jean Baptiste',
-            loanType: 'COMMERCIAL',
-            principalAmount: 100000,
-            interestRate: 18,
-            termMonths: 12,
-            monthlyPayment: 9168,
-            disbursementDate: '2025-01-15',
-            maturityDate: '2026-01-15',
-            remainingBalance: 85000,
-            paidAmount: 15000,
-            status: 'ACTIVE',
-            currency: 'HTG',
-            collateral: 'Stock de marchandises (valeur 150,000 HTG)',
-            guarantors: ['Marie Claire', 'Pierre Louis'],
-            branch: 'Port-au-Prince',
-            loanOfficer: 'Sophie Martin',
-            createdAt: '2025-01-10T10:00:00',
-            approvedBy: 'Admin',
-            approvedAt: '2025-01-14T15:30:00',
-            nextPaymentDate: '2025-11-15',
-            nextPaymentAmount: 9168
-          },
-          {
-            id: '2',
-            loanNumber: 'MC-2025-0002',
-            customerId: 'C002',
-            customerName: 'Marie Jeanne',
-            loanType: 'AGRICULTURAL',
-            principalAmount: 2000,
-            interestRate: 15,
-            termMonths: 6,
-            monthlyPayment: 350,
-            disbursementDate: '2025-05-01',
-            maturityDate: '2025-11-01',
-            remainingBalance: 1200,
-            paidAmount: 800,
-            status: 'ACTIVE',
-            currency: 'USD',
-            collateral: 'Récolte future (1 hectare de maïs)',
-            guarantors: ['Cooperative Agricole'],
-            branch: 'Gonaïves',
-            loanOfficer: 'Jacques Dubois',
-            createdAt: '2025-04-20T09:00:00',
-            approvedBy: 'Regional Manager',
-            approvedAt: '2025-04-28T14:00:00',
-            nextPaymentDate: '2025-11-01',
-            nextPaymentAmount: 350
-          },
-          {
-            id: '3',
-            loanNumber: 'MC-2025-0003',
-            customerId: 'C003',
-            customerName: 'Paul Léon',
-            loanType: 'PERSONAL',
-            principalAmount: 50000,
-            interestRate: 20,
-            termMonths: 18,
-            monthlyPayment: 3222,
-            disbursementDate: '2024-08-01',
-            maturityDate: '2026-02-01',
-            remainingBalance: 45000,
-            paidAmount: 5000,
-            status: 'OVERDUE',
-            currency: 'HTG',
-            collateral: 'Titre de propriété (maison)',
-            guarantors: ['Frère - André Léon', 'Cousin - Marc Jeune'],
-            branch: 'Cap-Haïtien',
-            loanOfficer: 'Claire Benoît',
-            createdAt: '2024-07-15T11:00:00',
-            approvedBy: 'Branch Supervisor',
-            approvedAt: '2024-07-28T16:00:00',
-            daysOverdue: 15,
-            nextPaymentDate: '2025-10-01',
-            nextPaymentAmount: 3222
-          },
-          {
-            id: '4',
-            loanNumber: 'MC-2025-0004',
-            customerId: 'C004',
-            customerName: 'Roseline Auguste',
-            loanType: 'EMERGENCY',
-            principalAmount: 300,
-            interestRate: 22,
-            termMonths: 3,
-            monthlyPayment: 105,
-            disbursementDate: '2025-09-10',
-            maturityDate: '2025-12-10',
-            remainingBalance: 210,
-            paidAmount: 90,
-            status: 'ACTIVE',
-            currency: 'USD',
-            collateral: 'Aucun',
-            guarantors: ['Voisin - Robert Jean'],
-            branch: 'Les Cayes',
-            loanOfficer: 'Michel François',
-            createdAt: '2025-09-08T08:00:00',
-            approvedBy: 'Admin',
-            approvedAt: '2025-09-09T10:00:00',
-            nextPaymentDate: '2025-11-10',
-            nextPaymentAmount: 105
-          }
-        ];
-        setLoans(demoLoans);
-      }
 
       setLoading(false);
     } catch (error) {
@@ -306,21 +167,39 @@ const LoanManagement: React.FC = () => {
   };
 
   const getLoanTypeLabel = (type: LoanType) => {
-    const labels = {
-      COMMERCIAL: 'Commercial',
-      AGRICULTURAL: 'Agricole',
-      PERSONAL: 'Personnel',
-      EMERGENCY: 'Urgence'
+    const labels: Record<LoanType, string> = {
+      [LoanType.COMMERCIAL]: 'Commercial',
+      [LoanType.AGRICULTURAL]: 'Agricole',
+      [LoanType.PERSONAL]: 'Personnel',
+      [LoanType.EMERGENCY]: 'Urgence',
+      [LoanType.CREDIT_LOYER]: 'Crédit Loyer',
+      [LoanType.CREDIT_AUTO]: 'Crédit Auto',
+      [LoanType.CREDIT_MOTO]: 'Crédit Moto',
+      [LoanType.CREDIT_PERSONNEL]: 'Crédit Personnel',
+      [LoanType.CREDIT_SCOLAIRE]: 'Crédit Scolaire',
+      [LoanType.CREDIT_AGRICOLE]: 'Crédit Agricole',
+      [LoanType.CREDIT_PROFESSIONNEL]: 'Crédit Professionnel',
+      [LoanType.CREDIT_APPUI]: 'Crédit d\'Appui',
+      [LoanType.CREDIT_HYPOTHECAIRE]: 'Crédit Hypothécaire'
     };
     return labels[type];
   };
 
   const getLoanTypeBadge = (type: LoanType) => {
-    const badges = {
-      COMMERCIAL: { color: 'bg-blue-100 text-blue-800', icon: '🏪' },
-      AGRICULTURAL: { color: 'bg-green-100 text-green-800', icon: '🌾' },
-      PERSONAL: { color: 'bg-purple-100 text-purple-800', icon: '👤' },
-      EMERGENCY: { color: 'bg-red-100 text-red-800', icon: '🚨' }
+    const badges: Record<LoanType, { color: string; icon: string }> = {
+      [LoanType.COMMERCIAL]: { color: 'bg-blue-100 text-blue-800', icon: '🏪' },
+      [LoanType.AGRICULTURAL]: { color: 'bg-green-100 text-green-800', icon: '🌾' },
+      [LoanType.PERSONAL]: { color: 'bg-purple-100 text-purple-800', icon: '👤' },
+      [LoanType.EMERGENCY]: { color: 'bg-red-100 text-red-800', icon: '🚨' },
+      [LoanType.CREDIT_LOYER]: { color: 'bg-indigo-100 text-indigo-800', icon: '🏠' },
+      [LoanType.CREDIT_AUTO]: { color: 'bg-cyan-100 text-cyan-800', icon: '🚗' },
+      [LoanType.CREDIT_MOTO]: { color: 'bg-teal-100 text-teal-800', icon: '🏍️' },
+      [LoanType.CREDIT_PERSONNEL]: { color: 'bg-pink-100 text-pink-800', icon: '💳' },
+      [LoanType.CREDIT_SCOLAIRE]: { color: 'bg-amber-100 text-amber-800', icon: '📚' },
+      [LoanType.CREDIT_AGRICOLE]: { color: 'bg-lime-100 text-lime-800', icon: '🚜' },
+      [LoanType.CREDIT_PROFESSIONNEL]: { color: 'bg-violet-100 text-violet-800', icon: '💼' },
+      [LoanType.CREDIT_APPUI]: { color: 'bg-orange-100 text-orange-800', icon: '🤝' },
+      [LoanType.CREDIT_HYPOTHECAIRE]: { color: 'bg-slate-100 text-slate-800', icon: '🏡' }
     };
 
     const badge = badges[type];
@@ -333,14 +212,14 @@ const LoanManagement: React.FC = () => {
   };
 
   const getStatusBadge = (status: LoanStatus) => {
-    const badges = {
-      PENDING: { color: 'bg-yellow-100 text-yellow-800', label: 'En attente', icon: Clock },
-      APPROVED: { color: 'bg-blue-100 text-blue-800', label: 'Approuvé', icon: CheckCircle },
-      DISBURSED: { color: 'bg-indigo-100 text-indigo-800', label: 'Décaissé', icon: DollarSign },
-      ACTIVE: { color: 'bg-green-100 text-green-800', label: 'Actif', icon: CheckCircle },
-      OVERDUE: { color: 'bg-red-100 text-red-800', label: 'En retard', icon: AlertTriangle },
-      PAID: { color: 'bg-gray-100 text-gray-800', label: 'Soldé', icon: CheckCircle },
-      REJECTED: { color: 'bg-gray-100 text-gray-800', label: 'Rejeté', icon: XCircle }
+    const badges: Record<LoanStatus, { color: string; label: string; icon: any }> = {
+      [LoanStatus.PENDING]: { color: 'bg-yellow-100 text-yellow-800', label: 'En attente', icon: Clock },
+      [LoanStatus.APPROVED]: { color: 'bg-blue-100 text-blue-800', label: 'Approuvé', icon: CheckCircle },
+      [LoanStatus.ACTIVE]: { color: 'bg-green-100 text-green-800', label: 'Actif', icon: CheckCircle },
+      [LoanStatus.COMPLETED]: { color: 'bg-gray-100 text-gray-800', label: 'Soldé', icon: CheckCircle },
+      [LoanStatus.OVERDUE]: { color: 'bg-red-100 text-red-800', label: 'En retard', icon: AlertTriangle },
+      [LoanStatus.DEFAULTED]: { color: 'bg-red-200 text-red-900', label: 'En défaut', icon: XCircle },
+      [LoanStatus.CANCELLED]: { color: 'bg-gray-100 text-gray-800', label: 'Annulé', icon: XCircle }
     };
 
     const badge = badges[status];
@@ -427,6 +306,46 @@ const LoanManagement: React.FC = () => {
             <Plus className="w-5 h-5" />
             Nouvelle Demande
           </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="border-b border-gray-200">
+          <nav className="flex -mb-px">
+            <button
+              onClick={() => setActiveTab('applications')}
+              className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'applications'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                <span>Nouvelles Demandes</span>
+                <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-full">
+                  {loans.filter(l => l.status === LoanStatus.PENDING).length}
+                </span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('loans')}
+              className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'loans'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5" />
+                <span>Prêts Actifs</span>
+                <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">
+                  {loans.filter(l => l.status === LoanStatus.ACTIVE).length}
+                </span>
+              </div>
+            </button>
+          </nav>
         </div>
       </div>
 
@@ -545,35 +464,38 @@ const LoanManagement: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Search */}
-          <div>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Rechercher..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              />
+      {activeTab === 'loans' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Search */}
+            <div>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Rechercher..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
             </div>
-          </div>
 
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-          >
-            <option value="ALL">Tous les statuts</option>
-            <option value="PENDING">En attente</option>
-            <option value="APPROVED">Approuvé</option>
-            <option value="ACTIVE">Actif</option>
-            <option value="OVERDUE">En retard</option>
-            <option value="PAID">Soldé</option>
-          </select>
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="ALL">Tous les statuts</option>
+              <option value={LoanStatus.PENDING}>En attente</option>
+              <option value={LoanStatus.APPROVED}>Approuvé</option>
+              <option value={LoanStatus.ACTIVE}>Actif</option>
+              <option value={LoanStatus.COMPLETED}>Soldé</option>
+              <option value={LoanStatus.OVERDUE}>En retard</option>
+              <option value={LoanStatus.DEFAULTED}>En défaut</option>
+              <option value={LoanStatus.CANCELLED}>Annulé</option>
+            </select>
 
           {/* Type Filter */}
           <select
@@ -582,10 +504,19 @@ const LoanManagement: React.FC = () => {
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           >
             <option value="ALL">Tous les types</option>
-            <option value="COMMERCIAL">Commercial</option>
-            <option value="AGRICULTURAL">Agricole</option>
-            <option value="PERSONAL">Personnel</option>
-            <option value="EMERGENCY">Urgence</option>
+            <option value={LoanType.COMMERCIAL}>Commercial</option>
+            <option value={LoanType.AGRICULTURAL}>Agricole</option>
+            <option value={LoanType.PERSONAL}>Personnel</option>
+            <option value={LoanType.EMERGENCY}>Urgence</option>
+            <option value={LoanType.CREDIT_LOYER}>Crédit Loyer</option>
+            <option value={LoanType.CREDIT_AUTO}>Crédit Auto</option>
+            <option value={LoanType.CREDIT_MOTO}>Crédit Moto</option>
+            <option value={LoanType.CREDIT_PERSONNEL}>Crédit Personnel</option>
+            <option value={LoanType.CREDIT_SCOLAIRE}>Crédit Scolaire</option>
+            <option value={LoanType.CREDIT_AGRICOLE}>Crédit Agricole</option>
+            <option value={LoanType.CREDIT_PROFESSIONNEL}>Crédit Professionnel</option>
+            <option value={LoanType.CREDIT_APPUI}>Crédit d'Appui</option>
+            <option value={LoanType.CREDIT_HYPOTHECAIRE}>Crédit Hypothécaire</option>
           </select>
 
           {/* Currency Filter */}
@@ -617,8 +548,157 @@ const LoanManagement: React.FC = () => {
           )}
         </div>
       </div>
+      )}
+
+      {/* Applications Table (Nouvelles Demandes) */}
+      {activeTab === 'applications' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Demandes en Attente d'Approbation</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  {loans.filter(l => l.status === LoanStatus.PENDING).length} demande(s) à traiter
+                </p>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <Clock className="w-5 h-5 text-yellow-600" />
+                <span className="text-sm font-medium text-yellow-800">Action requise</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Date Demande
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Client
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Type de Crédit
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Montant Demandé
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Durée
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Garanties
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Statut
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {loans.filter(l => l.status === LoanStatus.PENDING).length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center justify-center text-gray-500">
+                        <CheckCircle className="w-12 h-12 mb-4 text-gray-300" />
+                        <p className="text-lg font-medium">Aucune demande en attente</p>
+                        <p className="text-sm mt-2">Toutes les demandes ont été traitées</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  loans.filter(l => l.status === LoanStatus.PENDING).map((loan) => (
+                    <tr key={loan.id} className="hover:bg-yellow-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{formatDate(loan.createdAt)}</p>
+                          <p className="text-xs text-gray-500">{loan.loanNumber}</p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 bg-blue-100 rounded-full">
+                            <User className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{loan.customerName}</p>
+                            <p className="text-xs text-gray-500">{loan.branch}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {getLoanTypeBadge(loan.loanType)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <p className="text-sm font-bold text-gray-900">
+                          {formatCurrency(loan.principalAmount, loan.currency)}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Mensualité: {formatCurrency(loan.monthlyPayment, loan.currency)}
+                        </p>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <p className="text-sm text-gray-900">{loan.termMonths} mois</p>
+                        <p className="text-xs text-gray-500">Taux: {loan.interestRate}%</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="max-w-xs">
+                          {loan.collateral && (
+                            <div className="flex items-start gap-1 mb-1">
+                              <Shield className="w-3 h-3 text-green-600 mt-0.5 flex-shrink-0" />
+                              <p className="text-xs text-gray-600">{loan.collateral}</p>
+                            </div>
+                          )}
+                          {loan.guarantors && loan.guarantors.length > 0 && (
+                            <div className="flex items-center gap-1">
+                              <Users className="w-3 h-3 text-blue-600 flex-shrink-0" />
+                              <p className="text-xs text-gray-600">
+                                {loan.guarantors.length} garant(s)
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {getStatusBadge(loan.status)}
+                          <span className="text-xs text-yellow-600 font-medium">
+                            En attente
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleViewDetails(loan)}
+                            className="px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center gap-1"
+                          >
+                            <Eye className="w-3 h-3" />
+                            Voir
+                          </button>
+                          <button
+                            onClick={() => handleApproval(loan)}
+                            className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors flex items-center gap-1"
+                          >
+                            <CheckCircle className="w-3 h-3" />
+                            Traiter
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Loans Table */}
+      {activeTab === 'loans' && (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -748,16 +828,21 @@ const LoanManagement: React.FC = () => {
           </table>
         </div>
       </div>
+      )}
 
       {/* Application Form Modal */}
       {showApplicationForm && (
         <LoanApplicationForm
           onSubmit={(data) => {
             console.log('Loan application submitted:', data);
-            // TODO: Call API
-            toast.success('Demande de crédit soumise avec succès!');
+            toast.success(
+              'Demande de crédit soumise avec succès!\n\n' +
+              'Votre demande sera examinée par notre comité de crédit.',
+              { duration: 5000 }
+            );
             setShowApplicationForm(false);
-            loadLoans();
+            // Reload loans after brief delay
+            setTimeout(() => loadLoans(), 500);
           }}
           onCancel={() => setShowApplicationForm(false)}
         />
