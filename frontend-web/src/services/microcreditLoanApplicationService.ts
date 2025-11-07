@@ -91,10 +91,25 @@ export interface LoanApplicationResponse {
   id: string;
   applicationNumber: string;
   borrowerId: string;
+  borrower?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    accountNumber: string;
+  };
   loanType: LoanType;
   requestedAmount: number;
   requestedDurationMonths: number;
+  purpose: string;
   currency: string;
+  branchId: number;
+  branchName: string;
+  monthlyIncome: number;
+  monthlyExpenses: number;
+  existingDebts: number;
+  collateralValue?: number;
+  debtToIncomeRatio: number;
+  creditScore?: number;
   status: string;
   createdAt: string;
   submittedAt?: string;
@@ -102,9 +117,33 @@ export interface LoanApplicationResponse {
   approvedAt?: string;
   rejectedAt?: string;
   rejectionReason?: string;
+  loanOfficerId: string;
+  loanOfficerName: string;
+  guarantees?: Array<{
+    id: string;
+    type: string;
+    description: string;
+    contactName?: string;
+    contactPhone?: string;
+    value?: number;
+    currency?: string;
+  }>;
+}
+
+export interface LoanApplicationListResponse {
+  applications: LoanApplicationResponse[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
+  pageSize: number;
 }
 
 class MicrocreditLoanApplicationService {
+  isAuthenticated(): boolean {
+    const token = sessionStorage.getItem('auth_token');
+    return !!token && token !== 'null' && token !== 'undefined';
+  }
+
   private getAuthHeaders() {
     const token = sessionStorage.getItem('auth_token');
     return {
@@ -194,6 +233,9 @@ class MicrocreditLoanApplicationService {
     branchId?: number;
   }): Promise<LoanApplicationResponse[]> {
     try {
+      if (!this.isAuthenticated()) {
+        throw new Error('AUTH_REQUIRED');
+      }
       const params = new URLSearchParams();
       if (filters?.status) params.append('status', filters.status);
       if (filters?.loanType) params.append('loanType', loanTypeMapping[filters.loanType]);
@@ -204,26 +246,90 @@ class MicrocreditLoanApplicationService {
         { headers: this.getAuthHeaders() }
       );
       
-      // Map backend responses back to frontend enum values
-      const responseData = response.data;
+      // Handle paginated response shape from backend: { Applications: [...], TotalCount, ... }
+      const responseData = response.data as any;
+      let list: any[] = [];
       if (Array.isArray(responseData)) {
-        responseData.forEach(item => {
-          if (item.loanType) {
-            item.loanType = reverseLoanTypeMapping[item.loanType] || item.loanType;
-          }
-          if (item.currency) {
-            item.currency = reverseCurrencyMapping[item.currency] || item.currency;
-          }
-        });
+        list = responseData;
+      } else if (Array.isArray(responseData?.Applications)) {
+        list = responseData.Applications;
+      } else if (Array.isArray(responseData?.applications)) {
+        list = responseData.applications;
+      } else {
+        list = [];
       }
-      
-      return responseData;
+
+      // Map backend enum string values back to frontend enum values
+      list.forEach((item: any) => {
+        if (item.loanType) {
+          item.loanType = reverseLoanTypeMapping[item.loanType] || item.loanType;
+        }
+        if (item.currency) {
+          item.currency = reverseCurrencyMapping[item.currency] || item.currency;
+        }
+      });
+
+      return list as LoanApplicationResponse[];
     } catch (error: any) {
       console.error('Error fetching loan applications:', error);
       throw new Error(
-        error.response?.data?.message || 
+        error?.message || error.response?.data?.message || 
         'Erreur lors de la récupération des demandes'
       );
+    }
+  }
+
+  /**
+   * Obtenir les demandes de crédit avec pagination
+   */
+  async getApplicationsPage(paramsIn?: {
+    page?: number;
+    pageSize?: number;
+    status?: string;
+    loanType?: LoanType;
+    branchId?: number;
+  }): Promise<LoanApplicationListResponse> {
+    try {
+      if (!this.isAuthenticated()) {
+        throw new Error('AUTH_REQUIRED');
+      }
+
+      const params = new URLSearchParams();
+      if (paramsIn?.page) params.append('page', String(paramsIn.page));
+      if (paramsIn?.pageSize) params.append('pageSize', String(paramsIn.pageSize));
+      if (paramsIn?.status) params.append('status', paramsIn.status);
+      if (paramsIn?.loanType) params.append('loanType', loanTypeMapping[paramsIn.loanType]);
+      if (paramsIn?.branchId) params.append('branchId', String(paramsIn.branchId));
+
+      const response = await axios.get(
+        `${API_BASE_URL}/MicrocreditLoanApplication?${params.toString()}`,
+        { headers: this.getAuthHeaders() }
+      );
+
+      const data = response.data as any;
+      const applications: any[] = Array.isArray(data?.Applications)
+        ? data.Applications
+        : Array.isArray(data?.applications)
+        ? data.applications
+        : Array.isArray(data)
+        ? data
+        : [];
+
+      applications.forEach((item: any) => {
+        if (item.loanType) item.loanType = reverseLoanTypeMapping[item.loanType] || item.loanType;
+        if (item.currency) item.currency = reverseCurrencyMapping[item.currency] || item.currency;
+      });
+
+      return {
+        applications: applications as LoanApplicationResponse[],
+        totalCount: data?.TotalCount ?? data?.totalCount ?? applications.length,
+        totalPages: data?.TotalPages ?? data?.totalPages ?? 1,
+        currentPage: data?.CurrentPage ?? data?.currentPage ?? (paramsIn?.page ?? 1),
+        pageSize: data?.PageSize ?? data?.pageSize ?? (paramsIn?.pageSize ?? applications.length)
+      };
+    } catch (error: any) {
+      console.error('Error fetching paged applications:', error);
+      throw new Error(error?.message || error.response?.data?.message || 'Erreur lors de la récupération des demandes');
     }
   }
 
@@ -295,21 +401,90 @@ class MicrocreditLoanApplicationService {
       
       // Message d'erreur plus explicite pour les erreurs 409
       let errorMessage = 'Erreur lors de la soumission de la demande';
-      
-      if (error.response?.status === 409) {
-        errorMessage = error.response?.data || 'La demande a déjà été soumise ou validée';
-      } else {
-        errorMessage = error.response?.data?.message || 
-                      error.response?.data?.title || 
-                      error.response?.data || 
-                      errorMessage;
+      const status = error?.response?.status;
+      const serverMessage = error?.response?.data?.message || error?.response?.data?.title || error?.response?.data;
+
+      if (status === 409) {
+        errorMessage = serverMessage || 'La demande a déjà été soumise ou validée';
+      } else if (status) {
+        errorMessage = serverMessage || errorMessage;
       }
-      
-      throw new Error(errorMessage);
+
+      // Conserver le code statut pour le gestionnaire appelant
+      const err: any = new Error(errorMessage);
+      err.status = status;
+      err.response = error?.response;
+      throw err;
     }
   }
 
   
+
+  /**
+   * Approuver une demande de crédit
+   */
+  async approveApplication(id: string, comments: string, approvedAmount?: number): Promise<LoanApplicationResponse> {
+    try {
+      if (!this.isAuthenticated()) {
+        throw new Error('AUTH_REQUIRED');
+      }
+
+      const response = await axios.post(
+        `${API_BASE_URL}/MicrocreditLoanApplication/${id}/approve`,
+        { comments, approvedAmount },
+        { headers: this.getAuthHeaders() }
+      );
+
+      const responseData = response.data;
+      if (responseData.loanType) {
+        responseData.loanType = reverseLoanTypeMapping[responseData.loanType] || responseData.loanType;
+      }
+      if (responseData.currency) {
+        responseData.currency = reverseCurrencyMapping[responseData.currency] || responseData.currency;
+      }
+
+      return responseData;
+    } catch (error: any) {
+      console.error('Error approving loan application:', error);
+      throw new Error(
+        error?.message || error.response?.data?.message || 
+        'Erreur lors de l\'approbation de la demande'
+      );
+    }
+  }
+
+  /**
+   * Rejeter une demande de crédit
+   */
+  async rejectApplication(id: string, reason: string): Promise<LoanApplicationResponse> {
+    try {
+      if (!this.isAuthenticated()) {
+        throw new Error('AUTH_REQUIRED');
+      }
+
+      const response = await axios.post(
+        `${API_BASE_URL}/MicrocreditLoanApplication/${id}/reject`,
+        { reason },
+        { headers: this.getAuthHeaders() }
+      );
+
+      const responseData = response.data;
+      if (responseData.loanType) {
+        responseData.loanType = reverseLoanTypeMapping[responseData.loanType] || responseData.loanType;
+      }
+      if (responseData.currency) {
+        responseData.currency = reverseCurrencyMapping[responseData.currency] || responseData.currency;
+      }
+
+      return responseData;
+    } catch (error: any) {
+      console.error('Error rejecting loan application:', error);
+      throw new Error(
+        error?.message || error.response?.data?.message || 
+        'Erreur lors du rejet de la demande'
+      );
+    }
+  }
 
   /**
    * Obtenir la liste des succursales

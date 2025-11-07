@@ -10,7 +10,8 @@ import LoanApplicationForm from './LoanApplicationForm';
 import LoanApprovalWorkflow from './LoanApprovalWorkflow';
 import LoanDetails from './LoanDetails';
 import LoanReports from './LoanReports';
-import { LoanType, LoanStatus } from '../../types/microcredit';
+import { LoanType, LoanStatus, ApplicationStatus } from '../../types/microcredit';
+import { microcreditLoanApplicationService } from '../../services/microcreditLoanApplicationService';
 
 // Types
 
@@ -68,12 +69,18 @@ const LoanManagement: React.FC = () => {
     newLoansThisMonth: 0
   });
   const [loading, setLoading] = useState(true);
+  const [authRequired, setAuthRequired] = useState(false);
   const [showApplicationForm, setShowApplicationForm] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showApprovalWorkflow, setShowApprovalWorkflow] = useState(false);
   const [showReports, setShowReports] = useState(false);
   const [activeTab, setActiveTab] = useState<'loans' | 'applications'>('loans');
+  // Pagination & tri (Applications)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [sortOption, setSortOption] = useState<'DATE_DESC' | 'DATE_ASC' | 'AMOUNT_DESC' | 'AMOUNT_ASC'>('DATE_DESC');
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -83,44 +90,148 @@ const LoanManagement: React.FC = () => {
 
   useEffect(() => {
     loadLoans();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, pageSize]);
 
   useEffect(() => {
     applyFilters();
-  }, [loans, searchTerm, statusFilter, typeFilter, currencyFilter]);
+  }, [loans, searchTerm, statusFilter, typeFilter, currencyFilter, activeTab]);
+
+  // Resort when sort option changes
+  useEffect(() => {
+    setLoans(prev => {
+      const sorted = [...prev];
+      sorted.sort((a, b) => {
+        switch (sortOption) {
+          case 'DATE_ASC':
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          case 'AMOUNT_DESC':
+            return b.principalAmount - a.principalAmount;
+          case 'AMOUNT_ASC':
+            return a.principalAmount - b.principalAmount;
+          case 'DATE_DESC':
+          default:
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }
+      });
+      return sorted;
+    });
+  }, [sortOption]);
 
   const loadLoans = async () => {
     try {
       setLoading(true);
+      setAuthRequired(false);
       
-      // TODO: Call real API endpoint to load loans
-      // const response = await microcreditService.getLoans();
-      // setLoans(response.data.loans);
-      // setStats(response.data.stats);
+      // Charger les demandes de crédit depuis le backend (paginées)
+      const page = await microcreditLoanApplicationService.getApplicationsPage({ page: currentPage, pageSize });
+      const applications = page.applications;
       
-      // For now, initialize with empty data
-      setLoans([]);
+      // Convertir les applications en format Loan pour l'affichage
+      const loansData: Loan[] = applications.map(app => {
+        // Calculer taux d'intérêt et paiement mensuel basiques
+        const interestRate = 2.5; // Taux par défaut, TODO: utiliser calcul depuis backend
+        const monthlyPayment = app.requestedAmount * (1 + (interestRate * app.requestedDurationMonths / 100)) / app.requestedDurationMonths;
+        
+        return {
+          id: app.id,
+          loanNumber: app.applicationNumber || `APP-${app.id.substring(0, 8)}`,
+          customerId: app.borrowerId || '',
+          customerCode: app.borrower?.accountNumber,
+          customerName: app.borrower 
+            ? `${app.borrower.firstName} ${app.borrower.lastName}` 
+            : 'Client',
+          loanType: app.loanType as LoanType,
+          principalAmount: app.requestedAmount,
+          interestRate: interestRate,
+          termMonths: app.requestedDurationMonths,
+          monthlyPayment: monthlyPayment,
+          disbursementDate: app.createdAt,
+          maturityDate: new Date(new Date(app.createdAt).setMonth(new Date(app.createdAt).getMonth() + app.requestedDurationMonths)).toISOString(),
+          remainingBalance: app.requestedAmount, // TODO: calculer depuis paiements
+          paidAmount: 0, // TODO: calculer depuis paiements
+          status: mapApplicationStatusToLoanStatus(app.status as string),
+          currency: app.currency as 'HTG' | 'USD',
+          collateral: app.guarantees?.find(g => g.type === 'Collateral')?.description,
+          guarantors: app.guarantees?.filter(g => g.type === 'Personal').map(g => g.contactName || g.description) || [],
+          branch: app.branchName || 'Principal',
+          loanOfficer: app.loanOfficerName || 'Agent',
+          createdAt: app.createdAt,
+          approvedBy: app.loanOfficerId,
+          approvedAt: app.approvedAt
+        };
+      });
+      
+      // Appliquer tri sélectionné
+      const sorted = [...loansData];
+      sorted.sort((a, b) => {
+        switch (sortOption) {
+          case 'DATE_ASC':
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          case 'AMOUNT_DESC':
+            return b.principalAmount - a.principalAmount;
+          case 'AMOUNT_ASC':
+            return a.principalAmount - b.principalAmount;
+          case 'DATE_DESC':
+          default:
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }
+      });
+
+      setLoans(sorted);
+      setTotalPages(page.totalPages || 1);
+      
+      // Calculer les statistiques
+      const activeLoans = loansData.filter(l => l.status === LoanStatus.ACTIVE);
+      const pendingLoans = loansData.filter(l => l.status === LoanStatus.PENDING);
+      const overdueLoans = loansData.filter(l => l.status === LoanStatus.OVERDUE);
+      
+      const totalOutstandingHTG = activeLoans.filter(l => l.currency === 'HTG').reduce((sum, l) => sum + l.remainingBalance, 0);
+      const totalOutstandingUSD = activeLoans.filter(l => l.currency === 'USD').reduce((sum, l) => sum + l.remainingBalance, 0);
+      
+      const overdueAmountHTG = overdueLoans.filter(l => l.currency === 'HTG').reduce((sum, l) => sum + l.remainingBalance, 0);
+      const overdueAmountUSD = overdueLoans.filter(l => l.currency === 'USD').reduce((sum, l) => sum + l.remainingBalance, 0);
+      
       setStats({
-        totalClients: 0,
-        activeLoans: 0,
-        totalOutstanding: { HTG: 0, USD: 0 },
-        repaymentRate: 0,
-        overdueLoans: { count: 0, amount: { HTG: 0, USD: 0 } },
-        interestRevenue: { HTG: 0, USD: 0 },
-        loansCompletedThisMonth: 0,
-        newLoansThisMonth: 0
+        totalClients: new Set(loansData.map(l => l.customerId)).size,
+        activeLoans: activeLoans.length,
+        totalOutstanding: { HTG: totalOutstandingHTG, USD: totalOutstandingUSD },
+        repaymentRate: 95, // TODO: calculer depuis paiements réels
+        overdueLoans: { 
+          count: overdueLoans.length, 
+          amount: { HTG: overdueAmountHTG, USD: overdueAmountUSD } 
+        },
+        interestRevenue: { HTG: 0, USD: 0 }, // TODO: calculer depuis paiements
+        loansCompletedThisMonth: 0, // TODO: calculer depuis dates
+        newLoansThisMonth: pendingLoans.length
       });
 
       setLoading(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading loans:', error);
-      toast.error('Erreur lors du chargement des prêts');
+      if (error?.message === 'AUTH_REQUIRED') {
+        setAuthRequired(true);
+        toast.error('Tanpri konekte pou wè lis demann yo');
+      } else {
+        toast.error('Erreur lors du chargement des prêts');
+      }
       setLoading(false);
     }
   };
 
   const applyFilters = () => {
     let filtered = [...loans];
+
+    // Tab-specific filter: show only APPROVED/ACTIVE loans in "Prêts Actifs" tab
+    if (activeTab === 'loans') {
+      filtered = filtered.filter(loan => 
+        loan.status === LoanStatus.APPROVED || 
+        loan.status === LoanStatus.ACTIVE ||
+        loan.status === LoanStatus.COMPLETED ||
+        loan.status === LoanStatus.OVERDUE ||
+        loan.status === LoanStatus.DEFAULTED
+      );
+    }
 
     // Search filter
     if (searchTerm) {
@@ -222,7 +333,7 @@ const LoanManagement: React.FC = () => {
       [LoanStatus.CANCELLED]: { color: 'bg-gray-100 text-gray-800', label: 'Annulé', icon: XCircle }
     };
 
-    const badge = badges[status];
+    const badge = badges[status] || { color: 'bg-yellow-100 text-yellow-800', label: String(status || 'Inconnu'), icon: Clock };
     const Icon = badge.icon;
     
     return (
@@ -231,6 +342,22 @@ const LoanManagement: React.FC = () => {
         {badge.label}
       </span>
     );
+  };
+
+  const mapApplicationStatusToLoanStatus = (status: string): LoanStatus => {
+    switch (status as ApplicationStatus) {
+      case ApplicationStatus.SUBMITTED:
+      case ApplicationStatus.UNDER_REVIEW:
+      case ApplicationStatus.DRAFT:
+        return LoanStatus.PENDING;
+      case ApplicationStatus.APPROVED:
+        return LoanStatus.APPROVED;
+      case ApplicationStatus.REJECTED:
+      case ApplicationStatus.CANCELLED:
+        return LoanStatus.CANCELLED;
+      default:
+        return LoanStatus.PENDING;
+    }
   };
 
   const handleViewDetails = (loan: Loan) => {
@@ -243,20 +370,61 @@ const LoanManagement: React.FC = () => {
     setShowApprovalWorkflow(true);
   };
 
-  const handleApproveLoan = (applicationId: string, level: number, comment: string) => {
-    console.log('Approving loan:', applicationId, 'at level:', level, 'comment:', comment);
-    // TODO: Call API to approve
-    toast.success('Demande approuvée avec succès!');
-    setShowApprovalWorkflow(false);
-    loadLoans();
+  const handleApproveLoan = async (applicationId: string, level: number, comment: string) => {
+    try {
+      // First, check if application needs to be submitted (if it's still Draft)
+      const app = loans.find(l => l.id === applicationId);
+      if (app?.status === LoanStatus.PENDING) {
+        // Try to submit first if not already submitted
+        try {
+          await microcreditLoanApplicationService.submitApplication(applicationId);
+        } catch (submitError: any) {
+          // If backend says it's already submitted/non-draft, ignore and continue to approve
+          const msg = (submitError?.message || '').toLowerCase();
+          const status = submitError?.status;
+          if (status === 409) {
+            if (msg.includes('already') || msg.includes('déjà') || msg.includes('only draft')) {
+              // ok to proceed
+            } else if (msg.includes('validation')) {
+              // Validation failed: inform user and stop
+              toast.error(
+                "Demann lan pa ka soumèt: dokiman obligatwa yo manke (Kat idantite + Prèv revni verifye).",
+                { duration: 6000 }
+              );
+              return;
+            } else {
+              throw submitError;
+            }
+          } else {
+            throw submitError;
+          }
+        }
+      }
+      
+      // Now approve
+      await microcreditLoanApplicationService.approveApplication(applicationId, comment);
+      toast.success('Demande approuvée avec succès!');
+      setShowApprovalWorkflow(false);
+      // Reload loans to show updated status
+      await loadLoans();
+    } catch (error: any) {
+      console.error('Error approving loan:', error);
+      const errorMsg = error?.message || error?.response?.data || 'Erreur lors de l\'approbation de la demande';
+      toast.error(errorMsg);
+    }
   };
 
-  const handleRejectLoan = (applicationId: string, level: number, reason: string) => {
-    console.log('Rejecting loan:', applicationId, 'at level:', level, 'reason:', reason);
-    // TODO: Call API to reject
-    toast.error('Demande rejetée');
-    setShowApprovalWorkflow(false);
-    loadLoans();
+  const handleRejectLoan = async (applicationId: string, level: number, reason: string) => {
+    try {
+      await microcreditLoanApplicationService.rejectApplication(applicationId, reason);
+      toast.error('Demande rejetée');
+      setShowApprovalWorkflow(false);
+      // Reload loans to show updated status
+      await loadLoans();
+    } catch (error: any) {
+      console.error('Error rejecting loan:', error);
+      toast.error(error?.message || 'Erreur lors du rejet de la demande');
+    }
   };
 
   const handleNewApplication = () => {
@@ -278,6 +446,17 @@ const LoanManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {authRequired && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5" />
+            <div>
+              <p className="font-semibold">Tanpri konekte</p>
+              <p className="text-sm">Ou dwe konekte pou wè lis nouvo demann kredi yo.</p>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -285,6 +464,15 @@ const LoanManagement: React.FC = () => {
           <p className="text-gray-600 mt-1">Portefeuille de prêts et remboursements</p>
         </div>
         <div className="flex gap-3">
+          <button
+            onClick={loadLoans}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            title="Actualiser la liste"
+          >
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            Actualiser
+          </button>
           <button
             onClick={() => setShowReports(true)}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
@@ -561,9 +749,36 @@ const LoanManagement: React.FC = () => {
                   {loans.filter(l => l.status === LoanStatus.PENDING).length} demande(s) à traiter
                 </p>
               </div>
-              <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <Clock className="w-5 h-5 text-yellow-600" />
-                <span className="text-sm font-medium text-yellow-800">Action requise</span>
+              <div className="flex items-center gap-4">
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Tri</label>
+                  <select
+                    value={sortOption}
+                    onChange={(e) => setSortOption(e.target.value as any)}
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  >
+                    <option value="DATE_DESC">Dènye an premye</option>
+                    <option value="DATE_ASC">Pi ansyen an premye</option>
+                    <option value="AMOUNT_DESC">Montan ↓</option>
+                    <option value="AMOUNT_ASC">Montan ↑</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Pa paj</label>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(parseInt(e.target.value))}
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <Clock className="w-5 h-5 text-yellow-600" />
+                  <span className="text-sm font-medium text-yellow-800">Action requise</span>
+                </div>
               </div>
             </div>
           </div>
@@ -693,6 +908,28 @@ const LoanManagement: React.FC = () => {
                 )}
               </tbody>
             </table>
+          </div>
+          {/* Pagination */}
+          <div className="flex items-center justify-between p-4 border-t border-gray-200 text-sm bg-gray-50">
+            <div>
+              Paj {currentPage} sou {totalPages}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                className={`px-3 py-1.5 rounded-md border ${currentPage <= 1 ? 'text-gray-300 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-white'}`}
+              >
+                Prev
+              </button>
+              <button
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                className={`px-3 py-1.5 rounded-md border ${currentPage >= totalPages ? 'text-gray-300 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-white'}`}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       )}

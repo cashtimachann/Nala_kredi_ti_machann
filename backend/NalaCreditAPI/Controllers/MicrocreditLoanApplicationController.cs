@@ -167,7 +167,7 @@ namespace NalaCreditAPI.Controllers
         /// Réviser une demande de crédit
         /// </summary>
         [HttpPost("{id}/review")]
-        [Authorize(Roles = "Admin,Manager,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,LoanOfficer")]
         public async Task<ActionResult<MicrocreditLoanApplicationDto>> ReviewApplication(Guid id, [FromBody] ReviewApplicationDto dto)
         {
             try
@@ -205,7 +205,7 @@ namespace NalaCreditAPI.Controllers
         /// Approuver une demande de crédit
         /// </summary>
         [HttpPost("{id}/approve")]
-        [Authorize(Roles = "Admin,Manager,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,LoanOfficer")]
         public async Task<ActionResult<MicrocreditLoanApplicationDto>> ApproveApplication(Guid id, [FromBody] ApproveApplicationDto dto)
         {
             try
@@ -243,7 +243,7 @@ namespace NalaCreditAPI.Controllers
         /// Rejeter une demande de crédit
         /// </summary>
         [HttpPost("{id}/reject")]
-        [Authorize(Roles = "Admin,Manager,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,LoanOfficer")]
         public async Task<ActionResult<MicrocreditLoanApplicationDto>> RejectApplication(Guid id, [FromBody] RejectApplicationDto dto)
         {
             try
