@@ -118,7 +118,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
       signaturePlace: '',
       signatureDate: new Date().toISOString().split('T')[0]
     },
-    mode: 'onChange'
+    mode: 'onSubmit' // Only validate on form submission, not on every change
   });
 
   const watchedDepartment = watch('department');
@@ -153,6 +153,8 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
       // Réinitialiser les signataires
       setAuthorizedSigners([]);
     }
+    // Clear any validation errors when switching types
+    // This prevents errors from appearing for fields that are now irrelevant
   }, [isBusiness, setValue]);
 
   const availableCommunes = selectedDepartment ? COMMUNES_BY_DEPARTMENT[selectedDepartment] : [];
@@ -558,7 +560,16 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
       <form onSubmit={(e) => {
         e.preventDefault();
         if (currentStep === totalSteps) {
-          handleSubmit(handleFormSubmit)();
+          handleSubmit(handleFormSubmit, (errors) => {
+            console.error('Form validation errors:', errors);
+            // Show user-friendly error message
+            const firstError = Object.values(errors)[0];
+            if (firstError && firstError.message) {
+              alert(`Erreur de validation: ${firstError.message}`);
+            } else {
+              alert('Veuillez vérifier que tous les champs obligatoires sont remplis correctement.');
+            }
+          })();
         } else {
           handleNextStep();
         }
