@@ -220,6 +220,9 @@ namespace NalaCreditAPI.Models
     [MaxLength(20)]
     public string? MaritalStatus { get; set; } // SINGLE, MARRIED, DIVORCED, WIDOWED
 
+    [MaxLength(100)]
+    public string? SpouseName { get; set; } // Nom du conjoint
+
     public int? NumberOfDependents { get; set; }
 
     [MaxLength(30)]
@@ -231,6 +234,13 @@ namespace NalaCreditAPI.Models
 
     [MaxLength(20)]
     public string? ReferencePersonPhone { get; set; }
+
+    // Informations KYC additionnelles
+    [MaxLength(50)]
+    public string? TransactionFrequency { get; set; } // DAILY, WEEKLY, MONTHLY, OCCASIONAL
+
+    [MaxLength(200)]
+    public string? AccountPurpose { get; set; } // Objectif du compte
 
         // Signature
         public string? Signature { get; set; } // Base64 image data

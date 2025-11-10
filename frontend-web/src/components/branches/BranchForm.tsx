@@ -47,7 +47,28 @@ const BranchForm: React.FC<BranchFormProps> = ({
     reset,
     formState: { errors, isDirty }
   } = useForm<BranchFormData>({
-    resolver: zodResolver(branchSchema),
+    resolver: async (data: any, context: any, options: any) => {
+      try {
+        const result = branchSchema.safeParse(data);
+        if (!result.success) {
+          const fieldErrors: Record<string, any> = {};
+          result.error.issues.forEach((err: any) => {
+            const fieldPath = err.path.join('.');
+            if (!fieldErrors[fieldPath]) {
+              fieldErrors[fieldPath] = {
+                type: err.code,
+                message: err.message,
+              };
+            }
+          });
+          return { values: {} as any, errors: fieldErrors };
+        }
+        return { values: result.data as any, errors: {} };
+      } catch (error) {
+        console.error('Form validation error:', error);
+        return { values: {} as any, errors: {} };
+      }
+    },
     defaultValues: {
       name: '',
       code: '',
@@ -207,6 +228,16 @@ const BranchForm: React.FC<BranchFormProps> = ({
     setValue('closedDays', branchData.operatingHours.closedDays || []);
   };
 
+  const onFormInvalid = (formErrors: any) => {
+    const messages = Object.entries(formErrors)
+      .map(([field, err]: [string, any]) => err?.message)
+      .filter(Boolean)
+      .slice(0, 4);
+    if (messages.length > 0) {
+      toast.error(`Veuillez corriger les erreurs:\n${messages.join('\n')}`);
+    }
+  };
+
   const onSubmit: (data: BranchFormData) => Promise<void> = async (data: BranchFormData) => {
     setIsLoading(true);
     try {
@@ -283,7 +314,7 @@ const BranchForm: React.FC<BranchFormProps> = ({
 
         {/* Content */}
         <div className="overflow-y-auto max-h-[calc(90vh-140px)]">
-          <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-8">
+          <form onSubmit={handleSubmit(onSubmit, onFormInvalid)} className="p-6 space-y-8">
             {/* Basic Information */}
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -709,7 +740,7 @@ const BranchForm: React.FC<BranchFormProps> = ({
             Annuler
           </button>
           <button
-            onClick={handleSubmit(onSubmit)}
+            onClick={handleSubmit(onSubmit, onFormInvalid)}
             disabled={isLoading}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center space-x-2"
           >

@@ -478,8 +478,21 @@ const LoanApplicationForm: React.FC<LoanApplicationFormProps> = ({ onSubmit, onC
     setSubmitError(null);
 
     try {
-      // Validate the data
-      const validatedData = loanApplicationSchema.parse(data);
+      // Validate the data using safeParse to avoid throwing
+      const validationResult = loanApplicationSchema.safeParse(data);
+      
+      if (!validationResult.success) {
+        // Handle validation errors without throwing
+        const issues = validationResult.error.issues || [];
+        const errorMessages = issues
+          .map((err: any) => `${err.path?.join('.') || 'field'}: ${err.message}`)
+          .join('\n');
+        setSubmitError(`Erreurs de validation:\n${errorMessages}`);
+        setIsSubmitting(false);
+        return;
+      }
+
+      const validatedData = validationResult.data;
 
       // Prepare request data
       const requestData: CreateLoanApplicationRequest = {
@@ -568,17 +581,9 @@ const LoanApplicationForm: React.FC<LoanApplicationFormProps> = ({ onSubmit, onC
       onSubmit(validatedData as LoanApplicationFormData);
       
     } catch (error: any) {
-      if (error.name === 'ZodError') {
-        // Handle validation errors
-        const issues = error.errors || error.issues || [];
-        const errorMessages = Array.isArray(issues) 
-          ? issues.map((err: any) => `${err.path?.join('.') || 'field'}: ${err.message}`).join('\n')
-          : 'Erreur de validation inconnue';
-        setSubmitError(`Erreurs de validation:\n${errorMessages}`);
-      } else {
-        console.error('Error submitting application:', error);
-        setSubmitError(error?.message || error?.response?.data?.message || 'Erreur lors de la soumission de la demande');
-      }
+      // No more ZodError handling needed since we use safeParse
+      console.error('Error submitting application:', error);
+      setSubmitError(error?.message || error?.response?.data?.message || 'Erreur lors de la soumission de la demande');
     } finally {
       setIsSubmitting(false);
     }

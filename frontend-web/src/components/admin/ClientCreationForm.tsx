@@ -63,7 +63,40 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
     setValue,
     reset
   } = useForm<CustomerFormData>({
-    resolver: zodResolver(validationSchema) as any,
+    resolver: async (data: any, context: any, options: any) => {
+      try {
+        // Use safeParse to avoid throwing ZodError
+        const result = validationSchema.safeParse(data);
+        if (!result.success) {
+          // Transform Zod errors to react-hook-form format
+          const fieldErrors: Record<string, any> = {};
+          result.error.issues.forEach((err: any) => {
+            const fieldPath = err.path.join('.');
+            // Only keep first error per field
+            if (!fieldErrors[fieldPath]) {
+              fieldErrors[fieldPath] = {
+                type: err.code,
+                message: err.message,
+              };
+            }
+          });
+          return {
+            values: {} as any,
+            errors: fieldErrors,
+          };
+        }
+        return {
+          values: result.data as any,
+          errors: {},
+        };
+      } catch (error) {
+        console.error('Form validation error:', error);
+        return {
+          values: {} as any,
+          errors: {},
+        };
+      }
+    },
     defaultValues: {
   isBusiness: false,
   companyName: '',
@@ -245,6 +278,25 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
     }
   };
 
+  // Handle invalid form submission (prevent raw ZodError overlay & show friendly message)
+  const handleFormInvalid = (formErrors: any) => {
+    console.log('Form validation errors:', formErrors);
+    // Collect unique error messages
+    const messages = Object.entries(formErrors)
+      .map(([field, err]: [string, any]) => {
+        const fieldLabel = field.split('.').pop(); // Get last part of path
+        return err?.message || `Erreur de validation pour ${fieldLabel}`;
+      })
+      .filter(Boolean)
+      .slice(0, 5); // Limit to first 5 errors
+    
+    if (messages.length === 0) {
+      alert('Veuillez remplir tous les champs obligatoires.');
+    } else {
+      alert(`Veuillez corriger les erreurs suivantes:\n\n${messages.join('\n')}`);
+    }
+  };
+
   const handleFormSubmit = async (data: CustomerFormData) => {
     return withGlobalLoading(async () => {
       try {
@@ -409,8 +461,8 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
       }
     }
     
-    // Étape 3: Validation des documents
-    if (currentStep === 3) {
+    // Étape 4: Validation des documents (après infos professionnelles)
+    if (currentStep === 4) {
       // For business customers, validate the representative's document fields
       if (isBusiness) {
         if (!currentValues.legalRepresentativeDocumentType || !currentValues.legalRepresentativeDocumentNumber || !currentValues.legalRepresentativeIssuedDate || !currentValues.legalRepresentativeIssuingAuthority) {
@@ -507,8 +559,8 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
               <span className="text-xs mt-2 text-gray-600">
                 {step === 1 && 'Identité'}
                 {step === 2 && 'Contact'}
-                {step === 3 && 'Documents'}
-                {step === 4 && 'Professionnel'}
+                {step === 3 && 'Professionnel'}
+                {step === 4 && 'Documents'}
                 {step === 5 && 'Confirmation'}
               </span>
             </div>
@@ -558,7 +610,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
       <form onSubmit={(e) => {
         e.preventDefault();
         if (currentStep === totalSteps) {
-          handleSubmit(handleFormSubmit)();
+          handleSubmit(handleFormSubmit as any, handleFormInvalid)();
         } else {
           handleNextStep();
         }
@@ -1019,8 +1071,8 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
           </div>
         )}
 
-        {/* ÉTAPE 3: Documents */}
-        {currentStep === 3 && (
+        {/* ÉTAPE 4: Documents (déplacé après Professionnel) */}
+        {currentStep === 4 && (
           <div className="space-y-6">
             <h3 className="text-xl font-semibold text-gray-900 mb-4">
               Documents et Pièces d'Identité
@@ -1502,37 +1554,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   </div>
                 )}
 
-                {/* Signature */}
-                <div className="bg-white p-4 rounded-lg border-2 border-dashed border-gray-300">
-                  <div className="text-center">
-                    {customerSignature ? (
-                      <div>
-                        <img src={customerSignature} alt="Signature" className="h-16 mx-auto mb-2" />
-                        <button
-                          type="button"
-                          className="inline-flex items-center px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
-                          onClick={() => setShowSignatureCanvas(true)}
-                        >
-                          <RotateCcw className="w-3 h-3 mr-1" />
-                          Modifier
-                        </button>
-                      </div>
-                    ) : (
-                      <div>
-                        <FileText className="w-10 h-10 mx-auto mb-2 text-gray-400" />
-                        <h5 className="font-medium text-gray-900 mb-2">Signature</h5>
-                        <button
-                          type="button"
-                          className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                          onClick={() => setShowSignatureCanvas(true)}
-                        >
-                          <Plus className="w-4 h-4 mr-1" />
-                          Signer
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                {/* Signature déplacée à l'étape 5 (Confirmation) */}
               </div>
             </div>
 
@@ -1589,8 +1611,8 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
           </div>
         )}
 
-        {/* ÉTAPE 4: Informations Professionnelles */}
-        {currentStep === 4 && (
+        {/* ÉTAPE 3: Informations Professionnelles (avant Documents) */}
+        {currentStep === 3 && (
           <div className="space-y-6">
             <h3 className="text-xl font-semibold text-gray-900 mb-4">
               Informations Professionnelles et Financières (Optionnel)
@@ -1773,7 +1795,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
           </div>
         )}
 
-        {/* ÉTAPE 5: Confirmation */}
+        {/* ÉTAPE 5: Confirmation (inclut signature) */}
         {currentStep === 5 && (
           <div className="space-y-6">
             <h3 className="text-xl font-semibold text-gray-900 mb-4">
@@ -2016,14 +2038,35 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   </div>
                 </div>
 
-                {customerSignature && (
+                  {/* Signature capture et aperçu (déplacé ici) */}
                   <div className="pt-4 border-t">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Signature du {isBusiness ? 'représentant légal' : 'client'}
                     </label>
-                    <img src={customerSignature} alt="Signature" className="h-20 border border-gray-300 rounded p-2 bg-white" />
+                    {customerSignature ? (
+                      <div className="flex items-center space-x-3">
+                        <img src={customerSignature} alt="Signature" className="h-20 border border-gray-300 rounded p-2 bg-white" />
+                        <button
+                          type="button"
+                          className="inline-flex items-center px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
+                          onClick={() => setShowSignatureCanvas(true)}
+                        >
+                          <RotateCcw className="w-3 h-3 mr-1" />
+                          Modifier la signature
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                        onClick={() => setShowSignatureCanvas(true)}
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Signer maintenant
+                      </button>
+                    )}
                   </div>
-                )}
+
               </div>
             </div>
           </div>

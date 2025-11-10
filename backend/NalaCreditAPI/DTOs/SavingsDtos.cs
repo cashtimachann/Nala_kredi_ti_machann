@@ -151,6 +151,9 @@ namespace NalaCreditAPI.DTOs.Savings
         [StringLength(20)]
         public string? MaritalStatus { get; set; }
 
+        [StringLength(100)]
+        public string? SpouseName { get; set; }
+
         [Range(0, 50)]
         public int? NumberOfDependents { get; set; }
 
@@ -171,6 +174,13 @@ namespace NalaCreditAPI.DTOs.Savings
 
         [StringLength(20)]
         public string? ReferencePersonPhone { get; set; }
+
+        // Informations KYC additionnelles
+        [StringLength(50)]
+        public string? TransactionFrequency { get; set; }
+
+        [StringLength(200)]
+        public string? AccountPurpose { get; set; }
     }
 
     public class SavingsCustomerUpdateDto : SavingsCustomerCreateDto

@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import savingsCustomerService, { SavingsCustomerResponseDto } from '../../services/savingsCustomerService';
 import DocumentUploadModal from './DocumentUploadModal';
 import { genderToMF } from '../../utils/gender';
+import { HAITI_DEPARTMENTS, COMMUNES_BY_DEPARTMENT, HaitiDepartment } from '../../types/savings';
 
 // Types
 interface AuthorizedSigner {
@@ -19,20 +20,6 @@ interface AuthorizedSigner {
   phoneNumber: string;
   authorizationLimit?: number;
 }
-
-// Départements et communes d'Haïti
-const haitiLocations = {
-  'Ouest': ['Port-au-Prince', 'Pétion-Ville', 'Carrefour', 'Delmas', 'Kenscoff', 'Gressier', 'Léogâne'],
-  'Artibonite': ['Gonaïves', 'Saint-Marc', 'Dessalines', 'Gros-Morne', 'Ennery'],
-  'Nord': ['Cap-Haïtien', 'Limbé', 'Acul-du-Nord', 'Plaisance', 'Grande-Rivière-du-Nord'],
-  'Sud': ['Les Cayes', 'Port-Salut', 'Aquin', 'Saint-Louis-du-Sud', 'Chantal'],
-  'Nord-Est': ['Fort-Liberté', 'Trou-du-Nord', 'Ouanaminthe', 'Terrier-Rouge'],
-  'Nord-Ouest': ['Port-de-Paix', 'Saint-Louis-du-Nord', 'Môle-Saint-Nicolas', 'Bombardopolis'],
-  'Sud-Est': ['Jacmel', 'Marigot', 'Belle-Anse', 'Cayes-Jacmel'],
-  'Grande-Anse': ['Jérémie', 'Dame-Marie', 'Anse-d-Hainault', 'Corail'],
-  'Nippes': ['Miragoâne', 'Petit-Goâve', 'Anse-à-Veau', 'Baradères'],
-  'Centre': ['Hinche', 'Mirebalais', 'Lascahobas', 'Thomonde', 'Maïssade']
-};
 
 // Schema de validation dynamique
 const createValidationSchema = (isBusiness: boolean) => yup.object().shape({
@@ -90,9 +77,29 @@ const createValidationSchema = (isBusiness: boolean) => yup.object().shape({
     firstName: yup.string().required('Prénom obligatoire').min(2, 'Au moins 2 caractères'),
     lastName: yup.string().required('Nom obligatoire').min(2, 'Au moins 2 caractères'),
     dateOfBirth: yup.string().required('Date de naissance obligatoire'),
+    birthPlace: yup.string().nullable(),
+    nationality: yup.string().nullable(),
+    nif: yup.string().nullable(),
     gender: yup.string().required('Genre obligatoire'),
     occupation: yup.string().nullable(),
+    employerName: yup.string().nullable(),
+    workAddress: yup.string().nullable(),
+    incomeSource: yup.string().nullable(),
     monthlyIncome: yup.number().nullable(),
+    transactionFrequency: yup.string().nullable(),
+    accountPurpose: yup.string().nullable(),
+    maritalStatus: yup.string().nullable(),
+    spouseName: yup.string().nullable(),
+    numberOfDependents: yup.number().nullable(),
+    educationLevel: yup.string().nullable(),
+    referencePerson: yup.string().nullable(),
+    referencePersonPhone: yup.string()
+      .nullable()
+      .transform((value, originalValue) => originalValue === '' ? null : value)
+      .matches(/^(\+509\s?)?[234579]\d{7}$/, {
+        message: 'Format de téléphone invalide',
+        excludeEmptyString: true
+      }),
   })
 });
 
@@ -153,9 +160,23 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
       firstName: customer?.firstName || '',
       lastName: customer?.lastName || '',
       dateOfBirth: customer?.dateOfBirth ? customer.dateOfBirth.split('T')[0] : '',
+      birthPlace: (customer as any)?.birthPlace || '',
+      nationality: (customer as any)?.nationality || 'Haïtienne',
+      nif: (customer as any)?.nif || '',
       gender: genderToMF(customer?.gender),
       occupation: customer?.occupation || '',
+      employerName: (customer as any)?.employerName || '',
+      workAddress: (customer as any)?.workAddress || '',
+      incomeSource: (customer as any)?.incomeSource || '',
       monthlyIncome: customer?.monthlyIncome || undefined,
+      transactionFrequency: (customer as any)?.transactionFrequency || '',
+      accountPurpose: (customer as any)?.accountPurpose || '',
+      maritalStatus: (customer as any)?.maritalStatus || '',
+      spouseName: (customer as any)?.spouseName || '',
+      numberOfDependents: (customer as any)?.numberOfDependents || 0,
+      educationLevel: (customer as any)?.educationLevel || '',
+      referencePerson: (customer as any)?.referencePersonName || '',
+      referencePersonPhone: (customer as any)?.referencePersonPhone || '',
 
       // Champs personne morale
       companyName: (customer as any)?.companyName || '',
@@ -185,6 +206,9 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
   });
 
   const department = watch('department');
+
+  // Calculate available communes based on selected department
+  const availableCommunes = selectedDepartment ? (COMMUNES_BY_DEPARTMENT[selectedDepartment as HaitiDepartment] || []) : [];
 
   // Reset form when customer changes
   useEffect(() => {
@@ -216,9 +240,23 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
         firstName: customer?.firstName || '',
         lastName: customer?.lastName || '',
         dateOfBirth: customer?.dateOfBirth ? customer.dateOfBirth.split('T')[0] : '',
+        birthPlace: (customer as any)?.birthPlace || '',
+        nationality: (customer as any)?.nationality || 'Haïtienne',
+        nif: (customer as any)?.nif || '',
         gender: customer?.gender !== undefined ? genderToMF(customer.gender) : 'M',
         occupation: customer?.occupation || '',
+        employerName: (customer as any)?.employerName || '',
+        workAddress: (customer as any)?.workAddress || '',
+        incomeSource: (customer as any)?.incomeSource || '',
         monthlyIncome: customer?.monthlyIncome || undefined,
+        transactionFrequency: (customer as any)?.transactionFrequency || '',
+        accountPurpose: (customer as any)?.accountPurpose || '',
+        maritalStatus: (customer as any)?.maritalStatus || '',
+        spouseName: (customer as any)?.spouseName || '',
+        numberOfDependents: (customer as any)?.numberOfDependents || 0,
+        educationLevel: (customer as any)?.educationLevel || '',
+        referencePerson: (customer as any)?.referencePersonName || '',
+        referencePersonPhone: (customer as any)?.referencePersonPhone || '',
 
         // Champs personne morale
         companyName: (customer as any)?.companyName || '',
@@ -282,9 +320,23 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
         firstName: '',
         lastName: '',
         dateOfBirth: '',
+        birthPlace: '',
+        nationality: '',
+        nif: '',
         gender: '',
         occupation: '',
+        employerName: '',
+        workAddress: '',
+        incomeSource: '',
         monthlyIncome: '',
+        transactionFrequency: '',
+        accountPurpose: '',
+        maritalStatus: '',
+        spouseName: '',
+        numberOfDependents: '',
+        educationLevel: '',
+        referencePerson: '',
+        referencePersonPhone: '',
       }),
       // Update document type options
       documentType: isBusiness ? (currentValues.documentType && !['CIN','Passport','DrivingLicense'].includes(currentValues.documentType) ? currentValues.documentType : 'TradeRegister') : (currentValues.documentType && ['CIN','Passport','DrivingLicense'].includes(currentValues.documentType) ? currentValues.documentType : 'CIN'),
@@ -356,17 +408,45 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
           firstName: '',
           lastName: '',
           dateOfBirth: null,
+          birthPlace: null,
+          nationality: null,
+          personalNif: null,
           gender: null,
           occupation: null,
+          employerName: null,
+          workAddress: null,
+          incomeSource: null,
           monthlyIncome: null,
+          transactionFrequency: null,
+          accountPurpose: null,
+          referencePersonName: null,
+          referencePersonPhone: null,
+          maritalStatus: null,
+          spouseName: null,
+          numberOfDependents: null,
+          educationLevel: null,
         } : {
           // Champs personne physique
           firstName: data.firstName,
           lastName: data.lastName,
           dateOfBirth: data.dateOfBirth,
+          birthPlace: data.birthPlace,
+          nationality: data.nationality,
+          personalNif: data.nif, // Backend utilise personalNif
           gender: data.gender,
           occupation: data.occupation,
+          employerName: data.employerName,
+          workAddress: data.workAddress,
+          incomeSource: data.incomeSource,
           monthlyIncome: data.monthlyIncome,
+          transactionFrequency: data.transactionFrequency,
+          accountPurpose: data.accountPurpose,
+          referencePersonName: data.referencePerson, // Backend utilise referencePersonName
+          referencePersonPhone: data.referencePersonPhone,
+          maritalStatus: data.maritalStatus,
+          spouseName: data.spouseName,
+          numberOfDependents: data.numberOfDependents,
+          educationLevel: data.educationLevel,
           
           // Réinitialiser les champs personne morale
           companyName: '',
@@ -573,6 +653,18 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Lieu de Naissance
+                </label>
+                <input
+                  type="text"
+                  {...register('birthPlace')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Ex: Port-au-Prince, Haïti"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Genre <span className="text-red-500">*</span>
                 </label>
                 <select
@@ -586,6 +678,30 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
                 {(errors as any).gender && (
                   <p className="mt-1 text-sm text-red-600">{(errors as any).gender.message}</p>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nationalité
+                </label>
+                <input
+                  type="text"
+                  {...register('nationality')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Ex: Haïtienne"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  NIF <span className="text-xs text-gray-500">(Numéro d'Identification Fiscale)</span>
+                </label>
+                <input
+                  type="text"
+                  {...register('nif')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Ex: NIF-123456789"
+                />
               </div>
             </div>
           )}
@@ -707,7 +823,176 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
           </div>
         )}
 
-        {/* Section 3: Siège Social (pour personnes morales) */}
+        {/* Section 3: Informations Professionnelles (repositionnée avant Documents) */}
+        {!isBusiness && (
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">
+              3. Informations Professionnelles et Financières
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Profession</label>
+                <input
+                  type="text"
+                  {...register('occupation')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Ex: Enseignant, Commerçant"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Employeur / Entreprise</label>
+                <input
+                  type="text"
+                  {...register('employerName')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Nom de l'employeur"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Adresse Professionnelle</label>
+                <input
+                  type="text"
+                  {...register('workAddress')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Adresse du lieu de travail"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Source de Revenu</label>
+                <select
+                  {...register('incomeSource')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Sélectionner...</option>
+                  <option value="SALARY">Salaire</option>
+                  <option value="BUSINESS">Commerce/Affaires</option>
+                  <option value="AGRICULTURE">Agriculture</option>
+                  <option value="RENTAL">Loyers</option>
+                  <option value="PENSION">Pension/Retraite</option>
+                  <option value="OTHER">Autre</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Revenu Mensuel (HTG)</label>
+                <input
+                  type="number"
+                  {...register('monthlyIncome')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Montant du revenu mensuel"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Objectif du Compte</label>
+                <input
+                  type="text"
+                  {...register('accountPurpose')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Ex: Épargne, Dépôts commerciaux"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fréquence des Transactions</label>
+                <select
+                  {...register('transactionFrequency')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Sélectionner...</option>
+                  <option value="DAILY">Quotidienne</option>
+                  <option value="WEEKLY">Hebdomadaire</option>
+                  <option value="MONTHLY">Mensuelle</option>
+                  <option value="OCCASIONAL">Occasionnelle</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <h4 className="font-medium text-gray-900 mb-3 mt-2">Informations Familiales</h4>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Statut Marital</label>
+                <select
+                  {...register('maritalStatus')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Sélectionner...</option>
+                  <option value="SINGLE">Célibataire</option>
+                  <option value="MARRIED">Marié(e)</option>
+                  <option value="DIVORCED">Divorcé(e)</option>
+                  <option value="WIDOWED">Veuf/Veuve</option>
+                  <option value="UNION">Union libre</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nom du Conjoint</label>
+                <input
+                  type="text"
+                  {...register('spouseName')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Nom du conjoint (si applicable)"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de Personnes à Charge</label>
+                <input
+                  type="number"
+                  min="0"
+                  {...register('numberOfDependents')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="0"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Niveau d'Éducation</label>
+                <select
+                  {...register('educationLevel')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Sélectionner...</option>
+                  <option value="PRIMARY">Primaire</option>
+                  <option value="SECONDARY">Secondaire</option>
+                  <option value="VOCATIONAL">Professionnel</option>
+                  <option value="UNIVERSITY">Universitaire</option>
+                  <option value="GRADUATE">Postuniversitaire</option>
+                  <option value="NONE">Aucun</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Personne de Référence</label>
+                <input
+                  type="text"
+                  {...register('referencePerson')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Nom de la personne de référence"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone de Référence</label>
+                <input
+                  type="tel"
+                  {...register('referencePersonPhone')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="+509 XXXX XXXX"
+                />
+                {(errors as any).referencePersonPhone && (
+                  <p className="mt-1 text-sm text-red-600">{(errors as any).referencePersonPhone.message}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Section 3 (entreprise): Siège Social déplacé après Professionnel */}
         {isBusiness && (
           <div>
             <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">
@@ -715,9 +1000,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Adresse du Siège Social <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Adresse du Siège Social <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   {...register('headOfficeAddress')}
@@ -727,11 +1010,8 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
                   <p className="mt-1 text-sm text-red-600">{(errors as any).headOfficeAddress.message}</p>
                 )}
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Téléphone de l'Entreprise <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone de l'Entreprise <span className="text-red-500">*</span></label>
                 <input
                   type="tel"
                   {...register('companyPhone')}
@@ -742,11 +1022,8 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
                   <p className="mt-1 text-sm text-red-600">{(errors as any).companyPhone.message}</p>
                 )}
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email de l'Entreprise <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email de l'Entreprise <span className="text-red-500">*</span></label>
                 <input
                   type="email"
                   {...register('companyEmail')}
@@ -818,7 +1095,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
           </div>
         )}
 
-        {/* Section {isBusiness ? '4' : '2'}: Adresse et Contact */}
+  {/* Section {isBusiness ? '4' : '2'}: Adresse et Contact (garde numérotation) */}
         <div>
           <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">
             {isBusiness ? '4' : '2'}. Adresse et Contact
@@ -832,6 +1109,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
                 type="text"
                 {...register('street')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Numéro, rue, quartier"
               />
               {errors.street && (
                 <p className="mt-1 text-sm text-red-600">{errors.street.message}</p>
@@ -847,7 +1125,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">Sélectionner département...</option>
-                {Object.keys(haitiLocations).map(dept => (
+                {HAITI_DEPARTMENTS.map(dept => (
                   <option key={dept} value={dept}>{dept}</option>
                 ))}
               </select>
@@ -866,7 +1144,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
               >
                 <option value="">Sélectionner commune...</option>
-                {selectedDepartment && haitiLocations[selectedDepartment as keyof typeof haitiLocations]?.map(commune => (
+                {availableCommunes.map(commune => (
                   <option key={commune} value={commune}>{commune}</option>
                 ))}
               </select>
@@ -913,15 +1191,47 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
                 type="email"
                 {...register('email')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="email@exemple.com"
               />
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
               )}
             </div>
+
+            <div className="md:col-span-2">
+              <h4 className="font-medium text-gray-900 mb-3 mt-2">Contact d'Urgence</h4>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nom du Contact d'Urgence
+              </label>
+              <input
+                type="text"
+                {...register('emergencyContactName')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Nom complet"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Téléphone d'Urgence
+              </label>
+              <input
+                type="tel"
+                {...register('emergencyContactPhone')}
+                placeholder="+509 XXXX XXXX"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              {errors.emergencyContactPhone && (
+                <p className="mt-1 text-sm text-red-600">{errors.emergencyContactPhone.message}</p>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Section {isBusiness ? '5' : '3'}: Documents */}
+  {/* Section {isBusiness ? '5' : '3'}: Documents (reste après Contact) */}
         <div>
           <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">
             {isBusiness ? '5' : '3'}. Documents {isBusiness ? 'de l\'Entreprise' : 'd\'Identification'}
@@ -1012,72 +1322,10 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
           </div>
         </div>
 
-        {/* Section 4: Informations Professionnelles (pour personnes physiques) */}
-        {!isBusiness && (
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">
-              4. Informations Professionnelles
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Occupation
-                </label>
-                <input
-                  type="text"
-                  {...register('occupation')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Revenu Mensuel (HTG)
-                </label>
-                <input
-                  type="number"
-                  {...register('monthlyIncome')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Section professionnelle pour personnes physiques déplacée en Section 3 plus haut */}
       </div>
 
-      {/* Section Informations Professionnelles (pour personnes morales) */}
-      {isBusiness && (
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">
-            Informations Professionnelles
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Activité principale
-              </label>
-              <input
-                type="text"
-                {...register('occupation')}
-                placeholder="Ex: Commerce de détail, Services financiers"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Chiffre d'affaires annuel (HTG)
-              </label>
-              <input
-                type="number"
-                {...register('monthlyIncome')}
-                placeholder="Montant annuel"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Section Informations Professionnelles (pour personnes morales) déplacée en Section 3 via occupation/chiffre d'affaires? Conservée déjà plus haut */}
 
       {/* Section Documents & Signature */}
       <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6 border border-green-200">

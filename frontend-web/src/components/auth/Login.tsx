@@ -21,9 +21,45 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
+    resolver: async (data, context, options) => {
+      try {
+        // Use safeParse to avoid throwing
+        const result = loginSchema.safeParse(data);
+        if (!result.success) {
+          // Transform Zod errors to react-hook-form format
+          const fieldErrors: Record<string, any> = {};
+          result.error.issues.forEach((err: any) => {
+            const path = err.path[0] as string;
+            // Only keep first error per field
+            if (!fieldErrors[path]) {
+              fieldErrors[path] = {
+                type: err.code,
+                message: err.message,
+              };
+            }
+          });
+          return {
+            values: {},
+            errors: fieldErrors,
+          };
+        }
+        return {
+          values: result.data,
+          errors: {},
+        };
+      } catch (error) {
+        console.error('Form validation error:', error);
+        return {
+          values: {},
+          errors: {},
+        };
+      }
+    },
+    mode: 'onSubmit',
+    criteriaMode: 'firstError',
+    reValidateMode: 'onChange',
     defaultValues: {
       email: '',
       password: '',
@@ -59,6 +95,20 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
   };
 
+  // Handle invalid form (prevent raw ZodError overlay & show friendly message)
+  const onInvalid = (formErrors: any) => {
+    // Collect unique messages
+    const messages = Object.values(formErrors)
+      .map((err: any) => err?.message)
+      .filter(Boolean);
+    if (messages.length === 0) {
+      toast.error('Veuillez renseigner votre email et votre mot de passe.');
+    } else {
+      // Combine but keep it short
+      toast.error(messages.join(' | '));
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-cyan-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-2xl shadow-xl border border-gray-100">
@@ -76,7 +126,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </div>
 
         {/* Login Form */}
-        <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
+        <form className="space-y-6" onSubmit={handleSubmit(onSubmit, onInvalid)}>
+          {/* Global form errors summary (optional) */}
+          {Object.keys(errors).length > 0 && (
+            <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+              {Object.values(errors).map((e, idx) => (
+                <div key={idx}>{(e as any).message}</div>
+              ))}
+            </div>
+          )}
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
               Adresse email

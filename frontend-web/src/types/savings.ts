@@ -424,16 +424,16 @@ export const HAITI_DEPARTMENTS = [
 export type HaitiDepartment = typeof HAITI_DEPARTMENTS[number];
 
 export const COMMUNES_BY_DEPARTMENT: Record<HaitiDepartment, string[]> = {
-  'Ouest': ['Port-au-Prince', 'Delmas', 'Tabarre', 'Pétion-Ville', 'Carrefour', 'Gressier', 'Léogâne', 'Grand-Goâve'],
-  'Artibonite': ['Gonaïves', 'Saint-Marc', 'Dessalines', 'Petite-Rivière-de-l\'Artibonite', 'Verrettes'],
-  'Nord': ['Cap-Haïtien', 'Fort-Dauphin', 'Ouanaminthe', 'Dondon', 'Milot'],
-  'Sud': ['Cayes', 'Aquin', 'Saint-Louis-du-Sud', 'Cavaillon', 'Port-Salut'],
-  'Centre': ['Hinche', 'Mirebalais', 'Lascahobas', 'Cerca-la-Source', 'Thomassique'],
-  'Grand\'Anse': ['Jérémie', 'Dame-Marie', 'Anse-d\'Hainault', 'Corail', 'Pestel'],
-  'Nippes': ['Miragoâne', 'Petit-Goâve', 'Anse-à-Veau', 'Baradères', 'Plaisance-du-Sud'],
-  'Nord-Est': ['Fort-Dauphin', 'Trou-du-Nord', 'Sainte-Suzanne', 'Terrier-Rouge', 'Mombin-Crochu'],
-  'Nord-Ouest': ['Port-de-Paix', 'Jean-Rabel', 'Môle-Saint-Nicolas', 'Bombardopolis', 'Bassin-Bleu'],
-  'Sud-Est': ['Jacmel', 'Cayes-Jacmel', 'Marigot', 'Bainet', 'Belle-Anse']
+  'Ouest': ['Port-au-Prince', 'Delmas', 'Tabarre', 'Pétion-Ville', 'Carrefour', 'Gressier', 'Léogâne', 'Grand-Goâve', 'Kenscoff', 'Arcahaie'],
+  'Artibonite': ['Gonaïves', 'Saint-Marc', 'Dessalines', 'Petite-Rivière-de-l\'Artibonite', 'Verrettes', 'Gros-Morne', 'Ennery'],
+  'Nord': ['Cap-Haïtien', 'Limbé', 'Acul-du-Nord', 'Plaisance', 'Grande-Rivière-du-Nord', 'Dondon', 'Milot', 'Limonade'],
+  'Sud': ['Les Cayes', 'Aquin', 'Saint-Louis-du-Sud', 'Cavaillon', 'Port-Salut', 'Chantal', 'Torbeck'],
+  'Centre': ['Hinche', 'Mirebalais', 'Lascahobas', 'Cerca-la-Source', 'Thomassique', 'Thomonde', 'Maïssade'],
+  'Grand\'Anse': ['Jérémie', 'Dame-Marie', 'Anse-d\'Hainault', 'Corail', 'Pestel', 'Moron', 'Les Irois'],
+  'Nippes': ['Miragoâne', 'Petit-Goâve', 'Anse-à-Veau', 'Baradères', 'Plaisance-du-Sud', 'Fonds-des-Nègres'],
+  'Nord-Est': ['Fort-Liberté', 'Trou-du-Nord', 'Ouanaminthe', 'Sainte-Suzanne', 'Terrier-Rouge', 'Mombin-Crochu', 'Vallières'],
+  'Nord-Ouest': ['Port-de-Paix', 'Jean-Rabel', 'Môle-Saint-Nicolas', 'Bombardopolis', 'Bassin-Bleu', 'Saint-Louis-du-Nord'],
+  'Sud-Est': ['Jacmel', 'Cayes-Jacmel', 'Marigot', 'Bainet', 'Belle-Anse', 'Côtes-de-Fer']
 };
 
 // Business Rules Constants

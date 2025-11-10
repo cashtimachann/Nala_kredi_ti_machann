@@ -1,9 +1,23 @@
 import { z } from 'zod';
 import { BranchStatus, DayOfWeek } from '../types/branch';
 
+// Login schema with French messages (single error per field)
 export const loginSchema = z.object({
-  email: z.string().email('Email invalide'),
-  password: z.string().min(6, 'Le mot de passe doit contenir au moins 6 caractères'),
+  email: z
+    .string()
+    .min(1, 'Veuillez saisir votre email')
+    .refine((val) => {
+      if (!val || val.trim().length === 0) return true; // empty handled by min
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return emailRegex.test(val);
+    }, { message: 'Email invalide' }),
+  password: z
+    .string()
+    .min(1, 'Veuillez saisir votre mot de passe')
+    .refine((val) => {
+      if (!val || val.length === 0) return true; // empty handled by min
+      return val.length >= 6;
+    }, { message: 'Le mot de passe doit contenir au moins 6 caractères' }),
   rememberMe: z.boolean().optional(),
 });
 

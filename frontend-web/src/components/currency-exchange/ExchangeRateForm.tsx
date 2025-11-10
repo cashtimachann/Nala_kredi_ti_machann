@@ -47,7 +47,28 @@ const ExchangeRateForm: React.FC<ExchangeRateFormProps> = ({ rate, onSubmit, onC
   const isEdit = !!rate;
 
   const { register, handleSubmit, formState: { errors }, watch } = useForm<ExchangeRateFormValues>({
-    resolver: zodResolver(exchangeRateSchema),
+    resolver: async (data: any, context: any, options: any) => {
+      try {
+        const result = exchangeRateSchema.safeParse(data);
+        if (!result.success) {
+          const fieldErrors: Record<string, any> = {};
+          result.error.issues.forEach((err: any) => {
+            const fieldPath = err.path.join('.');
+            if (!fieldErrors[fieldPath]) {
+              fieldErrors[fieldPath] = {
+                type: err.code,
+                message: err.message,
+              };
+            }
+          });
+          return { values: {} as any, errors: fieldErrors };
+        }
+        return { values: result.data as any, errors: {} };
+      } catch (error) {
+        console.error('Form validation error:', error);
+        return { values: {} as any, errors: {} };
+      }
+    },
     defaultValues: {
       baseCurrency: rate?.baseCurrency ?? CurrencyType.HTG,
       targetCurrency: rate?.targetCurrency ?? CurrencyType.USD,
@@ -100,10 +121,20 @@ const ExchangeRateForm: React.FC<ExchangeRateFormProps> = ({ rate, onSubmit, onC
     }
   };
 
+  const onFormInvalid = (formErrors: any) => {
+    const messages = Object.entries(formErrors)
+      .map(([field, err]: [string, any]) => err?.message)
+      .filter(Boolean)
+      .slice(0, 3);
+    if (messages.length > 0) {
+      alert(`Veuillez corriger les erreurs:\n\n${messages.join('\n')}`);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-screen overflow-y-auto">
-        <form onSubmit={handleSubmit(onFormSubmit)}>
+        <form onSubmit={handleSubmit(onFormSubmit, onFormInvalid)}>
           {/* Header */}
           <div className="flex justify-between items-center p-6 border-b">
             <h2 className="text-xl font-semibold text-gray-900">
