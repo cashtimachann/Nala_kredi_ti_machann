@@ -151,7 +151,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
       signaturePlace: '',
       signatureDate: new Date().toISOString().split('T')[0]
     },
-    mode: 'onChange'
+    mode: 'onSubmit' // Only validate on form submission, not on every change
   });
 
   const watchedDepartment = watch('department');
@@ -186,6 +186,8 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
       // Réinitialiser les signataires
       setAuthorizedSigners([]);
     }
+    // Clear any validation errors when switching types
+    // This prevents errors from appearing for fields that are now irrelevant
   }, [isBusiness, setValue]);
 
   const availableCommunes = selectedDepartment ? COMMUNES_BY_DEPARTMENT[selectedDepartment] : [];
@@ -610,7 +612,16 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
       <form onSubmit={(e) => {
         e.preventDefault();
         if (currentStep === totalSteps) {
-          handleSubmit(handleFormSubmit as any, handleFormInvalid)();
+          handleSubmit(handleFormSubmit, (errors) => {
+            console.error('Form validation errors:', errors);
+            // Show user-friendly error message
+            const firstError = Object.values(errors)[0];
+            if (firstError && firstError.message) {
+              alert(`Erreur de validation: ${firstError.message}`);
+            } else {
+              alert('Veuillez vérifier que tous les champs obligatoires sont remplis correctement.');
+            }
+          })();
         } else {
           handleNextStep();
         }
@@ -1990,7 +2001,9 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                         checked={!!value}
                         onChange={(e) => onChange(e.target.checked)}
                         onBlur={onBlur}
-                        className="mt-1 mr-3 h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        className={`mt-1 mr-3 h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ${
+                          errors.acceptTerms ? 'border-red-500' : ''
+                        }`}
                       />
                     )}
                   />
@@ -2002,6 +2015,9 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                       Je comprends que la banque se réserve le droit de demander des documents supplémentaires 
                       ou d'effectuer toute vérification jugée nécessaire.
                     </p>
+                    {errors.acceptTerms && (
+                      <p className="mt-1 text-sm text-red-600">{errors.acceptTerms.message}</p>
+                    )}
                   </div>
                 </div>
 
@@ -2015,11 +2031,16 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                         <input
                           {...field}
                           type="text"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                            errors.signaturePlace ? 'border-red-500' : 'border-gray-300'
+                          }`}
                           placeholder="Ville"
                         />
                       )}
                     />
+                    {errors.signaturePlace && (
+                      <p className="mt-1 text-sm text-red-600">{errors.signaturePlace.message}</p>
+                    )}
                   </div>
 
                   <div>
@@ -2031,10 +2052,15 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                         <input
                           {...field}
                           type="date"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                            errors.signatureDate ? 'border-red-500' : 'border-gray-300'
+                          }`}
                         />
                       )}
                     />
+                    {errors.signatureDate && (
+                      <p className="mt-1 text-sm text-red-600">{errors.signatureDate.message}</p>
+                    )}
                   </div>
                 </div>
 

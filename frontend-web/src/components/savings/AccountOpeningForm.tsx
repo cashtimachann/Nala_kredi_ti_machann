@@ -359,7 +359,7 @@ const AccountOpeningForm: React.FC<AccountOpeningFormProps> = ({
       privacyConsent: false,
       termsAccepted: false
     },
-    mode: 'onChange'
+    mode: 'onSubmit' // Only validate on form submission
   });
 
   const watchedCurrency = watch('currency');

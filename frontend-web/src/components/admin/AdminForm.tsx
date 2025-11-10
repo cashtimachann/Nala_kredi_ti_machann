@@ -129,7 +129,7 @@ const AdminForm: React.FC<AdminFormProps> = ({
   } = useForm<AdminFormData>({
     resolver: yupResolver(adminValidationSchema),
     context: { isEditing },
-    mode: 'onChange',
+    mode: 'onSubmit', // Only validate on form submission
     defaultValues: initialData ? {
       firstName: initialData.firstName,
       lastName: initialData.lastName,

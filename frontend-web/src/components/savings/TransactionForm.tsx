@@ -106,7 +106,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
       verificationMethod: 'ID_CHECK',
       notes: ''
     },
-    mode: 'onChange'
+    mode: 'onSubmit' // Only validate on form submission
   });
 
   const watchedType = watch('type');
