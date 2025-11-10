@@ -3,9 +3,19 @@ import { X, Users, Building2, User } from 'lucide-react';
 
 const formatDateDisplay = (raw?: string) => {
   if (!raw) return '—';
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('fr-FR');
+  const value = String(raw).trim();
+  if (!value) return '—';
+
+  const isoDate = value.includes('T') ? value.split('T')[0] : value;
+  const parts = isoDate.split('-');
+  if (parts.length !== 3) return '—';
+
+  const [year, month, day] = parts;
+  if (!year || !month || !day) return '—';
+
+  const paddedDay = day.padStart(2, '0');
+  const paddedMonth = month.padStart(2, '0');
+  return `${paddedDay}/${paddedMonth}/${year}`;
 };
 
 const genderLabel = (g: any) => {
@@ -65,6 +75,18 @@ const CustomerDetailsModal: React.FC<Props> = ({ customer, isOpen, onClose, onEd
                     <label className="block text-sm font-medium text-gray-500">NIF</label>
                     <p className="text-base text-gray-900">{(customer as any)?.taxId || 'N/A'}</p>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500">Adresse siège social</label>
+                    <p className="text-base text-gray-900">{(customer as any)?.headOfficeAddress || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500">Téléphone entreprise</label>
+                    <p className="text-base text-gray-900">{(customer as any)?.companyPhone || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500">Email entreprise</label>
+                    <p className="text-base text-gray-900">{(customer as any)?.companyEmail || 'N/A'}</p>
+                  </div>
                 </>
               ) : (
                 <>
@@ -78,11 +100,23 @@ const CustomerDetailsModal: React.FC<Props> = ({ customer, isOpen, onClose, onEd
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-500">Date de Naissance</label>
-                    <p className="text-base text-gray-900">{customer.dateOfBirth ? new Date(customer.dateOfBirth).toLocaleDateString('fr-FR') : 'N/A'}</p>
+                    <p className="text-base text-gray-900">{customer.dateOfBirth ? formatDateDisplay(customer.dateOfBirth) : 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500">Lieu de Naissance</label>
+                    <p className="text-base text-gray-900">{(customer as any)?.birthPlace || 'N/A'}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-500">Genre</label>
                     <p className="text-base text-gray-900">{genderLabel(customer.gender)}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500">Nationalité</label>
+                    <p className="text-base text-gray-900">{(customer as any)?.nationality || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500">NIF Personnel</label>
+                    <p className="text-base text-gray-900 font-mono">{(customer as any)?.personalNif || 'N/A'}</p>
                   </div>
                 </>
               )}
@@ -144,11 +178,11 @@ const CustomerDetailsModal: React.FC<Props> = ({ customer, isOpen, onClose, onEd
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-500">Date d'émission</label>
-                      <p className="text-base text-gray-900">{repIssued ? new Date(repIssued).toLocaleDateString('fr-FR') : 'N/A'}</p>
+                      <p className="text-base text-gray-900">{formatDateDisplay(repIssued || undefined)}</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-500">Date d'expiration</label>
-                      <p className="text-base text-gray-900">{repExpiry ? new Date(repExpiry).toLocaleDateString('fr-FR') : 'N/A'}</p>
+                      <p className="text-base text-gray-900">{formatDateDisplay(repExpiry || undefined)}</p>
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-500">Autorité d'émission</label>
@@ -159,6 +193,162 @@ const CustomerDetailsModal: React.FC<Props> = ({ customer, isOpen, onClose, onEd
               );
             })()
           )}
+
+          {/* Professional & Financial Info (individuals only) */}
+          {!((customer as any)?.isBusiness || (customer as any)?.companyName || (customer as any)?.legalForm) && (
+            <div className="bg-green-50 rounded-lg p-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Informations Professionnelles & Financières
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Profession</label>
+                  <p className="text-base text-gray-900">{customer.occupation || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Employeur</label>
+                  <p className="text-base text-gray-900">{(customer as any)?.employerName || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Adresse du travail</label>
+                  <p className="text-base text-gray-900">{(customer as any)?.workAddress || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Source de revenu</label>
+                  <p className="text-base text-gray-900">{(customer as any)?.incomeSource || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Revenu mensuel</label>
+                  <p className="text-base text-gray-900">
+                    {customer.monthlyIncome ? `${customer.monthlyIncome.toLocaleString()} HTG` : 'N/A'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Fréquence des transactions</label>
+                  <p className="text-base text-gray-900">{(customer as any)?.transactionFrequency || 'N/A'}</p>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-500">But du compte</label>
+                  <p className="text-base text-gray-900">{(customer as any)?.accountPurpose || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Family Info (individuals only) */}
+          {!((customer as any)?.isBusiness || (customer as any)?.companyName || (customer as any)?.legalForm) && (
+            <div className="bg-purple-50 rounded-lg p-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Informations Familiales
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">État civil</label>
+                  <p className="text-base text-gray-900">{(customer as any)?.maritalStatus || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Nom du conjoint</label>
+                  <p className="text-base text-gray-900">{(customer as any)?.spouseName || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Nombre de personnes à charge</label>
+                  <p className="text-base text-gray-900">{(customer as any)?.numberOfDependents ?? 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Niveau d'éducation</label>
+                  <p className="text-base text-gray-900">{(customer as any)?.educationLevel || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Reference Person (individuals only) */}
+          {!((customer as any)?.isBusiness || (customer as any)?.companyName || (customer as any)?.legalForm) && (
+            <div className="bg-yellow-50 rounded-lg p-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Personne de Référence
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Nom complet</label>
+                  <p className="text-base text-gray-900">{(customer as any)?.referencePersonName || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500">Téléphone</label>
+                  <p className="text-base text-gray-900">{(customer as any)?.referencePersonPhone || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Contact Info */}
+          <div className="bg-gray-50 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Informations de Contact
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-500">Téléphone principal</label>
+                <p className="text-base text-gray-900 font-mono">{customer.contact?.primaryPhone || 'N/A'}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500">Téléphone secondaire</label>
+                <p className="text-base text-gray-900 font-mono">{customer.contact?.secondaryPhone || 'N/A'}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500">Email</label>
+                <p className="text-base text-gray-900">{customer.contact?.email || 'N/A'}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500">Contact d'urgence</label>
+                <p className="text-base text-gray-900">{customer.contact?.emergencyContactName || 'N/A'}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500">Téléphone d'urgence</label>
+                <p className="text-base text-gray-900 font-mono">{customer.contact?.emergencyContactPhone || 'N/A'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Identity Document */}
+          <div className="bg-gray-50 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Document d'Identité
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-500">Type de document</label>
+                <p className="text-base text-gray-900">
+                  {(() => {
+                    const docType = customer.identity?.documentType;
+                    const docTypeMap: Record<number, string> = { 
+                      0: "CIN (Carte d'Identité Nationale)", 
+                      1: 'Passeport', 
+                      2: 'Permis de Conduire',
+                      3: 'Acte de Naissance'
+                    };
+                    return docType !== undefined && docType !== null ? (docTypeMap[docType] || String(docType)) : 'N/A';
+                  })()}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500">Numéro de document</label>
+                <p className="text-base text-gray-900 font-mono">{customer.identity?.documentNumber || 'N/A'}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500">Date d'émission</label>
+                <p className="text-base text-gray-900">{formatDateDisplay(customer.identity?.issuedDate)}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500">Date d'expiration</label>
+                <p className="text-base text-gray-900">{formatDateDisplay(customer.identity?.expiryDate)}</p>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-500">Autorité d'émission</label>
+                <p className="text-base text-gray-900">{customer.identity?.issuingAuthority || 'N/A'}</p>
+              </div>
+            </div>
+          </div>
 
           {/* Address */}
           <div className="bg-gray-50 rounded-lg p-4">

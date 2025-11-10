@@ -22,7 +22,7 @@ describe('validation/schemas', () => {
       department: 'Ouest',
       primaryPhone: '+50937123456',
       email: 'a@b.com',
-      documentType: 'CIN',
+      documentType: 0, // CIN
       documentNumber: 'ABC12345',
       issuedDate: '2024-01-01',
       issuingAuthority: 'ONI',
@@ -39,6 +39,10 @@ describe('validation/schemas', () => {
     const missing = { ...good } as any;
     delete missing.firstName;
     expect(schema.safeParse(missing).success).toBe(false);
+
+    const missingDoc = { ...good } as any;
+    delete missingDoc.documentType;
+    expect(schema.safeParse(missingDoc).success).toBe(false);
   });
 
   it('createClientSchemaZ (business) requires company and representative fields, not individual ones', () => {
@@ -49,6 +53,11 @@ describe('validation/schemas', () => {
       department: 'Ouest',
       primaryPhone: '+50937123456',
       email: 'corp@example.com',
+      // Required document fields for business
+      documentType: 3, // TradeRegister
+      documentNumber: 'RCC-12345',
+      issuedDate: '2024-01-01',
+      issuingAuthority: 'Chambre de Commerce',
       // Business specific
       companyName: 'ACME SA',
       legalForm: 'SA',
@@ -72,5 +81,9 @@ describe('validation/schemas', () => {
     const missingRep = { ...good } as any;
     delete missingRep.legalRepresentativeName;
     expect(schema.safeParse(missingRep).success).toBe(false);
+
+    const missingDoc = { ...good } as any;
+    delete missingDoc.documentType;
+    expect(schema.safeParse(missingDoc).success).toBe(false);
   });
 });

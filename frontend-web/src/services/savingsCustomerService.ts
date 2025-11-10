@@ -108,8 +108,13 @@ export interface SavingsCustomerCreateDto {
 
   // Famille / social
   maritalStatus?: string;
+  spouseName?: string;
   numberOfDependents?: number;
   educationLevel?: string;
+
+  // Transaction / KYC
+  transactionFrequency?: string;
+  accountPurpose?: string;
 
   // Déclaration / signature
   acceptTerms?: boolean;
@@ -166,6 +171,7 @@ export interface SavingsCustomerResponseDto {
   representativeFirstName?: string;
   representativeLastName?: string;
   representativeTitle?: string;
+  representativeDocumentType?: SavingsIdentityDocumentType | number | string;
   representativeDocumentNumber?: string;
   representativeIssuedDate?: string;
   representativeExpiryDate?: string;
@@ -177,7 +183,7 @@ export interface SavingsCustomerResponseDto {
     firstName?: string;
     lastName?: string;
     title?: string;
-    documentType?: SavingsIdentityDocumentType | number;
+    documentType?: SavingsIdentityDocumentType | number | string;
     documentNumber?: string;
     issuedDate?: string;
     expiryDate?: string;
@@ -196,6 +202,9 @@ export interface SavingsCustomerResponseDto {
   referencePersonPhone?: string;
   transactionFrequency?: string;
   accountPurpose?: string;
+  acceptTerms?: boolean;
+  signaturePlace?: string;
+  signatureDate?: string;
   signature?: string; // Base64 encoded signature
   documents?: SavingsCustomerDocumentResponseDto[]; // Lis dokiman
   createdAt: string;
@@ -258,17 +267,94 @@ class SavingsCustomerService {
   private normalizeCustomer<T = SavingsCustomerResponseDto>(dto: any): T {
     if (!dto) return dto as T;
 
+    const pickValue = (...candidates: any[]) => {
+      for (const candidate of candidates) {
+        if (candidate === undefined || candidate === null) continue;
+        if (typeof candidate === 'string') {
+          const trimmed = candidate.trim();
+          if (trimmed.length === 0) continue;
+          return trimmed;
+        }
+        return candidate;
+      }
+      return undefined;
+    };
+
+    const pickString = (...candidates: any[]): string | undefined => {
+      const value = pickValue(...candidates);
+      return value === undefined ? undefined : String(value).trim();
+    };
+
+    const pickNumber = (...candidates: any[]): number | undefined => {
+      const value = pickValue(...candidates);
+      if (value === undefined) return undefined;
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : undefined;
+      }
+      const cleaned = String(value).replace(/[^0-9,.-]/g, '').replace(',', '.');
+      const parsed = parseFloat(cleaned);
+      return Number.isNaN(parsed) ? undefined : parsed;
+    };
+
+    const pickBoolean = (...candidates: any[]): boolean | undefined => {
+      const value = pickValue(...candidates);
+      if (value === undefined) return undefined;
+      if (typeof value === 'boolean') return value;
+      const str = String(value).trim().toLowerCase();
+      if (['true', '1', 'yes', 'oui'].includes(str)) return true;
+      if (['false', '0', 'no', 'non'].includes(str)) return false;
+      return Boolean(value);
+    };
+
     // Harmonize common casing differences
     if (dto.Id && !dto.id) dto.id = dto.Id;
     if (dto.CustomerCode && !dto.customerCode) dto.customerCode = dto.CustomerCode;
 
     // Compute fullName when missing or invalid
-    const firstName = dto.firstName ?? dto.FirstName ?? '';
-    const lastName = dto.lastName ?? dto.LastName ?? '';
+    const normalizedFirstName = pickString(
+      dto.firstName,
+      dto.FirstName,
+      dto.firstname,
+      dto.first_name,
+      dto.GivenName,
+      dto.givenName
+    ) || '';
+    const normalizedLastName = pickString(
+      dto.lastName,
+      dto.LastName,
+      dto.lastname,
+      dto.last_name,
+      dto.familyName,
+      dto.FamilyName
+    ) || '';
+    dto.firstName = normalizedFirstName;
+    dto.lastName = normalizedLastName;
+    const firstName = normalizedFirstName;
+    const lastName = normalizedLastName;
     const computedFullName = `${firstName || ''} ${lastName || ''}`.trim();
     if (!dto.fullName || dto.fullName === 'undefined undefined' || dto.fullName === ' ') {
       dto.fullName = computedFullName;
     }
+
+    const normalizedDob = pickString(
+      dto.dateOfBirth,
+      dto.DateOfBirth,
+      dto.birthDate,
+      dto.BirthDate,
+      dto.date_of_birth
+    );
+    if (normalizedDob) {
+      dto.dateOfBirth = normalizedDob;
+    }
+
+    const normalizedBirthPlace = pickString(dto.birthPlace, dto.BirthPlace, dto.birth_place, dto.placeOfBirth, dto.PlaceOfBirth);
+    if (normalizedBirthPlace) dto.birthPlace = normalizedBirthPlace;
+
+    const normalizedNationality = pickString(dto.nationality, dto.Nationality, dto.countryOfOrigin, dto.CountryOfOrigin);
+    if (normalizedNationality) dto.nationality = normalizedNationality;
+
+    const normalizedPersonalNif = pickString(dto.personalNif, dto.PersonalNif, dto.personalNIF, dto.PersonalNIF, dto.nif, dto.Nif, dto.taxPayerNumber, dto.TaxPayerNumber);
+    if (normalizedPersonalNif) dto.personalNif = normalizedPersonalNif;
 
     // Normalize nested address
     const address = dto.address || {
@@ -317,6 +403,186 @@ class SavingsCustomerService {
       expiryDate: identity.expiryDate || dto.expiryDate || undefined,
       issuingAuthority: identity.issuingAuthority || dto.issuingAuthority || ''
     };
+
+    // Normalize reference person informations (often used in KYC flows)
+    const rawReference = dto.referencePerson ?? dto.ReferencePerson ?? dto.referenceContact ?? dto.ReferenceContact;
+    const referenceNameCandidates: Array<string | undefined> = [
+      dto.referencePersonName,
+      dto.ReferencePersonName,
+      typeof rawReference === 'string' ? rawReference : undefined,
+      rawReference?.name,
+      rawReference?.fullName,
+      rawReference?.referenceName,
+      rawReference && [rawReference.firstName, rawReference.lastName].filter(Boolean).join(' ').trim() || undefined,
+    ];
+    const normalizedReferenceName = referenceNameCandidates.find(val => typeof val === 'string' && val.trim().length > 0)?.trim();
+
+    const referencePhoneCandidates: Array<string | undefined> = [
+      dto.referencePersonPhone,
+      dto.ReferencePersonPhone,
+      rawReference?.phone,
+      rawReference?.phoneNumber,
+      rawReference?.primaryPhone,
+      rawReference?.contactPhone,
+    ];
+    const normalizedReferencePhone = referencePhoneCandidates.find(val => typeof val === 'string' && val.trim().length > 0)?.trim();
+
+    if (normalizedReferenceName) {
+      dto.referencePersonName = normalizedReferenceName;
+    }
+    if (normalizedReferencePhone) {
+      dto.referencePersonPhone = normalizedReferencePhone;
+    }
+
+    // Business / occupation fields
+    const normalizedOccupation = pickString(dto.occupation, dto.Occupation, dto.profession, dto.Profession);
+    if (normalizedOccupation) dto.occupation = normalizedOccupation;
+
+    const normalizedEmployerName = pickString(dto.employerName, dto.EmployerName, dto.employer, dto.Employer);
+    if (normalizedEmployerName) dto.employerName = normalizedEmployerName;
+
+    const normalizedWorkAddress = pickString(dto.workAddress, dto.WorkAddress, dto.work_address, dto.officeAddress, dto.OfficeAddress);
+    if (normalizedWorkAddress) dto.workAddress = normalizedWorkAddress;
+
+    const normalizedIncomeSource = pickString(dto.incomeSource, dto.IncomeSource, dto.sourceOfIncome, dto.SourceOfIncome);
+    if (normalizedIncomeSource) dto.incomeSource = normalizedIncomeSource;
+
+    const normalizedMonthlyIncome = pickNumber(dto.monthlyIncome, dto.MonthlyIncome, dto.incomePerMonth, dto.IncomePerMonth);
+    if (normalizedMonthlyIncome !== undefined) dto.monthlyIncome = normalizedMonthlyIncome;
+
+    const normalizedTransactionFrequency = pickString(dto.transactionFrequency, dto.TransactionFrequency, dto.transaction_frequency);
+    if (normalizedTransactionFrequency) dto.transactionFrequency = normalizedTransactionFrequency;
+
+    const normalizedAccountPurpose = pickString(dto.accountPurpose, dto.AccountPurpose, dto.accountReason, dto.AccountReason);
+    if (normalizedAccountPurpose) dto.accountPurpose = normalizedAccountPurpose;
+
+    const normalizedMaritalStatus = pickString(dto.maritalStatus, dto.MaritalStatus, dto.marital_status, dto.civilStatus, dto.CivilStatus);
+    if (normalizedMaritalStatus) dto.maritalStatus = normalizedMaritalStatus;
+
+    const normalizedSpouseName = pickString(dto.spouseName, dto.SpouseName, dto.conjointName, dto.ConjointName);
+    if (normalizedSpouseName) dto.spouseName = normalizedSpouseName;
+
+    const normalizedNumberDependents = pickNumber(dto.numberOfDependents, dto.NumberOfDependents, dto.dependentsCount, dto.DependentsCount);
+    if (normalizedNumberDependents !== undefined) dto.numberOfDependents = Math.max(0, Math.floor(normalizedNumberDependents));
+
+    const normalizedEducationLevel = pickString(dto.educationLevel, dto.EducationLevel, dto.education_level, dto.highestEducation, dto.HighestEducation);
+    if (normalizedEducationLevel) dto.educationLevel = normalizedEducationLevel;
+
+    const normalizedIsBusiness = pickBoolean(dto.isBusiness, dto.IsBusiness, dto.isCorporate, dto.IsCorporate);
+    if (normalizedIsBusiness !== undefined) dto.isBusiness = normalizedIsBusiness;
+
+    const normalizedCompanyName = pickString(dto.companyName, dto.CompanyName, dto.legalName, dto.LegalName, dto.businessName, dto.BusinessName);
+    if (normalizedCompanyName) dto.companyName = normalizedCompanyName;
+
+    const normalizedLegalForm = pickString(dto.legalForm, dto.LegalForm, dto.companyType, dto.CompanyType);
+    if (normalizedLegalForm) dto.legalForm = normalizedLegalForm;
+
+    const normalizedTradeRegister = pickString(dto.tradeRegisterNumber, dto.TradeRegisterNumber, dto.businessRegistrationNumber, dto.BusinessRegistrationNumber, dto.rcNumber, dto.RcNumber);
+    if (normalizedTradeRegister) dto.tradeRegisterNumber = normalizedTradeRegister;
+
+    const normalizedTaxId = pickString(dto.taxId, dto.TaxId, dto.companyNif, dto.CompanyNif, dto.nifEntreprise, dto.NifEntreprise);
+    if (normalizedTaxId) dto.taxId = normalizedTaxId;
+
+    const normalizedHeadOfficeAddress = pickString(dto.headOfficeAddress, dto.HeadOfficeAddress, dto.headquartersAddress, dto.HeadquartersAddress);
+    if (normalizedHeadOfficeAddress) dto.headOfficeAddress = normalizedHeadOfficeAddress;
+
+    const normalizedCompanyPhone = pickString(dto.companyPhone, dto.CompanyPhone, dto.businessPhone, dto.BusinessPhone);
+    if (normalizedCompanyPhone) dto.companyPhone = normalizedCompanyPhone;
+
+    const normalizedCompanyEmail = pickString(dto.companyEmail, dto.CompanyEmail, dto.businessEmail, dto.BusinessEmail);
+    if (normalizedCompanyEmail) dto.companyEmail = normalizedCompanyEmail;
+
+    const legalRepSource = dto.legalRepresentative || dto.legalRep || dto.representative || {};
+    const legalRepNameRaw = pickString(
+      dto.legalRepresentativeName,
+      dto.LegalRepresentativeName,
+      legalRepSource.name,
+      legalRepSource.fullName,
+      legalRepSource.displayName
+    );
+    let legalRepFirst = pickString(
+      legalRepSource.firstName,
+      legalRepSource.firstname,
+      legalRepSource.givenName,
+      dto.representativeFirstName,
+      dto.RepresentativeFirstName
+    );
+    let legalRepLast = pickString(
+      legalRepSource.lastName,
+      legalRepSource.lastname,
+      legalRepSource.familyName,
+      dto.representativeLastName,
+      dto.RepresentativeLastName
+    );
+
+    if ((!legalRepFirst || !legalRepLast) && legalRepNameRaw) {
+      const parts = legalRepNameRaw.split(/\s+/).filter(Boolean);
+      if (parts.length === 1) {
+        legalRepLast = legalRepLast || parts[0];
+      } else if (parts.length > 1) {
+        legalRepFirst = legalRepFirst || parts.slice(0, -1).join(' ');
+        legalRepLast = legalRepLast || parts.slice(-1)[0];
+      }
+    }
+
+    const legalRepTitle = pickString(
+      legalRepSource.title,
+      legalRepSource.Title,
+      dto.representativeTitle,
+      dto.RepresentativeTitle
+    );
+
+    const legalRepDocumentType = pickValue(
+      legalRepSource.documentType,
+      legalRepSource.DocumentType,
+      dto.representativeDocumentType,
+      dto.RepresentativeDocumentType
+    );
+
+    const legalRepDocumentNumber = pickString(
+      legalRepSource.documentNumber,
+      legalRepSource.DocumentNumber,
+      dto.representativeDocumentNumber,
+      dto.RepresentativeDocumentNumber
+    );
+
+    const legalRepIssuedDate = pickString(
+      legalRepSource.issuedDate,
+      legalRepSource.IssuedDate,
+      dto.representativeIssuedDate,
+      dto.RepresentativeIssuedDate
+    );
+
+    const legalRepExpiryDate = pickString(
+      legalRepSource.expiryDate,
+      legalRepSource.ExpiryDate,
+      dto.representativeExpiryDate,
+      dto.RepresentativeExpiryDate
+    );
+
+    const legalRepIssuingAuthority = pickString(
+      legalRepSource.issuingAuthority,
+      legalRepSource.IssuingAuthority,
+      dto.representativeIssuingAuthority,
+      dto.RepresentativeIssuingAuthority
+    );
+
+    dto.legalRepresentative = {
+      firstName: legalRepFirst,
+      lastName: legalRepLast,
+      title: legalRepTitle,
+      documentType: legalRepDocumentType,
+      documentNumber: legalRepDocumentNumber,
+      issuedDate: legalRepIssuedDate,
+      expiryDate: legalRepExpiryDate,
+      issuingAuthority: legalRepIssuingAuthority,
+    };
+
+    if (legalRepNameRaw) {
+      dto.legalRepresentativeName = legalRepNameRaw;
+    } else if (legalRepFirst || legalRepLast) {
+      dto.legalRepresentativeName = [legalRepFirst, legalRepLast].filter(Boolean).join(' ').trim();
+    }
 
     // Defaults
     if (dto.isActive === undefined || dto.isActive === null) dto.isActive = true;
@@ -624,6 +890,8 @@ class SavingsCustomerService {
         customerData,
         this.getAuthHeaders()
       );
+      // Invalidate cached GETs so subsequent reads return fresh data
+      BaseApiService.clearCache();
       // Ensure we return a normalized DTO so callers always receive numeric enums (gender, etc.)
       return this.normalizeCustomer(response.data);
     } catch (error: any) {

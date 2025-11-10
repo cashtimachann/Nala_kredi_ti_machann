@@ -333,6 +333,13 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
           transformedData.taxId = data.companyNif;
           delete transformedData.companyNif;
 
+          // Pour les clients d'affaires, définir les champs de document d'identité principaux
+          // Utiliser le registre de commerce comme document principal
+          transformedData.documentType = 3; // TradeRegister enum value
+          transformedData.documentNumber = data.businessRegistrationNumber || '';
+          transformedData.issuedDate = new Date().toISOString().split('T')[0]; // Date d'aujourd'hui par défaut
+          transformedData.issuingAuthority = 'Chambre de Commerce et d\'Industrie d\'Haïti';
+
           // Séparer legalRepresentativeName en firstName et lastName using safer logic.
           if (data.legalRepresentativeName) {
             const parts = data.legalRepresentativeName.trim().split(/\s+/);
@@ -378,10 +385,21 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
         // Ajouter les champs manquants requis par le backend
         transformedData.transactionFrequency = data.transactionFrequency || 'MONTHLY';
         transformedData.accountPurpose = data.accountPurpose || '';
-        transformedData.referencePerson = data.referencePerson || '';
+        transformedData.referencePersonName = data.referencePerson || ''; // Backend utilise referencePersonName
+        transformedData.referencePersonPhone = data.referencePersonPhone || '';
         transformedData.maritalStatus = data.maritalStatus || 'SINGLE';
+        transformedData.spouseName = data.spouseName || '';
         transformedData.numberOfDependents = data.numberOfDependents || 0;
         transformedData.educationLevel = data.educationLevel || 'SECONDARY';
+        
+        // Mapper les champs avec noms différents
+        if (data.nif) {
+          transformedData.personalNif = data.nif; // Backend utilise personalNif
+        }
+
+        // Nettoyer les anciens noms de champs du payload
+        delete transformedData.referencePerson; // On a mappé vers referencePersonName
+        delete transformedData.nif; // On a mappé vers personalNif
 
         // Debug: log the transformed payload before sending (non-production only)
         try {
@@ -639,7 +657,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   <Controller name="companyName" control={control} render={({ field }) => (
                     <input
                       {...field}
-                      value={field.value ?? ''}
                       type="text"
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         errors.companyName ? 'border-red-500' : 'border-gray-300'
@@ -656,7 +673,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   <Controller name="legalForm" control={control} render={({ field }) => (
                     <select
                       {...field}
-                      value={field.value ?? ''}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         errors.legalForm ? 'border-red-500' : 'border-gray-300'
                       }`}>
@@ -674,31 +690,31 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Numéro de commerce</label>
                   <Controller name="businessRegistrationNumber" control={control} render={({ field }) => (
-                    <input {...field} value={field.value ?? ''} type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                    <input {...field} type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                   )}/>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">NIF de l'entreprise</label>
                   <Controller name="companyNif" control={control} render={({ field }) => (
-                    <input {...field} value={field.value ?? ''} type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                    <input {...field} type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                   )}/>
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Adresse du siège social *</label>
                   <Controller name="headOfficeAddress" control={control} render={({ field }) => (
-                    <input {...field} value={field.value ?? ''} type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                    <input {...field} type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                   )}/>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Téléphone *</label>
                   <Controller name="companyPhone" control={control} render={({ field }) => (
-                    <input {...field} value={field.value ?? ''} type="tel" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                    <input {...field} type="tel" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                   )}/>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
                   <Controller name="companyEmail" control={control} render={({ field }) => (
-                    <input {...field} value={field.value ?? ''} type="email" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                    <input {...field} type="email" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                   )}/>
                 </div>
                 <div className="md:col-span-2 pt-2">
@@ -707,7 +723,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Nom complet *</label>
                       <Controller name="legalRepresentativeName" control={control} render={({ field }) => (
-                        <input {...field} value={field.value ?? ''} type="text" className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                        <input {...field} type="text" className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                           (errors as any).legalRepresentativeName ? 'border-red-500' : 'border-gray-300'
                         }`} />
                       )}/>
@@ -718,7 +734,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Titre/Fonction *</label>
                       <Controller name="legalRepresentativeTitle" control={control} render={({ field }) => (
-                        <select {...field} value={field.value ?? ''} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                        <select {...field} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                           (errors as any).legalRepresentativeTitle ? 'border-red-500' : 'border-gray-300'
                         }`}>
                           <option value="">Sélectionner...</option>
@@ -749,7 +765,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   render={({ field }) => (
                     <input
                       {...field}
-                      value={field.value ?? ''}
                       type="text"
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         errors.firstName ? 'border-red-500' : 'border-gray-300'
@@ -773,7 +788,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   render={({ field }) => (
                     <input
                       {...field}
-                      value={field.value ?? ''}
                       type="text"
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         errors.lastName ? 'border-red-500' : 'border-gray-300'
@@ -797,7 +811,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   render={({ field }) => (
                     <input
                       {...field}
-                      value={field.value ?? ''}
                       type="date"
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         errors.dateOfBirth ? 'border-red-500' : 'border-gray-300'
@@ -820,7 +833,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   render={({ field }) => (
                     <input
                       {...field}
-                      value={field.value ?? ''}
                       type="text"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="Ex: Port-au-Prince, Haïti"
@@ -839,7 +851,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   render={({ field }) => (
                     <select
                       {...field}
-                      value={field.value ?? ''}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         errors.gender ? 'border-red-500' : 'border-gray-300'
                       }`}
@@ -1105,7 +1116,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                     render={({ field }) => (
                       <select
                         {...field}
-                        value={field.value ?? ''}
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                           (errors as any).legalRepresentativeDocumentType ? 'border-red-500' : 'border-gray-300'
                         }`}
@@ -1199,7 +1209,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                     render={({ field }) => (
                       <input
                         {...field}
-                        value={field.value ?? ''}
                         type="date"
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${ (errors as any).legalRepresentativeIssuedDate ? 'border-red-500' : 'border-gray-300'}`}
                       />
@@ -1240,7 +1249,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                     render={({ field }) => (
                       <input
                         {...field}
-                        value={field.value ?? ''}
                         type="date"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       />
@@ -1272,7 +1280,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                     render={({ field }) => (
                       <input
                         {...field}
-                        value={field.value ?? ''}
                         type="text"
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${(errors as any).legalRepresentativeIssuingAuthority ? 'border-red-500' : 'border-gray-300'}`}
                         placeholder="Ex: Office National d'Identification"
@@ -1683,7 +1690,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   render={({ field }) => (
                     <select
                       {...field}
-                      value={field.value ?? ''}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">Sélectionner...</option>
@@ -1710,7 +1716,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                       type="number"
                       min="0"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      value={field.value ?? ''}
                       placeholder="Montant du revenu"
                     />
                   )}
@@ -1727,7 +1732,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Fréquence des transactions</label>
                 <Controller name="transactionFrequency" control={control} render={({ field }) => (
-                  <select {...field} value={field.value ?? ''} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <select {...field} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option value="">Sélectionner...</option>
                     <option value="DAILY">Quotidienne</option>
                     <option value="WEEKLY">Hebdomadaire</option>
@@ -1750,7 +1755,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                       render={({ field }) => (
                         <select
                           {...field}
-                          value={field.value || ''}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                         >
                           <option value="">Sélectionner...</option>
@@ -1780,7 +1784,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                       render={({ field }) => (
                         <select
                           {...field}
-                          value={field.value ?? ''}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                         >
                           <option value="">Sélectionner...</option>

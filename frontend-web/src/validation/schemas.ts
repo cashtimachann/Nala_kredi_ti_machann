@@ -83,10 +83,10 @@ export const createClientSchemaZ = (isBusiness: boolean) =>
       .regex(/^(\+509\s?)?[234579]\d{7}$/i, 'Format de numéro haïtien invalide (ex: +509 3712 3456)'),
     email: z.string().optional(),
 
-    documentType: isBusiness ? z.string().optional() : z.string().min(1, 'Le type de document est obligatoire'),
-    documentNumber: isBusiness ? z.string().optional() : z.string().min(5, 'Le numéro de document doit contenir au moins 5 caractères'),
-    issuedDate: isBusiness ? z.string().optional() : z.string().min(1, "La date d'émission est obligatoire"),
-    issuingAuthority: isBusiness ? z.string().optional() : z.string().min(1, "L'autorité d'émission est obligatoire"),
+    documentType: z.number().min(0, 'Le type de document est obligatoire'), // Required for all
+    documentNumber: z.string().min(3, 'Le numéro de document doit contenir au moins 3 caractères'), // Required for all
+    issuedDate: z.string().min(1, "La date d'émission est obligatoire"), // Required for all
+    issuingAuthority: z.string().min(1, "L'autorité d'émission est obligatoire"), // Required for all
 
     // Confirmation step
     acceptTerms: z.boolean().refine((v) => v === true, 'Vous devez accepter les conditions'),
@@ -106,7 +106,7 @@ export const createClientSchemaZ = (isBusiness: boolean) =>
           legalRepresentativeDocumentType: z.string().min(1, 'Type de document du représentant obligatoire'),
           legalRepresentativeDocumentNumber: z
             .string()
-            .min(5, 'Le numéro de document doit contenir au moins 5 caractères'),
+            .min(3, 'Le numéro de document doit contenir au moins 3 caractères'),
           legalRepresentativeIssuedDate: z.string().min(1, "La date d'émission du document est obligatoire"),
           legalRepresentativeExpiryDate: z.string().optional().nullable(),
           legalRepresentativeIssuingAuthority: z.string().min(1, "L'autorité d'émission est obligatoire"),

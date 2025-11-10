@@ -213,6 +213,7 @@ export interface CustomerFormData {
   
   // Informations additionnelles (optionnel)
   referencePerson?: string; // Moun referans
+  referencePersonPhone?: string; // Telefòn moun referans
   maritalStatus?: 'SINGLE' | 'MARRIED' | 'DIVORCED' | 'WIDOWED'; // Sitiyasyon matrimonyal
   spouseName?: string; // Non konjwen
   numberOfDependents?: number; // Kantite moun ki depann

@@ -902,6 +902,9 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
         expiryDate: customer?.identity?.expiryDate || customer?.identity?.expiryDate || undefined,
         issuingAuthority: customer?.identity?.issuingAuthority || customer?.identity?.issuingAuthority || ''
       },
+      birthPlace: customer?.birthPlace || customer?.BirthPlace || undefined,
+      nationality: customer?.nationality || customer?.Nationality || undefined,
+      personalNif: customer?.personalNif || customer?.PersonalNif || undefined,
       // Business-specific fields (preserve both camelCase and PascalCase sources)
       isBusiness: customer?.isBusiness ?? customer?.IsBusiness ?? undefined,
       companyName: customer?.companyName || customer?.CompanyName || undefined,
@@ -936,8 +939,22 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
         return combined || customer?.legalRepresentativeName || undefined;
       })(),
 
-      occupation: customer?.occupation || customer?.occupation || undefined,
-      monthlyIncome: customer?.monthlyIncome ?? customer?.monthlyIncome ?? undefined,
+  occupation: customer?.occupation || (customer as any)?.Occupation || undefined,
+  monthlyIncome: customer?.monthlyIncome ?? (customer as any)?.MonthlyIncome ?? undefined,
+  employerName: customer?.employerName || customer?.EmployerName || undefined,
+  workAddress: customer?.workAddress || customer?.WorkAddress || undefined,
+  incomeSource: customer?.incomeSource || customer?.IncomeSource || undefined,
+  maritalStatus: customer?.maritalStatus || customer?.MaritalStatus || undefined,
+  spouseName: customer?.spouseName || customer?.SpouseName || undefined,
+  numberOfDependents: customer?.numberOfDependents ?? customer?.NumberOfDependents ?? undefined,
+  educationLevel: customer?.educationLevel || customer?.EducationLevel || undefined,
+  referencePersonName: customer?.referencePersonName || customer?.ReferencePersonName || undefined,
+  referencePersonPhone: customer?.referencePersonPhone || customer?.ReferencePersonPhone || undefined,
+  transactionFrequency: customer?.transactionFrequency || customer?.TransactionFrequency || undefined,
+  accountPurpose: customer?.accountPurpose || customer?.AccountPurpose || undefined,
+  acceptTerms: (customer?.acceptTerms ?? customer?.AcceptTerms) ?? false,
+  signaturePlace: customer?.signaturePlace || customer?.SignaturePlace || undefined,
+  signatureDate: customer?.signatureDate || customer?.SignatureDate || undefined,
       signature: customer?.signature || customer?.signature || undefined,
       documents: normalizedDocs,
       createdAt: customer?.createdAt || customer?.createdAt || new Date().toISOString(),
@@ -1687,8 +1704,8 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
         'Devise': account.currency || '',
         'Statut': account.status || '',
         'Succursale': account.branchName || '',
-        'Date d\'ouverture': account.openingDate ? new Date(account.openingDate).toLocaleDateString('fr-FR') : '',
-        'Dernière transaction': account.lastTransactionDate ? new Date(account.lastTransactionDate).toLocaleDateString('fr-FR') : '',
+  'Date d\'ouverture': formatDate(account.openingDate, ''),
+  'Dernière transaction': formatDate(account.lastTransactionDate, ''),
         'Type de compte': getAccountTypeLabel(account.accountType) || '',
         'Solde disponible': account.availableBalance || 0,
         'Taux d\'intérêt': account.interestRate ? `${(account.interestRate * 100).toFixed(2)}%` : '',
@@ -1859,7 +1876,7 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
                     </span>
                   </td>
                   <td>${account.branchName || ''}</td>
-                  <td>${account.openingDate ? new Date(account.openingDate).toLocaleDateString('fr-FR') : ''}</td>
+                  <td>${formatDate(account.openingDate, '')}</td>
                   <td>${getAccountTypeLabel(account.accountType) || ''}</td>
                 </tr>
               `).join('')}
@@ -2022,7 +2039,7 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
             </div>
             <div class="info-item">
               <div class="info-label">Date de naissance</div>
-              <div class="info-value">${customer.dateOfBirth ? new Date(customer.dateOfBirth).toLocaleDateString('fr-FR') : 'N/A'}</div>
+              <div class="info-value">${formatDate(customer.dateOfBirth)}</div>
             </div>
             <div class="info-item">
               <div class="info-label">Genre</div>
@@ -2098,12 +2115,12 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
             </div>
             <div class="info-item">
               <div class="info-label">Date d'émission</div>
-              <div class="info-value">${customer.identity?.issuedDate ? new Date(customer.identity.issuedDate).toLocaleDateString('fr-FR') : 'N/A'}</div>
+              <div class="info-value">${formatDate(customer.identity?.issuedDate)}</div>
             </div>
             ${customer.identity?.expiryDate ? `
             <div class="info-item">
               <div class="info-label">Date d'expiration</div>
-              <div class="info-value">${new Date(customer.identity.expiryDate).toLocaleDateString('fr-FR')}</div>
+              <div class="info-value">${formatDate(customer.identity?.expiryDate)}</div>
             </div>
             ` : ''}
             <div class="info-item">
@@ -2181,7 +2198,7 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
         'Nom complet': customer.fullName || '',
         'Prénom': customer.firstName || '',
         'Nom': customer.lastName || '',
-        'Date de naissance': customer.dateOfBirth ? new Date(customer.dateOfBirth).toLocaleDateString('fr-FR') : '',
+  'Date de naissance': formatDate(customer.dateOfBirth, ''),
         'Genre': customer.gender === 0 ? 'Masculin' : customer.gender === 1 ? 'Féminin' : '',
         'Téléphone principal': customer.contact?.primaryPhone || '',
         'Téléphone secondaire': customer.contact?.secondaryPhone || '',
@@ -2193,8 +2210,8 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
           ? ['CIN', 'Passeport', 'Permis de Conduire'][customer.identity.documentType] || ''
           : '',
         'Numéro de document': customer.identity?.documentNumber || '',
-        'Date d\'émission': customer.identity?.issuedDate ? new Date(customer.identity.issuedDate).toLocaleDateString('fr-FR') : '',
-        'Date d\'expiration': customer.identity?.expiryDate ? new Date(customer.identity.expiryDate).toLocaleDateString('fr-FR') : '',
+  'Date d\'émission': formatDate(customer.identity?.issuedDate, ''),
+  'Date d\'expiration': formatDate(customer.identity?.expiryDate, ''),
         'Autorité d\'émission': customer.identity?.issuingAuthority || '',
         'Profession': customer.occupation || '',
         'Revenu mensuel': customer.monthlyIncome ? `${customer.monthlyIncome} HTG` : '',
@@ -2204,7 +2221,7 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
         'Numéro registre commerce': (customer as any)?.tradeRegisterNumber || '',
         'NIF': (customer as any)?.taxId || '',
         'Statut': customer.isActive ? 'Actif' : 'Inactif',
-        'Date de création': customer.createdAt ? new Date(customer.createdAt).toLocaleDateString('fr-FR') : '',
+  'Date de création': formatDate(customer.createdAt, ''),
         'Nombre de documents': customer.documents?.length || 0
       }));
 
@@ -2585,12 +2602,22 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
     }).format(safeAmount) + ' USD';
   };
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return 'N/A';
+  const formatDate = (input?: any, fallback: string = 'N/A') => {
+    if (!input) return fallback;
     try {
-      return new Date(dateString).toLocaleDateString('fr-FR');
+      const value = String(input).trim();
+      if (!value) return fallback;
+
+      const iso = value.includes('T') ? value.split('T')[0] : value;
+      const parts = iso.split('-');
+      if (parts.length !== 3) return fallback;
+
+      const [year, month, day] = parts;
+      if (!year || !month || !day) return fallback;
+
+      return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
     } catch {
-      return 'N/A';
+      return fallback;
     }
   };
 
@@ -3501,7 +3528,7 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-500">Date de Naissance</label>
                         <p className="text-base text-gray-900">
-                          {selectedCustomer.dateOfBirth ? new Date(selectedCustomer.dateOfBirth).toLocaleDateString('fr-FR') : 'N/A'}
+                          {formatDate(selectedCustomer.dateOfBirth)}
                         </p>
                       </div>
                       <div>
@@ -3576,11 +3603,11 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-500">Date d'émission</label>
-                          <p className="text-base text-gray-900">{repIssued ? new Date(repIssued).toLocaleDateString('fr-FR') : 'N/A'}</p>
+                          <p className="text-base text-gray-900">{formatDate(repIssued)}</p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-500">Date d'expiration</label>
-                          <p className="text-base text-gray-900">{repExpiry ? new Date(repExpiry).toLocaleDateString('fr-FR') : 'N/A'}</p>
+                          <p className="text-base text-gray-900">{formatDate(repExpiry)}</p>
                         </div>
                         <div className="md:col-span-2">
                           <label className="block text-sm font-medium text-gray-500">Autorité d'émission</label>
@@ -3684,13 +3711,13 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-500">Date d'Émission</label>
                     <p className="text-base text-gray-900">
-                      {selectedCustomer.identity?.issuedDate ? new Date(selectedCustomer.identity.issuedDate).toLocaleDateString('fr-FR') : 'N/A'}
+                      {formatDate(selectedCustomer.identity?.issuedDate)}
                     </p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-500">Date d'Expiration</label>
                     <p className="text-base text-gray-900">
-                      {selectedCustomer.identity?.expiryDate ? new Date(selectedCustomer.identity.expiryDate).toLocaleDateString('fr-FR') : 'N/A'}
+                      {formatDate(selectedCustomer.identity?.expiryDate)}
                     </p>
                   </div>
                   <div className="md:col-span-2">
@@ -3716,8 +3743,7 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
                       const rawSize = (doc.FileSize ?? doc.fileSize);
                       const docSizeKb = typeof rawSize === 'number' && !isNaN(rawSize) ? (rawSize / 1024) : null;
                       const rawDate = doc.UploadedAt || doc.uploadedAt;
-                      const dateObj = rawDate ? new Date(rawDate) : null;
-                      const hasValidDate = !!(dateObj && !isNaN(dateObj.getTime()));
+                      const formattedUploadedAt = formatDate(rawDate, '');
                       const docDesc = doc.Description || doc.description;
                       const docVerified = doc.Verified || doc.verified || false;
 
@@ -3739,9 +3765,9 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
                                       <span>{docSizeKb.toFixed(1)} KB</span>
                                     </>
                                   )}
-                                  {docSizeKb !== null && hasValidDate && <span>•</span>}
-                                  {hasValidDate && (
-                                    <span>{dateObj!.toLocaleDateString('fr-FR')}</span>
+                                  {docSizeKb !== null && formattedUploadedAt && <span>•</span>}
+                                  {formattedUploadedAt && (
+                                    <span>{formattedUploadedAt}</span>
                                   )}
                                 </div>
                                 {docDesc && (
