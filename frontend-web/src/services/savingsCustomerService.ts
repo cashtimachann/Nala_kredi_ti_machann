@@ -130,6 +130,9 @@ export interface SavingsCustomerResponseDto {
   fullName: string;
   dateOfBirth: string;
   gender: SavingsGender;
+  birthPlace?: string;
+  nationality?: string;
+  personalNif?: string;
   address: {
     street: string;
     commune: string;
@@ -181,7 +184,18 @@ export interface SavingsCustomerResponseDto {
     issuingAuthority?: string;
   };
   occupation?: string;
+  employerName?: string;
+  workAddress?: string;
+  incomeSource?: string;
   monthlyIncome?: number;
+  maritalStatus?: string;
+  spouseName?: string;
+  numberOfDependents?: number;
+  educationLevel?: string;
+  referencePersonName?: string;
+  referencePersonPhone?: string;
+  transactionFrequency?: string;
+  accountPurpose?: string;
   signature?: string; // Base64 encoded signature
   documents?: SavingsCustomerDocumentResponseDto[]; // Lis dokiman
   createdAt: string;
