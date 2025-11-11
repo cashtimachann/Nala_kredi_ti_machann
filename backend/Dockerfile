@@ -15,7 +15,8 @@ RUN dotnet publish -c Release -o /app/publish \
     --no-restore \
     --self-contained false \
     /p:PublishTrimmed=false \
-    /p:PublishSingleFile=false
+    /p:PublishSingleFile=false \
+    /p:IncludeAnalyzers=false
 
 # Stage 2: Runtime environment
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
