@@ -65,7 +65,7 @@ class MicrocreditLoanTypeService {
     // Request interceptor to add auth token
     this.api.interceptors.request.use(
       (config) => {
-        const token = sessionStorage.getItem('auth_token');
+        const token = localStorage.getItem('token');
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
@@ -81,7 +81,7 @@ class MicrocreditLoanTypeService {
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
-          sessionStorage.removeItem('auth_token');
+          localStorage.removeItem('token');
           sessionStorage.removeItem('user');
           window.location.href = '/login';
         }

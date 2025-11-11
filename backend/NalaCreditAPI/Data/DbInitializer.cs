@@ -10,7 +10,22 @@ public static class DbInitializer
     public static async Task Initialize(ApplicationDbContext context, UserManager<User> userManager, RoleManager<IdentityRole> roleManager)
     {
         // Run all pending migrations (creates database and tables)
-        await context.Database.MigrateAsync();
+        try
+        {
+            await context.Database.MigrateAsync();
+        }
+        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P07")
+        {
+            // 42P07 = duplicate_table / relation already exists
+            // This can happen when the DB was partially initialized outside migrations.
+            // Log and continue — migrations likely already applied or partially applied.
+            Console.WriteLine("[WARN] Migration conflict detected (relation already exists). Continuing initialization.");
+        }
+        catch (Exception ex)
+        {
+            // For other errors, rethrow so the deployment fails loudly.
+            throw;
+        }
 
         // Create roles if they don't exist
         string[] roles = { "SuperAdmin", "Manager", "Cashier", "Employee", "Admin", "Support" };

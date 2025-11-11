@@ -1,20 +1,23 @@
+/// <reference types="@types/jest" />
+
 import type { UserInfo } from '../auth/AuthService';
 import { authService } from '../auth/AuthService';
 
 describe('AuthService', () => {
   beforeEach(() => {
-    // Clear sessionStorage before each test
+    // Clear localStorage and sessionStorage before each test
+    localStorage.clear();
     sessionStorage.clear();
   });
 
   describe('utility methods', () => {
     it('isAuthenticated should return true when token exists', () => {
-      sessionStorage.setItem('auth_token', 'some-token');
+      localStorage.setItem('token', 'some-token');
       expect(authService.isAuthenticated()).toBe(true);
     });
 
     it('isAuthenticated should return false when token is missing', () => {
-      sessionStorage.removeItem('auth_token');
+      localStorage.removeItem('token');
       expect(authService.isAuthenticated()).toBe(false);
     });
 
@@ -54,13 +57,13 @@ describe('AuthService', () => {
       expect(JSON.parse(stored!)).toEqual(user);
     });
 
-    it('getAuthToken should retrieve token from sessionStorage', () => {
-      sessionStorage.setItem('auth_token', 'test-token-123');
+    it('getAuthToken should retrieve token from localStorage', () => {
+      localStorage.setItem('token', 'test-token-123');
       expect(authService.getAuthToken()).toBe('test-token-123');
     });
 
     it('getAuthToken should return null when no token', () => {
-      sessionStorage.removeItem('auth_token');
+      localStorage.removeItem('token');
       expect(authService.getAuthToken()).toBeNull();
     });
   });

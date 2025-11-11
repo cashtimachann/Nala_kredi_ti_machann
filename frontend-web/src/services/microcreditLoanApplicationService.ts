@@ -140,12 +140,12 @@ export interface LoanApplicationListResponse {
 
 class MicrocreditLoanApplicationService {
   isAuthenticated(): boolean {
-    const token = sessionStorage.getItem('auth_token');
+    const token = localStorage.getItem('token');
     return !!token && token !== 'null' && token !== 'undefined';
   }
 
   private getAuthHeaders() {
-    const token = sessionStorage.getItem('auth_token');
+    const token = localStorage.getItem('token');
     return {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'

@@ -272,7 +272,7 @@ class SavingsCustomerService {
 
   // Obtenir le token d'authentification
   private getAuthToken() {
-    return sessionStorage.getItem('auth_token') || '';
+    return localStorage.getItem('token') || '';
   }
 
   // Headers avec authentification
