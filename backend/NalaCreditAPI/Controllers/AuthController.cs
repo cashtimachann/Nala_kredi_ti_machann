@@ -10,7 +10,6 @@ namespace NalaCreditAPI.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-[Route("api/health")]
 public class AuthController : ControllerBase
 {
     private readonly UserManager<User> _userManager;
@@ -195,18 +194,6 @@ public class AuthController : ControllerBase
             Role = user.Role.ToString(),
             BranchId = user.BranchId,
             LastLogin = user.LastLogin?.ToString("yyyy-MM-ddTHH:mm:ssZ")
-        });
-    }
-
-    [HttpGet]
-    [AllowAnonymous]
-    public IActionResult Health()
-    {
-        return Ok(new 
-        { 
-            status = "Healthy", 
-            timestamp = DateTime.UtcNow,
-            environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown"
         });
     }
 }
