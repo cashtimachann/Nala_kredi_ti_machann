@@ -454,4 +454,16 @@ public class DashboardController : ControllerBase
         var onTimeCredits = credits.Where(c => c.DaysInArrears == 0).Count();
         return (double)onTimeCredits / credits.Count * 100.0;
     }
+
+    [HttpGet("health")]
+    [AllowAnonymous]
+    public IActionResult Health()
+    {
+        return Ok(new 
+        { 
+            status = "Healthy", 
+            timestamp = DateTime.UtcNow,
+            environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown"
+        });
+    }
 }
