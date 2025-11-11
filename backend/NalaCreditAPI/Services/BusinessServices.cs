@@ -41,10 +41,10 @@ public class AuthService : IAuthService
         var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id),
-            new Claim(ClaimTypes.Name, user.UserName!),
-            new Claim(ClaimTypes.Email, user.Email!),
-            new Claim("FirstName", user.FirstName),
-            new Claim("LastName", user.LastName),
+            new Claim(ClaimTypes.Name, user.UserName ?? user.Email ?? "Unknown"),
+            new Claim(ClaimTypes.Email, user.Email ?? "Unknown"),
+            new Claim("FirstName", user.FirstName ?? "Unknown"),
+            new Claim("LastName", user.LastName ?? "Unknown"),
             new Claim("Role", user.Role.ToString()),
             new Claim(ClaimTypes.Role, user.Role.ToString())
         };
