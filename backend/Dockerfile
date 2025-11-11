@@ -11,6 +11,7 @@ RUN dotnet restore
 
 # Copy source code and build
 COPY NalaCreditAPI/ ./
+RUN dotnet restore --force
 RUN dotnet publish -c Release -o /app/publish \
     --no-restore \
     --self-contained false \
