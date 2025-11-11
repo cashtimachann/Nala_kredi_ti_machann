@@ -73,8 +73,20 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         [HttpGet]
         public async Task<ActionResult<CurrentAccountListResponseDto>> GetAccounts([FromQuery] CurrentAccountFilterDto filter)
         {
-            var result = await _accountService.GetAccountsAsync(filter);
-            return Ok(result);
+            try
+            {
+                var result = await _accountService.GetAccountsAsync(filter);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ERROR] GetAccounts failed: {ex.Message}\n{ex.StackTrace}");
+                if (ex.InnerException != null)
+                {
+                    Console.Error.WriteLine($"[ERROR] Inner: {ex.InnerException.Message}\n{ex.InnerException.StackTrace}");
+                }
+                return StatusCode(500, new { message = "Erreur lors du chargement des comptes courants", error = ex.Message, inner = ex.InnerException?.Message });
+            }
         }
 
         /// <summary>

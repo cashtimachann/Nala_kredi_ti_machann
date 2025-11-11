@@ -97,6 +97,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    command: >
+      sh -c "dotnet ef database update --no-build && dotnet NalaCreditAPI.dll"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 30s
