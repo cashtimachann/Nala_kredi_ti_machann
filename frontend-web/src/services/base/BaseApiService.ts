@@ -73,16 +73,16 @@ export abstract class BaseApiService {
   }
 
   protected getAuthToken(): string | null {
-    return sessionStorage.getItem('auth_token');
+    return localStorage.getItem('token');
   }
 
   protected setAuthToken(token: string): void {
-    sessionStorage.setItem('auth_token', token);
+    localStorage.setItem('token', token);
   }
 
   protected clearAuthToken(): void {
-    sessionStorage.removeItem('auth_token');
-    sessionStorage.removeItem('user');
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
   }
 
   protected async request<T>(config: AxiosRequestConfig): Promise<T> {
