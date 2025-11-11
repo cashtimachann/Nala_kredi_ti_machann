@@ -31,7 +31,7 @@ export enum IdentityDocumentType {
   CIN = 'CIN', // Carte d'Identité Nationale
   PASSPORT = 'PASSPORT',
   DRIVING_LICENSE = 'DRIVING_LICENSE',
-  BIRTH_CERTIFICATE = 'BIRTH_CERTIFICATE'
+  // BIRTH_CERTIFICATE retired from frontend options
 }
 
 // Client/Customer Information

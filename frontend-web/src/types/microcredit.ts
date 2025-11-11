@@ -129,7 +129,7 @@ export interface BorrowerContact {
 }
 
 export interface BorrowerIdentity {
-  documentType: 'CIN' | 'PASSPORT' | 'DRIVING_LICENSE' | 'BIRTH_CERTIFICATE';
+  documentType: 'CIN' | 'PASSPORT' | 'DRIVING_LICENSE';
   documentNumber: string;
   issuingAuthority: string;
   issueDate: string;

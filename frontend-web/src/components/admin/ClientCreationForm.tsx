@@ -12,7 +12,7 @@ import {
   HaitiDepartment,
   AuthorizedSigner
 } from '../../types/savings';
-import { Upload, X, Check, Camera, FileText, UserPlus, RotateCcw, Plus } from 'lucide-react';
+import { Upload, X, Check, FileText, UserPlus, RotateCcw, Plus } from 'lucide-react';
 import SignatureCanvas from '../savings/SignatureCanvas';
 import savingsCustomerService, { 
   SavingsCustomerDocumentType,
@@ -50,6 +50,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
   const [showSignerForm, setShowSignerForm] = useState(false);
   const [isBusiness, setIsBusiness] = useState<boolean>(false);
   const [currentSignerEdit, setCurrentSignerEdit] = useState<AuthorizedSigner | null>(null);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const withGlobalLoading = useUIStore(s => s.withGlobalLoading);
 
   // Créer un schéma de validation réactif qui change avec isBusiness
@@ -63,40 +64,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
     setValue,
     reset
   } = useForm<CustomerFormData>({
-    resolver: async (data: any, context: any, options: any) => {
-      try {
-        // Use safeParse to avoid throwing ZodError
-        const result = validationSchema.safeParse(data);
-        if (!result.success) {
-          // Transform Zod errors to react-hook-form format
-          const fieldErrors: Record<string, any> = {};
-          result.error.issues.forEach((err: any) => {
-            const fieldPath = err.path.join('.');
-            // Only keep first error per field
-            if (!fieldErrors[fieldPath]) {
-              fieldErrors[fieldPath] = {
-                type: err.code,
-                message: err.message,
-              };
-            }
-          });
-          return {
-            values: {} as any,
-            errors: fieldErrors,
-          };
-        }
-        return {
-          values: result.data as any,
-          errors: {},
-        };
-      } catch (error) {
-        console.error('Form validation error:', error);
-        return {
-          values: {} as any,
-          errors: {},
-        };
-      }
-    },
+    resolver: zodResolver(validationSchema) as any,
     defaultValues: {
   isBusiness: false,
   companyName: '',
@@ -151,10 +119,42 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
       signaturePlace: '',
       signatureDate: new Date().toISOString().split('T')[0]
     },
-    mode: 'onSubmit' // Only validate on form submission, not on every change
+    mode: 'onSubmit',
+    reValidateMode: 'onBlur'
   });
 
+  // Submit wrapper that shows friendly messages instead of raw Zod stack traces
+  const submitWithFriendlyErrors = async () => {
+    setSubmissionError(null);
+    try {
+      await handleSubmit(handleFormSubmit)();
+    } catch (err: any) {
+      // Zod throws may be either ZodError instance or array-like from resolver
+      if (err && typeof err === 'object') {
+        // z.ZodError instance
+        if (err instanceof z.ZodError) {
+          const msgs = (err.issues ?? []).map((e: any) => e.message).filter(Boolean) || [];
+          setSubmissionError(msgs.length ? msgs.join(' • ') : 'Des champs sont invalides. Veuillez vérifier le formulaire.');
+        } else if (Array.isArray(err) && err.length > 0 && err[0].message) {
+          const msgs = err.map((e: any) => e.message).filter(Boolean);
+          setSubmissionError(msgs.join(' • '));
+        } else {
+          setSubmissionError(err.message || 'Erreur lors de la création du client');
+        }
+      } else {
+        setSubmissionError(String(err ?? 'Erreur inconnue'));
+      }
+      // Log concise error for debugging but avoid dumping full stack to console for users
+      console.error('Client creation failed:', (err && err.message) || err);
+    }
+  };
+
   const watchedDepartment = watch('department');
+
+  // Clear submission-level error when user navigates steps
+  React.useEffect(() => {
+    setSubmissionError(null);
+  }, [currentStep]);
 
   React.useEffect(() => {
     if (watchedDepartment && watchedDepartment !== selectedDepartment) {
@@ -186,8 +186,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
       // Réinitialiser les signataires
       setAuthorizedSigners([]);
     }
-    // Clear any validation errors when switching types
-    // This prevents errors from appearing for fields that are now irrelevant
   }, [isBusiness, setValue]);
 
   const availableCommunes = selectedDepartment ? COMMUNES_BY_DEPARTMENT[selectedDepartment] : [];
@@ -195,34 +193,69 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
   // Fonction pour uploader les documents après création du client
   const uploadDocumentsAfterCreation = async (customerId: string) => {
     const uploadPromises: Promise<any>[] = [];
+    const currentDocType = watch('documentType');
 
-    // Photo (seulement pour personne physique)
-    if (!isBusiness && uploadedFiles.photo) {
-      uploadPromises.push(
-        savingsCustomerService.uploadDocument(
-          customerId,
-          uploadedFiles.photo,
-          SavingsCustomerDocumentType.Photo,
-          'Photo du client',
-          'Photo d\'identité du client'
-        )
-      );
+    // Pour personne physique uniquement
+    if (!isBusiness) {
+      // Recto de la pièce d'identité (obligatoire)
+      if (uploadedFiles.idDocument) {
+        uploadPromises.push(
+          savingsCustomerService.uploadDocument(
+            customerId,
+            uploadedFiles.idDocument,
+            SavingsCustomerDocumentType.IdentityCardFront,
+            currentDocType === IdentityDocumentType.CIN 
+              ? 'Carte d\'Identité (Recto)' 
+              : currentDocType === IdentityDocumentType.PASSPORT 
+                ? 'Passeport'
+                : 'Permis de Conduire',
+            'Document d\'identification officiel - Recto'
+          )
+        );
+      }
+
+      // Verso CIN ou Photo (selon le type de document)
+      if (uploadedFiles.photo) {
+        if (currentDocType === IdentityDocumentType.CIN) {
+          // Si CIN, le champ photo contient le verso
+          uploadPromises.push(
+            savingsCustomerService.uploadDocument(
+              customerId,
+              uploadedFiles.photo,
+              SavingsCustomerDocumentType.IdentityCardBack,
+              'Carte d\'Identité (Verso)',
+              'Verso de la carte d\'identité nationale'
+            )
+          );
+        } else {
+          // Si Passeport ou Permis, le champ photo contient la photo
+          uploadPromises.push(
+            savingsCustomerService.uploadDocument(
+              customerId,
+              uploadedFiles.photo,
+              SavingsCustomerDocumentType.Photo,
+              'Photo du Client',
+              'Photo d\'identité du client'
+            )
+          );
+        }
+      }
     }
 
-    // Pièce d'identité
-    if (uploadedFiles.idDocument) {
+    // Pour personne morale
+    if (isBusiness && uploadedFiles.idDocument) {
       uploadPromises.push(
         savingsCustomerService.uploadDocument(
           customerId,
           uploadedFiles.idDocument,
-          SavingsCustomerDocumentType.IdentityCard,
-          isBusiness ? 'Pièce d\'identité du représentant' : 'Carte d\'Identité',
-          'Document d\'identification officiel'
+          SavingsCustomerDocumentType.IdentityCardFront,
+          'Carte d\'Identité du Représentant Légal',
+          'Document d\'identification du représentant légal'
         )
       );
     }
 
-    // Preuve de résidence
+    // Preuve de résidence (pour tous)
     const proofOfResidence = isBusiness ? uploadedFiles.companyProofOfAddress : uploadedFiles.proofOfResidence;
     if (proofOfResidence) {
       uploadPromises.push(
@@ -230,7 +263,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
           customerId,
           proofOfResidence,
           SavingsCustomerDocumentType.ProofOfResidence,
-          isBusiness ? 'Justificatif domicile société' : 'Preuve de résidence',
+          isBusiness ? 'Justificatif de Domicile (Société)' : 'Justificatif de Domicile',
           'Document justifiant l\'adresse de résidence'
         )
       );
@@ -243,7 +276,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
           customerId,
           uploadedFiles.businessRegistrationDocument,
           SavingsCustomerDocumentType.Other,
-          'Registre de Commerce',
+          'Extrait Registre de Commerce',
           'Extrait du registre de commerce'
         )
       );
@@ -256,7 +289,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
           customerId,
           uploadedFiles.fundsOriginDeclaration,
           SavingsCustomerDocumentType.Other,
-          'Déclaration Origine des Fonds',
+          'Déclaration d\'Origine des Fonds',
           'Document déclarant l\'origine des fonds'
         )
       );
@@ -277,25 +310,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
       console.error('Erreur lors de l\'upload des documents:', error);
       // Ne pas throw l'erreur pour ne pas bloquer la création du client
       // Les documents peuvent être uploadés plus tard via DocumentUploadModal
-    }
-  };
-
-  // Handle invalid form submission (prevent raw ZodError overlay & show friendly message)
-  const handleFormInvalid = (formErrors: any) => {
-    console.log('Form validation errors:', formErrors);
-    // Collect unique error messages
-    const messages = Object.entries(formErrors)
-      .map(([field, err]: [string, any]) => {
-        const fieldLabel = field.split('.').pop(); // Get last part of path
-        return err?.message || `Erreur de validation pour ${fieldLabel}`;
-      })
-      .filter(Boolean)
-      .slice(0, 5); // Limit to first 5 errors
-    
-    if (messages.length === 0) {
-      alert('Veuillez remplir tous les champs obligatoires.');
-    } else {
-      alert(`Veuillez corriger les erreurs suivantes:\n\n${messages.join('\n')}`);
     }
   };
 
@@ -332,13 +346,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
           // Renommer companyNif en taxId
           transformedData.taxId = data.companyNif;
           delete transformedData.companyNif;
-
-          // Pour les clients d'affaires, définir les champs de document d'identité principaux
-          // Utiliser le registre de commerce comme document principal
-          transformedData.documentType = 3; // TradeRegister enum value
-          transformedData.documentNumber = data.businessRegistrationNumber || '';
-          transformedData.issuedDate = new Date().toISOString().split('T')[0]; // Date d'aujourd'hui par défaut
-          transformedData.issuingAuthority = 'Chambre de Commerce et d\'Industrie d\'Haïti';
 
           // Séparer legalRepresentativeName en firstName et lastName using safer logic.
           if (data.legalRepresentativeName) {
@@ -385,21 +392,10 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
         // Ajouter les champs manquants requis par le backend
         transformedData.transactionFrequency = data.transactionFrequency || 'MONTHLY';
         transformedData.accountPurpose = data.accountPurpose || '';
-        transformedData.referencePersonName = data.referencePerson || ''; // Backend utilise referencePersonName
-        transformedData.referencePersonPhone = data.referencePersonPhone || '';
+        transformedData.referencePerson = data.referencePerson || '';
         transformedData.maritalStatus = data.maritalStatus || 'SINGLE';
-        transformedData.spouseName = data.spouseName || '';
         transformedData.numberOfDependents = data.numberOfDependents || 0;
         transformedData.educationLevel = data.educationLevel || 'SECONDARY';
-        
-        // Mapper les champs avec noms différents
-        if (data.nif) {
-          transformedData.personalNif = data.nif; // Backend utilise personalNif
-        }
-
-        // Nettoyer les anciens noms de champs du payload
-        delete transformedData.referencePerson; // On a mappé vers referencePersonName
-        delete transformedData.nif; // On a mappé vers personalNif
 
         // Debug: log the transformed payload before sending (non-production only)
         try {
@@ -625,25 +621,9 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
         )}
       </div>
 
-      {renderStepIndicator()}
+  {renderStepIndicator()}
 
-      <form onSubmit={(e) => {
-        e.preventDefault();
-        if (currentStep === totalSteps) {
-          handleSubmit(handleFormSubmit, (errors) => {
-            console.error('Form validation errors:', errors);
-            // Show user-friendly error message
-            const firstError = Object.values(errors)[0];
-            if (firstError && firstError.message) {
-              alert(`Erreur de validation: ${firstError.message}`);
-            } else {
-              alert('Veuillez vérifier que tous les champs obligatoires sont remplis correctement.');
-            }
-          })();
-        } else {
-          handleNextStep();
-        }
-      }} className="space-y-6">
+  <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
         {/* ÉTAPE 1: Informations d'Identité */}
         {currentStep === 1 && (
           <div className="space-y-6">
@@ -657,6 +637,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   <Controller name="companyName" control={control} render={({ field }) => (
                     <input
                       {...field}
+                      value={field.value ?? ''}
                       type="text"
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         errors.companyName ? 'border-red-500' : 'border-gray-300'
@@ -673,6 +654,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   <Controller name="legalForm" control={control} render={({ field }) => (
                     <select
                       {...field}
+                      value={field.value ?? ''}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         errors.legalForm ? 'border-red-500' : 'border-gray-300'
                       }`}>
@@ -690,31 +672,31 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Numéro de commerce</label>
                   <Controller name="businessRegistrationNumber" control={control} render={({ field }) => (
-                    <input {...field} type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                    <input {...field} value={field.value ?? ''} type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                   )}/>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">NIF de l'entreprise</label>
                   <Controller name="companyNif" control={control} render={({ field }) => (
-                    <input {...field} type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                    <input {...field} value={field.value ?? ''} type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                   )}/>
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Adresse du siège social *</label>
                   <Controller name="headOfficeAddress" control={control} render={({ field }) => (
-                    <input {...field} type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                    <input {...field} value={field.value ?? ''} type="text" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                   )}/>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Téléphone *</label>
                   <Controller name="companyPhone" control={control} render={({ field }) => (
-                    <input {...field} type="tel" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                    <input {...field} value={field.value ?? ''} type="tel" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                   )}/>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
                   <Controller name="companyEmail" control={control} render={({ field }) => (
-                    <input {...field} type="email" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                    <input {...field} value={field.value ?? ''} type="email" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                   )}/>
                 </div>
                 <div className="md:col-span-2 pt-2">
@@ -723,7 +705,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Nom complet *</label>
                       <Controller name="legalRepresentativeName" control={control} render={({ field }) => (
-                        <input {...field} type="text" className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                        <input {...field} value={field.value ?? ''} type="text" className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                           (errors as any).legalRepresentativeName ? 'border-red-500' : 'border-gray-300'
                         }`} />
                       )}/>
@@ -734,7 +716,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Titre/Fonction *</label>
                       <Controller name="legalRepresentativeTitle" control={control} render={({ field }) => (
-                        <select {...field} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                        <select {...field} value={field.value ?? ''} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                           (errors as any).legalRepresentativeTitle ? 'border-red-500' : 'border-gray-300'
                         }`}>
                           <option value="">Sélectionner...</option>
@@ -765,6 +747,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   render={({ field }) => (
                     <input
                       {...field}
+                      value={field.value ?? ''}
                       type="text"
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         errors.firstName ? 'border-red-500' : 'border-gray-300'
@@ -788,6 +771,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   render={({ field }) => (
                     <input
                       {...field}
+                      value={field.value ?? ''}
                       type="text"
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         errors.lastName ? 'border-red-500' : 'border-gray-300'
@@ -811,6 +795,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   render={({ field }) => (
                     <input
                       {...field}
+                      value={field.value ?? ''}
                       type="date"
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         errors.dateOfBirth ? 'border-red-500' : 'border-gray-300'
@@ -833,6 +818,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   render={({ field }) => (
                     <input
                       {...field}
+                      value={field.value ?? ''}
                       type="text"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="Ex: Port-au-Prince, Haïti"
@@ -851,6 +837,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   render={({ field }) => (
                     <select
                       {...field}
+                      value={field.value ?? ''}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         errors.gender ? 'border-red-500' : 'border-gray-300'
                       }`}
@@ -879,24 +866,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                       type="text"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="Ex: Haïtienne"
-                    />
-                  )}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  NIF <span className="text-xs text-gray-500">(Nimewo Idantifikasyon Fiskal)</span>
-                </label>
-                <Controller
-                  name="nif"
-                  control={control}
-                  render={({ field }) => (
-                    <input
-                      {...field}
-                      type="text"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="Ex: NIF-123456789"
                     />
                   )}
                 />
@@ -1116,6 +1085,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                     render={({ field }) => (
                       <select
                         {...field}
+                        value={field.value ?? ''}
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                           (errors as any).legalRepresentativeDocumentType ? 'border-red-500' : 'border-gray-300'
                         }`}
@@ -1209,6 +1179,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                     render={({ field }) => (
                       <input
                         {...field}
+                        value={field.value ?? ''}
                         type="date"
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${ (errors as any).legalRepresentativeIssuedDate ? 'border-red-500' : 'border-gray-300'}`}
                       />
@@ -1249,6 +1220,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                     render={({ field }) => (
                       <input
                         {...field}
+                        value={field.value ?? ''}
                         type="date"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       />
@@ -1280,6 +1252,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                     render={({ field }) => (
                       <input
                         {...field}
+                        value={field.value ?? ''}
                         type="text"
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${(errors as any).legalRepresentativeIssuingAuthority ? 'border-red-500' : 'border-gray-300'}`}
                         placeholder="Ex: Office National d'Identification"
@@ -1317,61 +1290,17 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
               <h4 className="font-semibold text-gray-900 mb-4">Télécharger les documents</h4>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Photo - Seulement pour personne physique */}
+                {/* Recto CIN / Photo du document - Pour personne physique */}
                 {!isBusiness && (
-                <div className="bg-white p-4 rounded-lg border-2 border-dashed border-gray-300">
-                  <div className="text-center">
-                    <Camera className="w-10 h-10 mx-auto mb-2 text-gray-400" />
-                    <h5 className="font-medium text-gray-900 mb-2">Photo</h5>
-                    {uploadedFiles.photo ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-center text-green-600">
-                          <Check className="w-4 h-4 mr-1" />
-                          <span className="text-sm">{uploadedFiles.photo.name}</span>
-                        </div>
-                        <label className="inline-flex items-center px-3 py-1 bg-gray-600 text-white text-sm rounded cursor-pointer hover:bg-gray-700">
-                          <RotateCcw className="w-3 h-3 mr-1" />
-                          Changer
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file && file.size <= 5 * 1024 * 1024) {
-                                setUploadedFiles({ ...uploadedFiles, photo: file });
-                              }
-                            }}
-                          />
-                        </label>
-                      </div>
-                    ) : (
-                      <label className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm rounded cursor-pointer hover:bg-green-700">
-                        <Upload className="w-4 h-4 mr-1" />
-                        Charger
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file && file.size <= 5 * 1024 * 1024) {
-                              setUploadedFiles({ ...uploadedFiles, photo: file });
-                            }
-                          }}
-                        />
-                      </label>
-                    )}
-                  </div>
-                </div>
-                )}
-
-                {/* ID Document - Pour tout le monde */}
                 <div className="bg-white p-4 rounded-lg border-2 border-dashed border-gray-300">
                   <div className="text-center">
                     <FileText className="w-10 h-10 mx-auto mb-2 text-gray-400" />
                     <h5 className="font-medium text-gray-900 mb-2">
-                      {isBusiness ? "Pièce représentant" : "Pièce d'identité"}
+                      {watch('documentType') === IdentityDocumentType.CIN 
+                        ? 'Carte d\'Identité (Recto) *' 
+                        : watch('documentType') === IdentityDocumentType.PASSPORT 
+                          ? 'Passeport (Photo) *'
+                          : 'Permis de Conduire (Photo) *'}
                     </h5>
                     {uploadedFiles.idDocument ? (
                       <div className="space-y-2">
@@ -1414,13 +1343,112 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                     )}
                   </div>
                 </div>
+                )}
+
+                {/* Verso CIN - Seulement si CIN est sélectionné pour personne physique */}
+                {!isBusiness && watch('documentType') === IdentityDocumentType.CIN && (
+                <div className="bg-white p-4 rounded-lg border-2 border-dashed border-gray-300">
+                  <div className="text-center">
+                    <FileText className="w-10 h-10 mx-auto mb-2 text-gray-400" />
+                    <h5 className="font-medium text-gray-900 mb-2">Carte d'Identité (Verso) *</h5>
+                    {uploadedFiles.photo ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-center text-green-600">
+                          <Check className="w-4 h-4 mr-1" />
+                          <span className="text-sm">{uploadedFiles.photo.name}</span>
+                        </div>
+                        <label className="inline-flex items-center px-3 py-1 bg-gray-600 text-white text-sm rounded cursor-pointer hover:bg-gray-700">
+                          <RotateCcw className="w-3 h-3 mr-1" />
+                          Changer
+                          <input
+                            type="file"
+                            accept="image/*,.pdf"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file && file.size <= 5 * 1024 * 1024) {
+                                setUploadedFiles({ ...uploadedFiles, photo: file });
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm rounded cursor-pointer hover:bg-green-700">
+                        <Upload className="w-4 h-4 mr-1" />
+                        Charger
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file && file.size <= 5 * 1024 * 1024) {
+                              setUploadedFiles({ ...uploadedFiles, photo: file });
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+                )}
+
+                {/* ID Document - Pour personne morale (représentant) */}
+                {isBusiness && (
+                <div className="bg-white p-4 rounded-lg border-2 border-dashed border-gray-300">
+                  <div className="text-center">
+                    <FileText className="w-10 h-10 mx-auto mb-2 text-gray-400" />
+                    <h5 className="font-medium text-gray-900 mb-2">Carte d'Identité du Représentant (Recto)</h5>
+                    {uploadedFiles.idDocument ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-center text-green-600">
+                          <Check className="w-4 h-4 mr-1" />
+                          <span className="text-sm">{uploadedFiles.idDocument.name}</span>
+                        </div>
+                        <label className="inline-flex items-center px-3 py-1 bg-gray-600 text-white text-sm rounded cursor-pointer hover:bg-gray-700">
+                          <RotateCcw className="w-3 h-3 mr-1" />
+                          Changer
+                          <input
+                            type="file"
+                            accept="image/*,.pdf"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file && file.size <= 5 * 1024 * 1024) {
+                                setUploadedFiles({ ...uploadedFiles, idDocument: file });
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm rounded cursor-pointer hover:bg-green-700">
+                        <Upload className="w-4 h-4 mr-1" />
+                        Charger
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file && file.size <= 5 * 1024 * 1024) {
+                              setUploadedFiles({ ...uploadedFiles, idDocument: file });
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+                )}
 
                 {/* Extrait registre du commerce - Personne morale uniquement */}
                 {isBusiness && (
                   <div className="bg-white p-4 rounded-lg border-2 border-dashed border-gray-300">
                     <div className="text-center">
                       <FileText className="w-10 h-10 mx-auto mb-2 text-gray-400" />
-                      <h5 className="font-medium text-gray-900 mb-2">Registre de commerce *</h5>
+                      <h5 className="font-medium text-gray-900 mb-2">Extrait Registre de Commerce *</h5>
                       {uploadedFiles.businessRegistrationDocument ? (
                         <div className="space-y-2">
                           <div className="flex items-center justify-center text-green-600">
@@ -1469,7 +1497,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   <div className="text-center">
                     <FileText className="w-10 h-10 mx-auto mb-2 text-gray-400" />
                     <h5 className="font-medium text-gray-900 mb-2">
-                      {isBusiness ? "Justificatif domicile société" : "Preuve de résidence"}
+                      {isBusiness ? "Justificatif de Domicile (Société)" : "Justificatif de Domicile"}
                     </h5>
                     {(isBusiness ? uploadedFiles.companyProofOfAddress : uploadedFiles.proofOfResidence) ? (
                       <div className="space-y-2">
@@ -1528,7 +1556,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   <div className="bg-white p-4 rounded-lg border-2 border-dashed border-gray-300">
                     <div className="text-center">
                       <FileText className="w-10 h-10 mx-auto mb-2 text-gray-400" />
-                      <h5 className="font-medium text-gray-900 mb-2">Origine des fonds *</h5>
+                      <h5 className="font-medium text-gray-900 mb-2">Déclaration d'Origine des Fonds *</h5>
                       {uploadedFiles.fundsOriginDeclaration ? (
                         <div className="space-y-2">
                           <div className="flex items-center justify-center text-green-600">
@@ -1690,6 +1718,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                   render={({ field }) => (
                     <select
                       {...field}
+                      value={field.value ?? ''}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">Sélectionner...</option>
@@ -1716,6 +1745,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                       type="number"
                       min="0"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      value={field.value ?? ''}
                       placeholder="Montant du revenu"
                     />
                   )}
@@ -1732,7 +1762,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Fréquence des transactions</label>
                 <Controller name="transactionFrequency" control={control} render={({ field }) => (
-                  <select {...field} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <select {...field} value={field.value ?? ''} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option value="">Sélectionner...</option>
                     <option value="DAILY">Quotidienne</option>
                     <option value="WEEKLY">Hebdomadaire</option>
@@ -1755,6 +1785,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                       render={({ field }) => (
                         <select
                           {...field}
+                          value={field.value || ''}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                         >
                           <option value="">Sélectionner...</option>
@@ -1784,6 +1815,7 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                       render={({ field }) => (
                         <select
                           {...field}
+                          value={field.value ?? ''}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                         >
                           <option value="">Sélectionner...</option>
@@ -1929,36 +1961,59 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
               <div className="border-t pt-4">
                 <h4 className="font-semibold text-gray-900 mb-2">Documents Uploadés</h4>
                 <div className="space-y-2 text-sm">
-                  {uploadedFiles.photo && (
-                    <div className="flex items-center text-green-600">
-                      <Check className="w-4 h-4 mr-2" />
-                      <span>Photo du client</span>
-                    </div>
-                  )}
+                  {/* Document d'identité (Recto) */}
                   {uploadedFiles.idDocument && (
                     <div className="flex items-center text-green-600">
                       <Check className="w-4 h-4 mr-2" />
-                      <span>Pièce d'identité</span>
+                      <span>
+                        {!isBusiness 
+                          ? (watch('documentType') === IdentityDocumentType.CIN 
+                              ? 'Carte d\'Identité (Recto)' 
+                              : watch('documentType') === IdentityDocumentType.PASSPORT 
+                                ? 'Passeport'
+                                : 'Permis de Conduire')
+                          : 'Carte d\'Identité du Représentant'}
+                      </span>
                     </div>
                   )}
-                  {uploadedFiles.businessRegistrationDocument && (
+                  
+                  {/* Verso CIN ou Photo selon le type */}
+                  {!isBusiness && uploadedFiles.photo && (
                     <div className="flex items-center text-green-600">
                       <Check className="w-4 h-4 mr-2" />
-                      <span>Extrait du registre de commerce</span>
+                      <span>
+                        {watch('documentType') === IdentityDocumentType.CIN 
+                          ? 'Carte d\'Identité (Verso)' 
+                          : 'Photo du Client'}
+                      </span>
                     </div>
                   )}
+                  
+                  {/* Justificatif de domicile */}
                   {(uploadedFiles.companyProofOfAddress || uploadedFiles.proofOfResidence) && (
                     <div className="flex items-center text-green-600">
                       <Check className="w-4 h-4 mr-2" />
-                      <span>Justificatif de domicile</span>
+                      <span>{isBusiness ? 'Justificatif de Domicile (Société)' : 'Justificatif de Domicile'}</span>
                     </div>
                   )}
+                  
+                  {/* Registre de commerce */}
+                  {uploadedFiles.businessRegistrationDocument && (
+                    <div className="flex items-center text-green-600">
+                      <Check className="w-4 h-4 mr-2" />
+                      <span>Extrait Registre de Commerce</span>
+                    </div>
+                  )}
+                  
+                  {/* Déclaration origine des fonds */}
                   {uploadedFiles.fundsOriginDeclaration && (
                     <div className="flex items-center text-green-600">
                       <Check className="w-4 h-4 mr-2" />
-                      <span>Déclaration origine des fonds</span>
+                      <span>Déclaration d'Origine des Fonds</span>
                     </div>
                   )}
+                  
+                  {/* Signature */}
                   {customerSignature && (
                     <div className="flex items-center text-green-600">
                       <Check className="w-4 h-4 mr-2" />
@@ -1991,37 +2046,45 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
             <div className="bg-yellow-50 p-6 rounded-lg border-2 border-yellow-200">
               <h4 className="font-semibold text-gray-900 mb-4">Déclaration et Acceptation</h4>
               
+              {submissionError && (
+                <div className="mb-4 p-3 rounded border border-red-200 bg-red-50 text-red-800">
+                  {submissionError}
+                </div>
+              )}
+
               <div className="space-y-4">
-                <div className="flex items-start">
-                  <Controller
-                    name="acceptTerms"
-                    control={control}
-                    render={({ field: { value, onChange, onBlur, name, ref } }) => (
-                      <input
-                        type="checkbox"
-                        name={name}
-                        ref={ref}
-                        checked={!!value}
-                        onChange={(e) => onChange(e.target.checked)}
-                        onBlur={onBlur}
-                        className={`mt-1 mr-3 h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ${
-                          errors.acceptTerms ? 'border-red-500' : ''
-                        }`}
-                      />
-                    )}
-                  />
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-800 font-medium mb-2">
-                      Je certifie que les informations fournies dans ce formulaire sont exactes et complètes.
-                    </p>
-                    <p className="text-xs text-gray-600">
-                      Je comprends que la banque se réserve le droit de demander des documents supplémentaires 
-                      ou d'effectuer toute vérification jugée nécessaire.
-                    </p>
-                    {errors.acceptTerms && (
-                      <p className="mt-1 text-sm text-red-600">{errors.acceptTerms.message}</p>
-                    )}
+                <div>
+                  <div className="flex items-start">
+                    <Controller
+                      name="acceptTerms"
+                      control={control}
+                      render={({ field: { value, onChange, onBlur, name, ref } }) => (
+                        <input
+                          type="checkbox"
+                          name={name}
+                          ref={ref}
+                          checked={!!value}
+                          onChange={(e) => onChange(e.target.checked)}
+                          onBlur={onBlur}
+                          className={`mt-1 mr-3 h-5 w-5 text-blue-600 focus:ring-blue-500 rounded ${
+                            errors.acceptTerms ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        />
+                      )}
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-800 font-medium mb-2">
+                        Je certifie que les informations fournies dans ce formulaire sont exactes et complètes.
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        Je comprends que la banque se réserve le droit de demander des documents supplémentaires 
+                        ou d'effectuer toute vérification jugée nécessaire.
+                      </p>
+                    </div>
                   </div>
+                  {errors.acceptTerms && (
+                    <p className="mt-2 ml-8 text-sm text-red-600">{errors.acceptTerms.message}</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 pt-4 border-t">
@@ -2055,22 +2118,17 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                         <input
                           {...field}
                           type="date"
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                            errors.signatureDate ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                         />
                       )}
                     />
-                    {errors.signatureDate && (
-                      <p className="mt-1 text-sm text-red-600">{errors.signatureDate.message}</p>
-                    )}
                   </div>
                 </div>
 
                   {/* Signature capture et aperçu (déplacé ici) */}
                   <div className="pt-4 border-t">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Signature du {isBusiness ? 'représentant légal' : 'client'}
+                      Signature du {isBusiness ? 'représentant légal' : 'client'} *
                     </label>
                     {customerSignature ? (
                       <div className="flex items-center space-x-3">
@@ -2085,14 +2143,19 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                         </button>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                        onClick={() => setShowSignatureCanvas(true)}
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        Signer maintenant
-                      </button>
+                      <div>
+                        <button
+                          type="button"
+                          className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                          onClick={() => setShowSignatureCanvas(true)}
+                        >
+                          <Plus className="w-4 h-4 mr-1" />
+                          Signer maintenant
+                        </button>
+                        {!customerSignature && (
+                          <p className="mt-2 text-sm text-red-600">La signature est obligatoire</p>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -2120,10 +2183,11 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
             >
               Suivant
             </button>
-          ) : (
+            ) : (
             <button
-              type="submit"
+              type="button"
               disabled={isLoading}
+              onClick={submitWithFriendlyErrors}
               className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center space-x-2"
             >
               {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>}

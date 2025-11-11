@@ -1,4 +1,4 @@
-  import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Plus,
   Search,
@@ -60,6 +60,9 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const currentUser = apiService.getCurrentUser();
+  const defaultBranchId = currentUser?.branchId ? String(currentUser.branchId) : '';
+  const [branchId, setBranchId] = useState<string>(defaultBranchId);
+  const [branchOptions, setBranchOptions] = useState<Array<{ id: string; name: string }>>([]);
   const canCreate = (() => {
     const role = (currentUser?.role || '').toString();
     // Accept English and French role labels commonly used
@@ -78,27 +81,170 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
     error?: string;
   }>({});
 
+  const parseOptionalNumber = (value: unknown): number | undefined => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : undefined;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.replace(/\s/g, '').replace(',', '.');
+      if (normalized === '') return undefined;
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+    return undefined;
+  };
+
+  const normalizeNumberInput = (value: string): string => value.replace(/[^0-9.,-]/g, '');
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const list = await apiService.getAllBranches();
+        if (!mounted) return;
+        const options = Array.isArray(list)
+          ? list
+              .map((branch: Branch) => ({
+                id: branch.id?.toString?.() || '',
+                name: branch.name || `Succursale ${branch.id ?? ''}`.trim(),
+              }))
+              .filter((option) => option.id)
+          : [];
+        setBranchOptions(options);
+        if (!branchId) {
+          const fallback = defaultBranchId || options[0]?.id || '';
+          if (fallback) {
+            setBranchId(fallback);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading branches for account creation form:', error);
+        if (!branchId && defaultBranchId) {
+          setBranchId(defaultBranchId);
+        }
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultBranchId]);
+
+  useEffect(() => {
+    setFormData((prev) => ({ ...prev, branchId }));
+  }, [branchId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // Ensure a valid backend customerId is set (from auto-lookup)
-      if (!formData.customerId || typeof formData.customerId !== 'string' || formData.customerId.trim().length === 0) {
+      if (!canCreate) {
+        toast.error("Vous n'avez pas l'autorisation de créer un compte");
+        return;
+      }
+
+      const customerId = typeof formData.customerId === 'string' ? formData.customerId.trim() : '';
+      if (!customerId) {
         toast.error("Veuillez entrer un ID client valide et sélectionner un client existant");
         return;
       }
 
-      const accountData = {
-        ...formData,
+      const resolvedBranchId = branchId || defaultBranchId || (branchOptions[0]?.id ?? '');
+      if (!resolvedBranchId) {
+        toast.error('Veuillez sélectionner une succursale');
+        return;
+      }
+
+      const numericBranchId = Number(resolvedBranchId);
+      if (!Number.isFinite(numericBranchId)) {
+        toast.error('Succursale invalide');
+        return;
+      }
+
+      const initialDeposit = parseOptionalNumber(formData.initialDeposit);
+      if (initialDeposit === undefined || initialDeposit < 0) {
+        toast.error('Montant initial invalide');
+        return;
+      }
+
+      const payload: Record<string, any> = {
+        customerId,
+        customerName: typeof formData.customerName === 'string' ? formData.customerName.trim() : undefined,
         accountType,
         currency,
-        branchId: 1, // Default branch for now
+        branchId: numericBranchId,
+        initialDeposit,
       };
 
-      await onSubmit(accountData);
+      if (accountType === AccountType.SAVINGS) {
+        const defaultInterestPercent = currency === 'HTG' ? '3.0' : '1.5';
+        const interestPercent = parseOptionalNumber(formData.interestRatePercent ?? defaultInterestPercent);
+        if (interestPercent === undefined || interestPercent < 0) {
+          toast.error("Taux d'intérêt invalide");
+          return;
+        }
+
+        const minimumBalance = parseOptionalNumber(formData.minimumBalance ?? (currency === 'HTG' ? '100' : '5'));
+        if (minimumBalance === undefined || minimumBalance < 0) {
+          toast.error('Solde minimum invalide');
+          return;
+        }
+
+        const dailyWithdrawalLimit = parseOptionalNumber(formData.dailyWithdrawalLimit ?? (currency === 'HTG' ? '50000' : '1000'));
+        if (dailyWithdrawalLimit === undefined || dailyWithdrawalLimit < 0) {
+          toast.error('Limite de retrait quotidienne invalide');
+          return;
+        }
+
+        payload.interestRate = interestPercent / 100;
+        payload.minimumBalance = minimumBalance;
+        payload.dailyWithdrawalLimit = dailyWithdrawalLimit;
+      } else if (accountType === AccountType.CURRENT) {
+        const minimumBalance = parseOptionalNumber(formData.minimumBalance ?? (currency === 'HTG' ? '500' : '25'));
+        if (minimumBalance === undefined || minimumBalance < 0) {
+          toast.error('Solde minimum invalide');
+          return;
+        }
+
+        const dailyWithdrawalLimit = parseOptionalNumber(formData.dailyWithdrawalLimit ?? (currency === 'HTG' ? '100000' : '2000'));
+        if (dailyWithdrawalLimit === undefined || dailyWithdrawalLimit < 0) {
+          toast.error('Limite de retrait quotidienne invalide');
+          return;
+        }
+
+        const monthlyWithdrawalLimit = parseOptionalNumber(formData.monthlyWithdrawalLimit ?? (currency === 'HTG' ? '500000' : '10000'));
+        if (monthlyWithdrawalLimit === undefined || monthlyWithdrawalLimit < 0) {
+          toast.error('Limite de retrait mensuelle invalide');
+          return;
+        }
+
+        payload.minimumBalance = minimumBalance;
+        payload.dailyWithdrawalLimit = dailyWithdrawalLimit;
+        payload.monthlyWithdrawalLimit = monthlyWithdrawalLimit;
+        payload.dailyDepositLimit = parseOptionalNumber(formData.dailyDepositLimit);
+        payload.overdraftLimit = parseOptionalNumber(formData.overdraftLimit);
+        payload.securityPin = typeof formData.securityPin === 'string' ? formData.securityPin.trim() || undefined : undefined;
+        payload.securityQuestion = typeof formData.securityQuestion === 'string' ? formData.securityQuestion.trim() || undefined : undefined;
+        payload.securityAnswer = typeof formData.securityAnswer === 'string' ? formData.securityAnswer.trim() || undefined : undefined;
+        payload.depositMethod = formData.depositMethod || undefined;
+        payload.incomeSource = formData.incomeSource || undefined;
+        payload.transactionFrequency = formData.transactionFrequency || undefined;
+        payload.accountPurpose = typeof formData.accountPurpose === 'string' ? formData.accountPurpose.trim() || undefined : undefined;
+        payload.authorizedSigners = formData.authorizedSigners;
+      } else if (accountType === AccountType.TERM_SAVINGS) {
+        if (!formData.termType) {
+          toast.error('Veuillez sélectionner une durée pour le dépôt à terme');
+          return;
+        }
+        payload.termType = formData.termType;
+      }
+
+      await onSubmit(payload);
     } catch (error) {
       console.error('Error creating account:', error);
+      toast.error('Erreur lors de la création du compte');
     } finally {
       setLoading(false);
     }
@@ -278,6 +424,29 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
         </div>
       </div>
 
+        {/* Branch Selection */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Succursale *
+          </label>
+          <select
+            value={branchId}
+            onChange={(e) => setBranchId(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            disabled={branchOptions.length === 0}
+          >
+            <option value="">Sélectionner...</option>
+            {branchOptions.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.name}
+              </option>
+            ))}
+          </select>
+          {branchOptions.length === 0 && (
+            <p className="text-xs text-gray-500 mt-1">Chargement des succursales…</p>
+          )}
+        </div>
+
       {/* Customer Information */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -370,12 +539,11 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
           Montant Initial ({currency}) *
         </label>
         <input
-          type="number"
+          type="text"
+          inputMode="decimal"
           required
-          min="0"
-          step="0.01"
-          value={formData.initialDeposit || ''}
-          onChange={(e) => updateFormData('initialDeposit', parseFloat(e.target.value))}
+          value={formData.initialDeposit ?? ''}
+          onChange={(e) => updateFormData('initialDeposit', normalizeNumberInput(e.target.value))}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           placeholder={`Montant en ${currency}`}
         />
@@ -392,12 +560,10 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
                 Taux d'Intérêt (%)
               </label>
               <input
-                type="number"
-                min="0"
-                max="10"
-                step="0.01"
-                value={formData.interestRate || (currency === 'HTG' ? '3.0' : '1.5')}
-                onChange={(e) => updateFormData('interestRate', parseFloat(e.target.value) / 100)}
+                type="text"
+                inputMode="decimal"
+                value={formData.interestRatePercent ?? (currency === 'HTG' ? '3.0' : '1.5')}
+                onChange={(e) => updateFormData('interestRatePercent', normalizeNumberInput(e.target.value))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -406,10 +572,10 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
                 Solde Minimum ({currency})
               </label>
               <input
-                type="number"
-                min="0"
-                value={formData.minimumBalance || (currency === 'HTG' ? '100' : '5')}
-                onChange={(e) => updateFormData('minimumBalance', parseFloat(e.target.value))}
+                type="text"
+                inputMode="decimal"
+                value={formData.minimumBalance ?? (currency === 'HTG' ? '100' : '5')}
+                onChange={(e) => updateFormData('minimumBalance', normalizeNumberInput(e.target.value))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -420,10 +586,10 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
               Limite Retrait Quotidien ({currency})
             </label>
             <input
-              type="number"
-              min="0"
-              value={formData.dailyWithdrawalLimit || (currency === 'HTG' ? '50000' : '1000')}
-              onChange={(e) => updateFormData('dailyWithdrawalLimit', parseFloat(e.target.value))}
+              type="text"
+              inputMode="decimal"
+              value={formData.dailyWithdrawalLimit ?? (currency === 'HTG' ? '50000' : '1000')}
+              onChange={(e) => updateFormData('dailyWithdrawalLimit', normalizeNumberInput(e.target.value))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
@@ -440,10 +606,10 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
                 Solde Minimum ({currency})
               </label>
               <input
-                type="number"
-                min="0"
-                value={formData.minimumBalance || (currency === 'HTG' ? '500' : '25')}
-                onChange={(e) => updateFormData('minimumBalance', parseFloat(e.target.value))}
+                type="text"
+                inputMode="decimal"
+                value={formData.minimumBalance ?? (currency === 'HTG' ? '500' : '25')}
+                onChange={(e) => updateFormData('minimumBalance', normalizeNumberInput(e.target.value))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -452,10 +618,10 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
                 Limite Retrait Quotidien ({currency})
               </label>
               <input
-                type="number"
-                min="0"
-                value={formData.dailyWithdrawalLimit || (currency === 'HTG' ? '100000' : '2000')}
-                onChange={(e) => updateFormData('dailyWithdrawalLimit', parseFloat(e.target.value))}
+                type="text"
+                inputMode="decimal"
+                value={formData.dailyWithdrawalLimit ?? (currency === 'HTG' ? '100000' : '2000')}
+                onChange={(e) => updateFormData('dailyWithdrawalLimit', normalizeNumberInput(e.target.value))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -466,10 +632,10 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
               Limite Retrait Mensuel ({currency})
             </label>
             <input
-              type="number"
-              min="0"
-              value={formData.monthlyWithdrawalLimit || (currency === 'HTG' ? '500000' : '10000')}
-              onChange={(e) => updateFormData('monthlyWithdrawalLimit', parseFloat(e.target.value))}
+              type="text"
+              inputMode="decimal"
+              value={formData.monthlyWithdrawalLimit ?? (currency === 'HTG' ? '500000' : '10000')}
+              onChange={(e) => updateFormData('monthlyWithdrawalLimit', normalizeNumberInput(e.target.value))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
@@ -804,11 +970,13 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
 
   // Helper to name document types when backend doesn't provide a name
   const getDocumentTypeName = (t: any): string => {
+    // Align with SavingsCustomerDocumentType enum:
+    // 0 = IdentityCardFront, 1 = IdentityCardBack, 2 = ProofOfResidence, 3 = Photo, 4 = Other
     const n = typeof t === 'number' ? t : parseInt(t, 10);
     switch (n) {
-      case 0: return "Carte d'Identité";
-      case 1: return 'Justificatif de Résidence';
-      case 2: return 'Justificatif de Revenu';
+      case 0: return "Pièce d'identité (recto)";
+      case 1: return "Pièce d'identité (verso)";
+      case 2: return 'Justificatif de domicile';
       case 3: return 'Photo';
       default: return 'Autre';
     }
@@ -1226,15 +1394,25 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
       };
 
       // Convertir le type de document
-      const convertDocumentType = (type: string): SavingsIdentityDocumentType => {
-        if (!type) return SavingsIdentityDocumentType.CIN;
-        const typeMap: { [key: string]: SavingsIdentityDocumentType } = {
-          'CIN': SavingsIdentityDocumentType.CIN,
-          'PASSPORT': SavingsIdentityDocumentType.Passport,
-          'DRIVING_LICENSE': SavingsIdentityDocumentType.DrivingLicense,
-          'BIRTH_CERTIFICATE': SavingsIdentityDocumentType.BirthCertificate
-        };
-        return typeMap[type.toUpperCase()] || SavingsIdentityDocumentType.CIN;
+      const convertDocumentType = (type?: string | number | null): SavingsIdentityDocumentType => {
+        if (type === null || type === undefined || type === '') {
+          return SavingsIdentityDocumentType.CIN;
+        }
+
+        if (typeof type === 'number' && SavingsIdentityDocumentType[type] !== undefined) {
+          return type as SavingsIdentityDocumentType;
+        }
+
+        const key = type.toString().trim().toUpperCase();
+        switch (key) {
+          case 'PASSPORT':
+            return SavingsIdentityDocumentType.Passport;
+          case 'DRIVING_LICENSE':
+            return SavingsIdentityDocumentType.DrivingLicense;
+          // Birth certificate retired on frontend — treat as unknown/legacy if encountered
+          default:
+            return SavingsIdentityDocumentType.CIN;
+        }
       };
 
   const sanitizePhone = (p?: string) => (p ? p.replace(/[\s-]/g, '') : undefined);
@@ -1498,15 +1676,25 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
       };
 
       // Convertir le type de document
-      const convertDocumentType = (type: string): SavingsIdentityDocumentType => {
-        if (!type) return SavingsIdentityDocumentType.CIN;
-        const typeMap: { [key: string]: SavingsIdentityDocumentType } = {
-          'CIN': SavingsIdentityDocumentType.CIN,
-          'PASSPORT': SavingsIdentityDocumentType.Passport,
-          'DRIVING_LICENSE': SavingsIdentityDocumentType.DrivingLicense,
-          'BIRTH_CERTIFICATE': SavingsIdentityDocumentType.BirthCertificate
-        };
-        return typeMap[type.toUpperCase()] || SavingsIdentityDocumentType.CIN;
+      const convertDocumentType = (type?: string | number | null): SavingsIdentityDocumentType => {
+        if (type === null || type === undefined || type === '') {
+          return SavingsIdentityDocumentType.CIN;
+        }
+
+        if (typeof type === 'number' && SavingsIdentityDocumentType[type] !== undefined) {
+          return type as SavingsIdentityDocumentType;
+        }
+
+        const key = type.toString().trim().toUpperCase();
+        switch (key) {
+          case 'PASSPORT':
+            return SavingsIdentityDocumentType.Passport;
+          case 'DRIVING_LICENSE':
+            return SavingsIdentityDocumentType.DrivingLicense;
+          // 'BIRTH_CERTIFICATE' retired from frontend: treat as unknown/legacy and fall back to CIN
+          default:
+            return SavingsIdentityDocumentType.CIN;
+        }
       };
 
   const sanitizePhone = (p?: string) => (p ? p.replace(/[\s-]/g, '') : undefined);

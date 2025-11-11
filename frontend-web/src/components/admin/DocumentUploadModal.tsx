@@ -21,7 +21,7 @@ const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({ customer, onC
   
   // Document upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [documentType, setDocumentType] = useState<SavingsCustomerDocumentType>(SavingsCustomerDocumentType.IdentityCard);
+  const [documentType, setDocumentType] = useState<SavingsCustomerDocumentType>(SavingsCustomerDocumentType.IdentityCardFront);
   const [documentName, setDocumentName] = useState('');
   const [documentDescription, setDocumentDescription] = useState('');
   
@@ -34,10 +34,10 @@ const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({ customer, onC
   const getDocumentTypeName = (t: any): string => {
     const n = typeof t === 'number' ? t : parseInt(t, 10);
     switch (n) {
-      case 0: return "Carte d'Identité";
-      case 1: return 'Justificatif de Résidence';
-      case 2: return 'Justificatif de Revenu';
-      case 3: return 'Photo';
+      case 0: return "Carte d'Identité (Face)";
+      case 1: return 'Carte d\'Identité (Dos)';
+      case 2: return 'Justificatif de Résidence';
+      case 4: return 'Autre';
       default: return 'Autre';
     }
   };
@@ -169,10 +169,9 @@ const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({ customer, onC
   };
 
   const documentTypeOptions = [
-    { value: SavingsCustomerDocumentType.IdentityCard, label: 'Carte d\'Identité' },
+    { value: SavingsCustomerDocumentType.IdentityCardFront, label: 'Carte d\'Identité (Face)' },
+    { value: SavingsCustomerDocumentType.IdentityCardBack, label: 'Carte d\'Identité (Dos)' },
     { value: SavingsCustomerDocumentType.ProofOfResidence, label: 'Justificatif de Résidence' },
-    { value: SavingsCustomerDocumentType.ProofOfIncome, label: 'Justificatif de Revenu' },
-    { value: SavingsCustomerDocumentType.Photo, label: 'Photo' },
     { value: SavingsCustomerDocumentType.Other, label: 'Autre' },
   ];
 
@@ -310,8 +309,18 @@ const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({ customer, onC
                       const rawDate = (doc as any).UploadedAt;
                       const dateObj = rawDate ? new Date(rawDate) : null;
                       const hasValidDate = !!(dateObj && !isNaN(dateObj.getTime()));
-                      const displayName = doc.name || (doc as any).name || ((doc as any).FilePath ? String((doc as any).FilePath).split(/[/\\]/).pop() : '') || 'Document';
-                      const displayDesc = doc.description || (doc as any).description;
+                      const displayName = typeName;
+                      // Generate correct description based on document type instead of using stored description
+                      const docType = (doc as any).DocumentType ?? (doc as any).documentType;
+                      const getDocumentDescription = (type: number): string => {
+                        switch (type) {
+                          case 0: return "Figi kat idantite nasyonal la";
+                          case 1: return "Dèyè kat idantite nasyonal la";
+                          case 2: return "Dokiman ki jistifye adrès rezidans lan";
+                          default: return doc.description || (doc as any).description || 'Dokiman siplemantè';
+                        }
+                      };
+                      const displayDesc = getDocumentDescription(docType);
                       const isVerified = (doc as any).Verified ?? (doc as any).verified ?? false;
                       return (
                         <div key={docId || displayName} className="bg-white rounded-lg p-4 border border-gray-200 hover:border-blue-300 transition-colors">

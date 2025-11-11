@@ -203,7 +203,7 @@ const SavingsCustomerManagement: React.FC = () => {
           'CIN': SavingsIdentityDocumentType.CIN,
           'PASSPORT': SavingsIdentityDocumentType.Passport,
           'DRIVING_LICENSE': SavingsIdentityDocumentType.DrivingLicense,
-          'BIRTH_CERTIFICATE': SavingsIdentityDocumentType.BirthCertificate
+          // Birth certificate retired on frontend — legacy numeric values will be tolerated but not emitted
         };
         return typeMap[type.toUpperCase()] || SavingsIdentityDocumentType.CIN;
       };
@@ -258,13 +258,14 @@ const SavingsCustomerManagement: React.FC = () => {
 
           // Upload ID document if provided
           if (clientData.uploadedFiles.idDocument) {
-            await savingsCustomerService.uploadDocument(customerId, clientData.uploadedFiles.idDocument, 0, 'Pièce d\'identité', 'Document d\'identité du client');
+            await savingsCustomerService.uploadDocument(customerId, clientData.uploadedFiles.idDocument, 0, 'Pièce d\'identité (recto)', 'Face de la carte d\'identité nationale');
             console.log('ID document uploaded successfully');
           }
 
           // Upload proof of residence if provided
           if (clientData.uploadedFiles.proofOfResidence) {
-            await savingsCustomerService.uploadDocument(customerId, clientData.uploadedFiles.proofOfResidence, 1, 'Justificatif de domicile', 'Preuve de résidence');
+            // Use document type 2 = ProofOfResidence
+            await savingsCustomerService.uploadDocument(customerId, clientData.uploadedFiles.proofOfResidence, 2, 'Justificatif de domicile', 'Facture d\'électricité, d\'eau ou autre document prouvant le domicile');
             console.log('Proof of residence uploaded successfully');
           }
 
@@ -276,7 +277,8 @@ const SavingsCustomerManagement: React.FC = () => {
 
           // Upload company proof of address if provided
           if (clientData.uploadedFiles.companyProofOfAddress) {
-            await savingsCustomerService.uploadDocument(customerId, clientData.uploadedFiles.companyProofOfAddress, 1, 'Justificatif domicile société', 'Preuve d\'adresse de l\'entreprise');
+            // Use document type 2 = ProofOfResidence
+            await savingsCustomerService.uploadDocument(customerId, clientData.uploadedFiles.companyProofOfAddress, 2, 'Justificatif domicile société', 'Facture d\'électricité, d\'eau ou autre document prouvant l\'adresse de l\'entreprise');
             console.log('Company proof of address uploaded successfully');
           }
 
@@ -335,7 +337,7 @@ const SavingsCustomerManagement: React.FC = () => {
           'CIN': SavingsIdentityDocumentType.CIN,
           'PASSPORT': SavingsIdentityDocumentType.Passport,
           'DRIVING_LICENSE': SavingsIdentityDocumentType.DrivingLicense,
-          'BIRTH_CERTIFICATE': SavingsIdentityDocumentType.BirthCertificate
+          // Birth certificate retired from frontend mapping
         };
         return typeMap[type.toUpperCase()] || SavingsIdentityDocumentType.CIN;
       };
@@ -389,13 +391,14 @@ const SavingsCustomerManagement: React.FC = () => {
 
           // Upload ID document if provided
           if (clientData.uploadedFiles.idDocument) {
-            await savingsCustomerService.uploadDocument(selectedCustomer.id, clientData.uploadedFiles.idDocument, 0, 'Pièce d\'identité', 'Document d\'identité du client');
+            await savingsCustomerService.uploadDocument(selectedCustomer.id, clientData.uploadedFiles.idDocument, 0, 'Pièce d\'identité (recto)', 'Face de la carte d\'identité nationale');
             console.log('ID document uploaded successfully');
           }
 
           // Upload proof of residence if provided
           if (clientData.uploadedFiles.proofOfResidence) {
-            await savingsCustomerService.uploadDocument(selectedCustomer.id, clientData.uploadedFiles.proofOfResidence, 1, 'Justificatif de domicile', 'Preuve de résidence');
+            // Use document type 2 = ProofOfResidence
+            await savingsCustomerService.uploadDocument(selectedCustomer.id, clientData.uploadedFiles.proofOfResidence, 2, 'Justificatif de domicile', 'Facture d\'électricité, d\'eau ou autre document prouvant le domicile');
             console.log('Proof of residence uploaded successfully');
           }
 
@@ -407,7 +410,8 @@ const SavingsCustomerManagement: React.FC = () => {
 
           // Upload company proof of address if provided
           if (clientData.uploadedFiles.companyProofOfAddress) {
-            await savingsCustomerService.uploadDocument(selectedCustomer.id, clientData.uploadedFiles.companyProofOfAddress, 1, 'Justificatif domicile société', 'Preuve d\'adresse de l\'entreprise');
+            // Use document type 2 = ProofOfResidence
+            await savingsCustomerService.uploadDocument(selectedCustomer.id, clientData.uploadedFiles.companyProofOfAddress, 2, 'Justificatif domicile société', 'Facture d\'électricité, d\'eau ou autre document prouvant l\'adresse de l\'entreprise');
             console.log('Company proof of address uploaded successfully');
           }
 

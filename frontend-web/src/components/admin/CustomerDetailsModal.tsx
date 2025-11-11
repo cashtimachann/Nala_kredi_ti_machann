@@ -19,8 +19,19 @@ const formatDateDisplay = (raw?: string) => {
 };
 
 const genderLabel = (g: any) => {
-  if (g === 1) return 'Féminin';
-  return 'Masculin';
+  if (g === null || g === undefined || g === '') return '—';
+  if (typeof g === 'number') {
+    return g === 1 ? 'Féminin' : 'Masculin';
+  }
+
+  const normalized = g.toString().trim().toLowerCase();
+  if (['f', 'female', 'feminin', 'féminin', 'femme'].includes(normalized)) {
+    return 'Féminin';
+  }
+  if (['m', 'male', 'masculin', 'gason', 'homme'].includes(normalized)) {
+    return 'Masculin';
+  }
+  return g;
 };
 
 interface Props {

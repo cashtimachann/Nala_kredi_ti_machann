@@ -17,12 +17,34 @@ export enum SavingsIdentityDocumentType {
 }
 
 export enum SavingsCustomerDocumentType {
-  IdentityCard = 0,
-  ProofOfResidence = 1,
-  ProofOfIncome = 2,
+  IdentityCardFront = 0,
+  IdentityCardBack = 1,
+  ProofOfResidence = 2,
   Photo = 3,
   Other = 4
 }
+
+// Helper: safely convert various frontend string representations (including uppercase snake case)
+// to the backend enum numeric value expected by the API. Falls back to CIN when unknown.
+export const identityDocumentTypeFromString = (type: string | number | undefined | null): SavingsIdentityDocumentType => {
+  if (typeof type === 'number' && type in SavingsIdentityDocumentType) {
+    return type as SavingsIdentityDocumentType;
+  }
+  const normalized = (type ?? '').toString().trim().toUpperCase();
+  switch (normalized) {
+    case 'CIN':
+      return SavingsIdentityDocumentType.CIN;
+    case 'PASSPORT':
+      return SavingsIdentityDocumentType.Passport;
+    case 'DRIVING_LICENSE':
+      return SavingsIdentityDocumentType.DrivingLicense;
+    // Some legacy camelCase values that might arrive from persisted data
+    case 'DRIVINGLICENSE':
+      return SavingsIdentityDocumentType.DrivingLicense;
+    default:
+      return SavingsIdentityDocumentType.CIN;
+  }
+};
 
 // Interface pour dokiman kliyan
 export interface SavingsCustomerDocumentResponseDto {
@@ -1002,7 +1024,7 @@ class SavingsCustomerService {
       'CIN': SavingsIdentityDocumentType.CIN,
       'PASSPORT': SavingsIdentityDocumentType.Passport,
       'DRIVING_LICENSE': SavingsIdentityDocumentType.DrivingLicense,
-      'BIRTH_CERTIFICATE': SavingsIdentityDocumentType.BirthCertificate
+      // 'BIRTH_CERTIFICATE' intentionally retired from frontend mapping
     };
     return typeMap[type.toUpperCase()] || SavingsIdentityDocumentType.CIN;
   }

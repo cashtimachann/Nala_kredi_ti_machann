@@ -169,7 +169,7 @@ const handleCreateClient = async (clientData: any) => {
 | "CIN" | SavingsIdentityDocumentType.CIN | 0 |
 | "PASSPORT" | SavingsIdentityDocumentType.Passport | 1 |
 | "DRIVING_LICENSE" | SavingsIdentityDocumentType.DrivingLicense | 2 |
-| "BIRTH_CERTIFICATE" | SavingsIdentityDocumentType.BirthCertificate | 3 |
+| "BIRTH_CERTIFICATE" | (retired on frontend) | 3 |
 
 ### Dates
 | Frontend | Backend |

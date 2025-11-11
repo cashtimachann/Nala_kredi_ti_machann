@@ -11,16 +11,22 @@ const convertGender = (gender: string) => {
   return g === 'male' || g === 'gason' || g === 'm' ? 0 : 1;
 };
 
-const convertDocumentType = (type: string): SavingsIdentityDocumentType => {
-  if (!type) return SavingsIdentityDocumentType.CIN;
-  const t = type.toUpperCase();
+const convertDocumentType = (type?: string | number | null): SavingsIdentityDocumentType => {
+  if (type === null || type === undefined || type === '') {
+    return SavingsIdentityDocumentType.CIN;
+  }
+
+  if (typeof type === 'number' && SavingsIdentityDocumentType[type] !== undefined) {
+    return type as SavingsIdentityDocumentType;
+  }
+
+  const t = type.toString().toUpperCase();
   switch (t) {
     case 'PASSPORT':
       return SavingsIdentityDocumentType.Passport;
     case 'DRIVING_LICENSE':
       return SavingsIdentityDocumentType.DrivingLicense;
-    case 'BIRTH_CERTIFICATE':
-      return SavingsIdentityDocumentType.BirthCertificate;
+    // Birth certificate retired from frontend options - do not map frontend input to that value
     default:
       return SavingsIdentityDocumentType.CIN;
   }
@@ -137,31 +143,33 @@ const ClientCreatePage: React.FC = () => {
 
           // Upload ID document if provided
           if (uploadedFiles.idDocument) {
-            await savingsCustomerService.uploadDocument(customerId, uploadedFiles.idDocument, 0, 'Pièce d\'identité', 'Document d\'identité du client');
+            const idDocName = basicData?.isBusiness ? 'Pièce d\'identité du représentant légal' : 'Pièce d\'identité';
+            const idDocDesc = basicData?.isBusiness ? 'Document d\'identité du représentant légal' : 'Document d\'identité du client';
+            await savingsCustomerService.uploadDocument(customerId, uploadedFiles.idDocument, 0, idDocName, idDocDesc);
             console.log('ID document uploaded successfully');
           }
 
           // Upload proof of residence if provided
           if (uploadedFiles.proofOfResidence) {
-            await savingsCustomerService.uploadDocument(customerId, uploadedFiles.proofOfResidence, 1, 'Justificatif de domicile', 'Preuve de résidence');
+            await savingsCustomerService.uploadDocument(customerId, uploadedFiles.proofOfResidence, 2, 'Justificatif de domicile', 'Preuve de résidence du client');
             console.log('Proof of residence uploaded successfully');
           }
 
           // Upload business registration document if provided
           if (uploadedFiles.businessRegistrationDocument) {
-            await savingsCustomerService.uploadDocument(customerId, uploadedFiles.businessRegistrationDocument, 4, 'Registre de commerce', 'Extrait du registre de commerce');
+            await savingsCustomerService.uploadDocument(customerId, uploadedFiles.businessRegistrationDocument, 4, 'Registre de commerce', 'Extrait du registre de commerce de l\'entreprise');
             console.log('Business registration document uploaded successfully');
           }
 
           // Upload company proof of address if provided
           if (uploadedFiles.companyProofOfAddress) {
-            await savingsCustomerService.uploadDocument(customerId, uploadedFiles.companyProofOfAddress, 1, 'Justificatif domicile société', 'Preuve d\'adresse de l\'entreprise');
+            await savingsCustomerService.uploadDocument(customerId, uploadedFiles.companyProofOfAddress, 2, 'Justificatif de domicile de l\'entreprise', 'Preuve d\'adresse du siège social');
             console.log('Company proof of address uploaded successfully');
           }
 
           // Upload funds origin declaration if provided
           if (uploadedFiles.fundsOriginDeclaration) {
-            await savingsCustomerService.uploadDocument(customerId, uploadedFiles.fundsOriginDeclaration, 4, 'Déclaration origine fonds', 'Déclaration d\'origine des fonds');
+            await savingsCustomerService.uploadDocument(customerId, uploadedFiles.fundsOriginDeclaration, 4, 'Déclaration d\'origine des fonds', 'Document déclarant l\'origine des fonds de l\'entreprise');
             console.log('Funds origin declaration uploaded successfully');
           }
 

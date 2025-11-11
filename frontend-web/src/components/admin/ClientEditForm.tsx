@@ -4,10 +4,10 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { X, Save, Loader2, FileText, Edit3, UserPlus } from 'lucide-react';
 import toast from 'react-hot-toast';
-import savingsCustomerService, { SavingsCustomerResponseDto } from '../../services/savingsCustomerService';
+import savingsCustomerService, { SavingsCustomerResponseDto, identityDocumentTypeFromString } from '../../services/savingsCustomerService';
 import DocumentUploadModal from './DocumentUploadModal';
 import { genderToMF } from '../../utils/gender';
-import { HAITI_DEPARTMENTS, COMMUNES_BY_DEPARTMENT, HaitiDepartment } from '../../types/savings';
+import { HAITI_DEPARTMENTS, COMMUNES_BY_DEPARTMENT, HaitiDepartment, IdentityDocumentType } from '../../types/savings';
 
 // Types
 interface AuthorizedSigner {
@@ -79,7 +79,6 @@ const createValidationSchema = (isBusiness: boolean) => yup.object().shape({
     dateOfBirth: yup.string().required('Date de naissance obligatoire'),
     birthPlace: yup.string().nullable(),
     nationality: yup.string().nullable(),
-    nif: yup.string().nullable(),
     gender: yup.string().required('Genre obligatoire'),
     occupation: yup.string().nullable(),
     employerName: yup.string().nullable(),
@@ -110,6 +109,21 @@ interface ClientEditFormProps {
 }
 
 const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onCancel }) => {
+  // Normalize various string/number representations to our frontend enum string values
+  const toIdentityEnumString = React.useCallback((dt: any): string => {
+    if (dt === undefined || dt === null || dt === '') return '';
+    if (typeof dt === 'number') {
+      const numMap: Record<number, string> = { 0: 'CIN', 1: 'PASSPORT', 2: 'DRIVING_LICENSE' };
+      // If backend returns legacy numeric 3 (BirthCertificate), map to empty to avoid showing a retired option
+      return numMap[dt] ?? '';
+    }
+    const s = String(dt).trim().toUpperCase();
+    if (['CIN','PASSPORT','DRIVING_LICENSE'].includes(s)) return s;
+    // Legacy camelCase values
+    if (s === 'DRIVINGLICENSE') return 'DRIVING_LICENSE';
+    // Birth certificate retired — do not return it as a selectable frontend value
+    return '';
+  }, []);
   const [selectedDepartment, setSelectedDepartment] = useState(customer?.address?.department || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -148,9 +162,8 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
       email: customer?.contact?.email || '',
       emergencyContactName: customer?.contact?.emergencyContactName || '',
       emergencyContactPhone: customer?.contact?.emergencyContactPhone || '',
-      documentType: customer?.identity?.documentType !== undefined 
-        ? ['CIN', 'Passport', 'DrivingLicense'][customer.identity.documentType] || 'CIN'
-        : 'CIN',
+      // Support either a string enum value from backend or a legacy numeric code
+      documentType: toIdentityEnumString(customer?.identity?.documentType),
       documentNumber: customer?.identity?.documentNumber || '',
       issuedDate: customer?.identity?.issuedDate ? customer.identity.issuedDate.split('T')[0] : '',
       expiryDate: customer?.identity?.expiryDate ? customer.identity.expiryDate.split('T')[0] : '',
@@ -162,7 +175,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
       dateOfBirth: customer?.dateOfBirth ? customer.dateOfBirth.split('T')[0] : '',
       birthPlace: (customer as any)?.birthPlace || '',
       nationality: (customer as any)?.nationality || 'Haïtienne',
-      nif: (customer as any)?.personalNif || '',
+      
       gender: genderToMF(customer?.gender),
       occupation: customer?.occupation || '',
       employerName: (customer as any)?.employerName || '',
@@ -190,14 +203,9 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
         ? `${customer.legalRepresentative.firstName} ${customer.legalRepresentative.lastName}`
         : (customer as any)?.legalRepresentativeName || '',
       legalRepresentativeTitle: customer?.legalRepresentative?.title || (customer as any)?.legalRepresentativeTitle || '',
-      legalRepresentativeDocumentType: (() => {
-        // Priorité: legalRepresentative.documentType (normalisé) -> representativeDocumentType -> legalRepresentativeDocumentType
-        const docType = customer?.legalRepresentative?.documentType ?? (customer as any)?.representativeDocumentType ?? (customer as any)?.legalRepresentativeDocumentType;
-        if (docType === 0 || docType === 'CIN') return 'CIN';
-        if (docType === 1 || docType === 'Passport') return 'Passport';
-        if (docType === 2 || docType === 'DrivingLicense') return 'DrivingLicense';
-        return '';
-      })(),
+      legalRepresentativeDocumentType: toIdentityEnumString(
+        customer?.legalRepresentative?.documentType ?? (customer as any)?.representativeDocumentType ?? (customer as any)?.legalRepresentativeDocumentType
+      ),
       legalRepresentativeDocumentNumber: customer?.legalRepresentative?.documentNumber || (customer as any)?.legalRepresentativeDocumentNumber || '',
       legalRepresentativeIssuedDate: customer?.legalRepresentative?.issuedDate ? customer.legalRepresentative.issuedDate.split('T')[0] : (customer as any)?.legalRepresentativeIssuedDate ? (customer as any).legalRepresentativeIssuedDate.split('T')[0] : '',
       legalRepresentativeExpiryDate: customer?.legalRepresentative?.expiryDate ? customer.legalRepresentative.expiryDate.split('T')[0] : (customer as any)?.legalRepresentativeExpiryDate ? (customer as any).legalRepresentativeExpiryDate.split('T')[0] : '',
@@ -228,9 +236,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
         email: customer?.contact?.email || '',
         emergencyContactName: customer?.contact?.emergencyContactName || '',
         emergencyContactPhone: customer?.contact?.emergencyContactPhone || '',
-        documentType: customer?.identity?.documentType !== undefined 
-          ? ['CIN', 'Passport', 'DrivingLicense'][customer.identity.documentType] || (customerIsBusiness ? 'TradeRegister' : 'CIN')
-          : (customerIsBusiness ? 'TradeRegister' : 'CIN'),
+        documentType: toIdentityEnumString(customer?.identity?.documentType),
         documentNumber: customer?.identity?.documentNumber || '',
         issuedDate: customer?.identity?.issuedDate ? customer.identity.issuedDate.split('T')[0] : '',
         expiryDate: customer?.identity?.expiryDate ? customer.identity.expiryDate.split('T')[0] : '',
@@ -242,7 +248,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
         dateOfBirth: customer?.dateOfBirth ? customer.dateOfBirth.split('T')[0] : '',
         birthPlace: (customer as any)?.birthPlace || '',
         nationality: (customer as any)?.nationality || 'Haïtienne',
-        nif: (customer as any)?.personalNif || '',
+        
         gender: customer?.gender !== undefined ? genderToMF(customer.gender) : 'M',
         occupation: customer?.occupation || '',
         employerName: (customer as any)?.employerName || '',
@@ -270,14 +276,9 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
           ? `${customer.legalRepresentative.firstName} ${customer.legalRepresentative.lastName}`
           : (customer as any)?.legalRepresentativeName || '',
         legalRepresentativeTitle: customer?.legalRepresentative?.title || (customer as any)?.legalRepresentativeTitle || '',
-        legalRepresentativeDocumentType: (() => {
-          // Priorité: legalRepresentative.documentType (normalisé) -> representativeDocumentType -> legalRepresentativeDocumentType
-          const docType = customer?.legalRepresentative?.documentType ?? (customer as any)?.representativeDocumentType ?? (customer as any)?.legalRepresentativeDocumentType;
-          if (docType === 0 || docType === 'CIN') return 'CIN';
-          if (docType === 1 || docType === 'Passport') return 'Passport';
-          if (docType === 2 || docType === 'DrivingLicense') return 'DrivingLicense';
-          return '';
-        })(),
+        legalRepresentativeDocumentType: toIdentityEnumString(
+          customer?.legalRepresentative?.documentType ?? (customer as any)?.representativeDocumentType ?? (customer as any)?.legalRepresentativeDocumentType
+        ),
         legalRepresentativeDocumentNumber: customer?.legalRepresentative?.documentNumber || (customer as any)?.legalRepresentativeDocumentNumber || '',
         legalRepresentativeIssuedDate: customer?.legalRepresentative?.issuedDate ? customer.legalRepresentative.issuedDate.split('T')[0] : (customer as any)?.legalRepresentativeIssuedDate ? (customer as any).legalRepresentativeIssuedDate.split('T')[0] : '',
         legalRepresentativeExpiryDate: customer?.legalRepresentative?.expiryDate ? customer.legalRepresentative.expiryDate.split('T')[0] : (customer as any)?.legalRepresentativeExpiryDate ? (customer as any).legalRepresentativeExpiryDate.split('T')[0] : '',
@@ -296,7 +297,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
   // Reset form fields when switching between business/individual
   useEffect(() => {
     const currentValues = watch();
-    reset({
+  reset({
       ...currentValues,
       // Clear business fields when switching to individual
       ...(isBusiness ? {} : {
@@ -322,7 +323,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
         dateOfBirth: '',
         birthPlace: '',
         nationality: '',
-        nif: '',
+        
         gender: '',
         occupation: '',
         employerName: '',
@@ -338,8 +339,16 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
         referencePerson: '',
         referencePersonPhone: '',
       }),
-      // Update document type options
-      documentType: isBusiness ? (currentValues.documentType && !['CIN','Passport','DrivingLicense'].includes(currentValues.documentType) ? currentValues.documentType : 'TradeRegister') : (currentValues.documentType && ['CIN','Passport','DrivingLicense'].includes(currentValues.documentType) ? currentValues.documentType : 'CIN'),
+    // Update document type options without forcing a fallback value.
+    // For personne physique keep only valid personal doc values, else blank.
+    // For personne morale keep custom business doc value if not one of personal list.
+    documentType: isBusiness
+      ? (currentValues.documentType && !['CIN','PASSPORT','DRIVING_LICENSE'].includes(currentValues.documentType)
+        ? currentValues.documentType
+        : '')
+      : (currentValues.documentType && ['CIN','PASSPORT','DRIVING_LICENSE'].includes(currentValues.documentType)
+        ? currentValues.documentType
+        : ''),
     });
   }, [isBusiness, reset, watch]);
 
@@ -348,7 +357,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
       setIsSubmitting(true);
       
       // Préparer les données pour la mise à jour
-      const updateData = {
+  const updateData = {
         // Champs communs
         street: data.street,
         department: data.department,
@@ -359,7 +368,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
         email: data.email,
         emergencyContactName: data.emergencyContactName,
         emergencyContactPhone: data.emergencyContactPhone,
-        documentType: data.documentType,
+  documentType: identityDocumentTypeFromString(data.documentType),
         documentNumber: data.documentNumber,
         issuedDate: data.issuedDate,
         expiryDate: data.expiryDate,
@@ -396,7 +405,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
             };
           })() : {}),
           representativeTitle: data.legalRepresentativeTitle,
-          representativeDocumentType: data.legalRepresentativeDocumentType,
+          representativeDocumentType: identityDocumentTypeFromString(data.legalRepresentativeDocumentType),
           representativeDocumentNumber: data.legalRepresentativeDocumentNumber,
           representativeIssuedDate: data.legalRepresentativeIssuedDate,
           representativeExpiryDate: data.legalRepresentativeExpiryDate,
@@ -406,9 +415,9 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
           firstName: data.firstName,
           lastName: data.lastName,
           dateOfBirth: data.dateOfBirth,
-          birthPlace: data.birthPlace !== null && data.birthPlace !== undefined ? data.birthPlace : undefined,
-          nationality: data.nationality !== null && data.nationality !== undefined ? data.nationality : undefined,
-          personalNif: data.nif !== null && data.nif !== undefined ? data.nif : undefined, // Backend utilise personalNif
+          birthPlace: data.birthPlace || undefined,
+          nationality: data.nationality || undefined,
+          // personalNif removed from edit form for personne physique
           gender: data.gender,
           occupation: data.occupation || undefined,
           employerName: data.employerName || undefined,
@@ -436,14 +445,24 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
 
   // Authorized signers handlers
   const handleAddSigner = (signer: AuthorizedSigner) => {
+      // Normalize signer.documentType to consistent enum string
+      const normalize = (dt: any) => {
+        if (!dt) return '';
+        const upper = String(dt).trim().toUpperCase();
+        if (['CIN','PASSPORT','DRIVING_LICENSE'].includes(upper)) return upper;
+        if (upper === 'DRIVINGLICENSE') return 'DRIVING_LICENSE';
+        // Birth certificate retired — normalize to CIN as safe fallback
+        return 'CIN';
+      };
+      const normalizedSigner = { ...signer, documentType: normalize(signer.documentType) };
     if (currentSignerEdit) {
       // Modifier un signataire existant
-      setAuthorizedSigners(authorizedSigners.map(s => 
-        s.id === currentSignerEdit.id ? signer : s
+        setAuthorizedSigners(authorizedSigners.map(s => 
+          s.id === currentSignerEdit.id ? normalizedSigner : s
       ));
     } else {
       // Ajouter un nouveau signataire
-      setAuthorizedSigners([...authorizedSigners, { ...signer, id: Date.now().toString() }]);
+        setAuthorizedSigners([...authorizedSigners, { ...normalizedSigner, id: Date.now().toString() }]);
     }
     setShowSignerForm(false);
     setCurrentSignerEdit(null);
@@ -541,6 +560,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
                 {(errors as any).legalForm && (
                   <p className="mt-1 text-sm text-red-600">{(errors as any).legalForm.message}</p>
                 )}
+
               </div>
 
               <div>
@@ -651,17 +671,7 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  NIF <span className="text-xs text-gray-500">(Numéro d'Identification Fiscale)</span>
-                </label>
-                <input
-                  type="text"
-                  {...register('nif')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Ex: NIF-123456789"
-                />
-              </div>
+              {/* NIF removed for personne physique per request */}
             </div>
           )}
         </div>
@@ -715,10 +725,10 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
                   {...register('legalRepresentativeDocumentType')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="">Sélectionner type...</option>
-                  <option value="CIN">CIN (Carte d'Identité Nationale)</option>
-                  <option value="Passport">Passeport</option>
-                  <option value="DrivingLicense">Permis de Conduire</option>
+                    <option value="">Sélectionner type...</option>
+                    <option value={IdentityDocumentType.CIN}>CIN (Carte d'Identité Nationale)</option>
+                    <option value={IdentityDocumentType.PASSPORT}>Passport</option>
+                    <option value={IdentityDocumentType.DRIVING_LICENSE}>Permis de Conduire</option>
                 </select>
                 {(errors as any).legalRepresentativeDocumentType && (
                   <p className="mt-1 text-sm text-red-600">{(errors as any).legalRepresentativeDocumentType.message}</p>
@@ -1214,9 +1224,9 @@ const ClientEditForm: React.FC<ClientEditFormProps> = ({ customer, onSubmit, onC
                   </>
                 ) : (
                   <>
-                    <option value="CIN">CIN (Carte d'Identité Nationale)</option>
-                    <option value="Passport">Passeport</option>
-                    <option value="DrivingLicense">Permis de Conduire</option>
+                    <option value={IdentityDocumentType.CIN}>CIN (Carte d'Identité Nationale)</option>
+                    <option value={IdentityDocumentType.PASSPORT}>Passport</option>
+                    <option value={IdentityDocumentType.DRIVING_LICENSE}>Permis de Conduire</option>
                   </>
                 )}
               </select>
@@ -1456,9 +1466,9 @@ const AuthorizedSignerForm: React.FC<AuthorizedSignerFormProps> = ({ signer, onS
                 onChange={(e) => setFormData({ ...formData, documentType: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
-                <option value="CIN">CIN</option>
-                <option value="Passport">Passeport</option>
-                <option value="DrivingLicense">Permis de conduire</option>
+                <option value={IdentityDocumentType.CIN}>CIN</option>
+                <option value={IdentityDocumentType.PASSPORT}>Passport</option>
+                <option value={IdentityDocumentType.DRIVING_LICENSE}>Permis de conduire</option>
               </select>
             </div>
 

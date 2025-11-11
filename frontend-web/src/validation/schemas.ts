@@ -1,23 +1,9 @@
 import { z } from 'zod';
 import { BranchStatus, DayOfWeek } from '../types/branch';
 
-// Login schema with French messages (single error per field)
 export const loginSchema = z.object({
-  email: z
-    .string()
-    .min(1, 'Veuillez saisir votre email')
-    .refine((val) => {
-      if (!val || val.trim().length === 0) return true; // empty handled by min
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      return emailRegex.test(val);
-    }, { message: 'Email invalide' }),
-  password: z
-    .string()
-    .min(1, 'Veuillez saisir votre mot de passe')
-    .refine((val) => {
-      if (!val || val.length === 0) return true; // empty handled by min
-      return val.length >= 6;
-    }, { message: 'Le mot de passe doit contenir au moins 6 caractères' }),
+  email: z.string().email('Email invalide'),
+  password: z.string().min(6, 'Le mot de passe doit contenir au moins 6 caractères'),
   rememberMe: z.boolean().optional(),
 });
 
@@ -71,9 +57,6 @@ export type BranchFormDataZ = z.infer<typeof branchSchema>;
 // Dynamic client creation schema (Personne Physique vs Personne Morale)
 export const createClientSchemaZ = (isBusiness: boolean) =>
   z.object({
-    // Flag to identify business vs individual
-    isBusiness: z.boolean().optional(),
-
     // Common fields
     street: z.string().min(5, "L'adresse doit contenir au moins 5 caractères"),
     commune: z.string().min(1, 'La commune est obligatoire'),
@@ -81,12 +64,12 @@ export const createClientSchemaZ = (isBusiness: boolean) =>
     primaryPhone: z
       .string()
       .regex(/^(\+509\s?)?[234579]\d{7}$/i, 'Format de numéro haïtien invalide (ex: +509 3712 3456)'),
-    email: z.string().optional(),
+    email: z.string().email("Format d'email invalide").optional(),
 
-    documentType: z.number().min(0, 'Le type de document est obligatoire'), // Required for all
-    documentNumber: z.string().min(3, 'Le numéro de document doit contenir au moins 3 caractères'), // Required for all
-    issuedDate: z.string().min(1, "La date d'émission est obligatoire"), // Required for all
-    issuingAuthority: z.string().min(1, "L'autorité d'émission est obligatoire"), // Required for all
+    documentType: isBusiness ? z.string().optional() : z.string().min(1, 'Le type de document est obligatoire'),
+    documentNumber: isBusiness ? z.string().optional() : z.string().min(5, 'Le numéro de document doit contenir au moins 5 caractères'),
+    issuedDate: isBusiness ? z.string().optional() : z.string().min(1, "La date d'émission est obligatoire"),
+    issuingAuthority: isBusiness ? z.string().optional() : z.string().min(1, "L'autorité d'émission est obligatoire"),
 
     // Confirmation step
     acceptTerms: z.boolean().refine((v) => v === true, 'Vous devez accepter les conditions'),
@@ -100,39 +83,21 @@ export const createClientSchemaZ = (isBusiness: boolean) =>
           legalForm: z.string().min(1, 'La forme juridique est obligatoire'),
           headOfficeAddress: z.string().min(1, "L'adresse du siège social est obligatoire"),
           companyPhone: z.string().min(1, "Le téléphone de l'entreprise est obligatoire"),
-          companyEmail: z.string().optional(),
+          companyEmail: z.string().email("Format d'email invalide"),
           legalRepresentativeName: z.string().min(1, 'Nom du représentant obligatoire'),
           legalRepresentativeTitle: z.string().min(1, 'Titre du représentant obligatoire'),
           legalRepresentativeDocumentType: z.string().min(1, 'Type de document du représentant obligatoire'),
           legalRepresentativeDocumentNumber: z
             .string()
-            .min(3, 'Le numéro de document doit contenir au moins 3 caractères'),
+            .min(5, 'Le numéro de document doit contenir au moins 5 caractères'),
           legalRepresentativeIssuedDate: z.string().min(1, "La date d'émission du document est obligatoire"),
           legalRepresentativeExpiryDate: z.string().optional().nullable(),
           legalRepresentativeIssuingAuthority: z.string().min(1, "L'autorité d'émission est obligatoire"),
-          // Make individual fields optional for business
-          firstName: z.string().optional(),
-          lastName: z.string().optional(),
-          dateOfBirth: z.string().optional(),
-          gender: z.string().optional(),
         }
       : {
           firstName: z.string().min(2, 'Le prénom doit contenir au moins 2 caractères'),
           lastName: z.string().min(2, 'Le nom doit contenir au moins 2 caractères'),
           dateOfBirth: z.string().min(1, 'La date de naissance est obligatoire'),
           gender: z.string().regex(/^(M|F)$/),
-          // Make business fields optional for individuals
-          companyName: z.string().optional(),
-          legalForm: z.string().optional(),
-          headOfficeAddress: z.string().optional(),
-          companyPhone: z.string().optional(),
-          companyEmail: z.string().optional(),
-          legalRepresentativeName: z.string().optional(),
-          legalRepresentativeTitle: z.string().optional(),
-          legalRepresentativeDocumentType: z.string().optional(),
-          legalRepresentativeDocumentNumber: z.string().optional(),
-          legalRepresentativeIssuedDate: z.string().optional(),
-          legalRepresentativeExpiryDate: z.string().optional().nullable(),
-          legalRepresentativeIssuingAuthority: z.string().optional(),
         }),
-  }).passthrough(); // Allow extra fields not defined in schema
+  });

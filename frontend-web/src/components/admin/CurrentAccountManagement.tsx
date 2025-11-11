@@ -3505,7 +3505,7 @@ const CreateCurrentAccountWithNewCustomerModal: React.FC<{ onClose: () => void; 
         'CIN': 0,
         'PASSPORT': 1,
         'DRIVING_LICENSE': 2,
-        'BIRTH_CERTIFICATE': 3
+  // 'BIRTH_CERTIFICATE' retired from frontend — legacy numeric 3 may still appear from backend but should not be emitted by frontend
       };
       return docTypeMap[String(t).toUpperCase()] ?? 0;
     };
