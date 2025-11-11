@@ -172,7 +172,8 @@ const SavingsCustomerManagement: React.FC = () => {
         const customerIdsWithAccounts = new Set(accounts.map((acc: any) => acc.customerId));
         const customersWithAccounts = results
           .filter(c => customerIdsWithAccounts.has(c.id))
-          .map(normalizeCustomer);
+          .map(normalizeCustomer)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); // Sort by most recent first
         
         setCustomers(Array.isArray(customersWithAccounts) ? customersWithAccounts : []);
         setCustomerAccounts(accounts);
@@ -180,7 +181,10 @@ const SavingsCustomerManagement: React.FC = () => {
         // Charger tous les clients qui ont des comptes d'épargne (partagé)
         const customersWithAccounts = await clientAccountCustomerLoader.loadCustomersHavingAccounts('SAVINGS');
         const accounts = await apiService.getSavingsAccounts({});
-        setCustomers(Array.isArray(customersWithAccounts) ? customersWithAccounts : []);
+        const sortedCustomers = Array.isArray(customersWithAccounts) 
+          ? customersWithAccounts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) // Sort by most recent first
+          : [];
+        setCustomers(sortedCustomers);
         setCustomerAccounts(accounts);
       }
     } catch (error) {

@@ -228,7 +228,14 @@ const CurrentAccountManagement: React.FC<{ showTabs?: boolean }> = ({ showTabs =
         lastTransactionDate: a.lastTransactionDate,
       }));
 
-      setAccounts(mapped);
+      // Sort accounts from most recent to oldest based on openDate
+      const sortedMapped = mapped.sort((a, b) => {
+        const dateA = new Date(a.openDate || 0);
+        const dateB = new Date(b.openDate || 0);
+        return dateB.getTime() - dateA.getTime(); // Most recent first
+      });
+
+      setAccounts(sortedMapped);
       // Update stats based on retrieved data
       await loadStats(mapped);
     } catch (error) {
@@ -1220,7 +1227,13 @@ const ClientsTabCurrent: React.FC<{ onOpenCurrent: (customer: any) => void }> = 
     setLoading(true);
     try {
       const matched = await clientAccountCustomerLoader.loadCustomersHavingAccounts('CURRENT');
-      setResults(matched || []);
+      // Sort by most recent first (createdAt descending)
+      const sorted = Array.isArray(matched) ? matched.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0);
+        const dateB = new Date(b.createdAt || 0);
+        return dateB.getTime() - dateA.getTime();
+      }) : matched;
+      setResults(sorted || []);
       if (!matched?.length) toast('Aucun client trouvé avec compte courant');
     } catch (e) {
       console.error('❌ Error loading current clients:', e);

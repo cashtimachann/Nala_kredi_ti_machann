@@ -160,7 +160,13 @@ const CompleteSavingsAccountManagement: React.FC = () => {
     setLoading(true);
     try {
       const data = await apiService.getSavingsAccounts(filters);
-      setAccounts(data);
+      // Sort accounts from most recent to oldest based on openingDate or createdAt
+      const sortedData = Array.isArray(data) ? data.sort((a, b) => {
+        const dateA = new Date(a.openingDate || a.createdAt || 0);
+        const dateB = new Date(b.openingDate || b.createdAt || 0);
+        return dateB.getTime() - dateA.getTime(); // Most recent first
+      }) : data;
+      setAccounts(sortedData);
     } catch (error) {
       console.error('Error loading accounts:', error);
       toast.error('Erreur lors du chargement des comptes');
