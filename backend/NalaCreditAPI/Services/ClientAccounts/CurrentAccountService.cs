@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using NalaCreditAPI.Data;
 using NalaCreditAPI.DTOs.ClientAccounts;
 using NalaCreditAPI.Models;
-using System.Linq.Dynamic.Core;
 
 namespace NalaCreditAPI.Services.ClientAccounts
 {
@@ -317,6 +316,10 @@ namespace NalaCreditAPI.Services.ClientAccounts
                 .Include(a => a.Branch)
                 .AsQueryable();
 
+            // Sanitize pagination parameters to avoid invalid Skip/Take operations
+            var requestedPage = filter.Page < 1 ? 1 : filter.Page;
+            var pageSize = filter.PageSize < 1 ? 10 : Math.Min(filter.PageSize, 100);
+
             // Apply filters
             if (!string.IsNullOrEmpty(filter.Search))
             {
@@ -349,15 +352,46 @@ namespace NalaCreditAPI.Services.ClientAccounts
 
             var totalCount = await query.CountAsync();
 
-            // Apply sorting
-            var sortBy = filter.SortBy ?? "AccountNumber";
-            var sortDirection = filter.SortDirection?.ToLower() == "desc" ? "descending" : "ascending";
-            query = query.OrderBy($"{sortBy} {sortDirection}");
+            // Clamp page to available range (keep at least 1 when no data)
+            var totalPages = pageSize > 0 ? (int)Math.Ceiling((double)totalCount / pageSize) : 0;
+            var page = totalPages == 0 ? 1 : Math.Min(requestedPage, totalPages);
+
+            // Apply deterministic sorting with a whitelist of supported columns
+            var sortBy = string.IsNullOrWhiteSpace(filter.SortBy) ? "AccountNumber" : filter.SortBy.Trim();
+            var sortDescending = string.Equals(filter.SortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+
+            query = sortBy switch
+            {
+                var s when s.Equals("Balance", StringComparison.OrdinalIgnoreCase)
+                    => sortDescending ? query.OrderByDescending(a => a.Balance) : query.OrderBy(a => a.Balance),
+                var s when s.Equals("OpeningDate", StringComparison.OrdinalIgnoreCase)
+                    => sortDescending ? query.OrderByDescending(a => a.OpeningDate) : query.OrderBy(a => a.OpeningDate),
+                var s when s.Equals("LastTransactionDate", StringComparison.OrdinalIgnoreCase)
+                    => sortDescending
+                        ? query.OrderByDescending(a => a.LastTransactionDate ?? a.OpeningDate)
+                        : query.OrderBy(a => a.LastTransactionDate ?? a.OpeningDate),
+                var s when s.Equals("CreatedAt", StringComparison.OrdinalIgnoreCase)
+                    => sortDescending ? query.OrderByDescending(a => a.CreatedAt) : query.OrderBy(a => a.CreatedAt),
+                var s when s.Equals("UpdatedAt", StringComparison.OrdinalIgnoreCase)
+                    => sortDescending ? query.OrderByDescending(a => a.UpdatedAt) : query.OrderBy(a => a.UpdatedAt),
+                var s when s.Equals("CustomerName", StringComparison.OrdinalIgnoreCase)
+                    => sortDescending
+                        ? query.OrderByDescending(a => a.Customer != null ? a.Customer.FirstName : string.Empty)
+                               .ThenByDescending(a => a.Customer != null ? a.Customer.LastName : string.Empty)
+                        : query.OrderBy(a => a.Customer != null ? a.Customer.FirstName : string.Empty)
+                               .ThenBy(a => a.Customer != null ? a.Customer.LastName : string.Empty),
+                var s when s.Equals("BranchId", StringComparison.OrdinalIgnoreCase)
+                    => sortDescending ? query.OrderByDescending(a => a.BranchId) : query.OrderBy(a => a.BranchId),
+                var s when s.Equals("Currency", StringComparison.OrdinalIgnoreCase)
+                    => sortDescending ? query.OrderByDescending(a => a.Currency) : query.OrderBy(a => a.Currency),
+                _
+                    => sortDescending ? query.OrderByDescending(a => a.AccountNumber) : query.OrderBy(a => a.AccountNumber)
+            };
 
             // Apply pagination
             var accounts = await query
-                .Skip((filter.Page - 1) * filter.PageSize)
-                .Take(filter.PageSize)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync();
 
             var accountDtos = new List<CurrentAccountResponseDto>();
@@ -370,9 +404,9 @@ namespace NalaCreditAPI.Services.ClientAccounts
             {
                 Accounts = accountDtos,
                 TotalCount = totalCount,
-                Page = filter.Page,
-                PageSize = filter.PageSize,
-                TotalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize),
+                Page = page,
+                PageSize = pageSize,
+                TotalPages = totalPages,
                 Statistics = await GetStatisticsAsync()
             };
         }
