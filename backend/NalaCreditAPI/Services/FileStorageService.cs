@@ -30,7 +30,7 @@ namespace NalaCreditAPI.Services
             _baseUploadPath = Path.Combine(_environment.WebRootPath ?? _environment.ContentRootPath, "uploads");
 
             // URL de base pour accéder aux fichiers
-            _baseUrl = configuration["FileStorage:BaseUrl"] ?? "http://localhost:7001/uploads";
+            _baseUrl = configuration["FileStorage:BaseUrl"] ?? "/uploads";
 
             // Créer le dossier uploads s'il n'existe pas
             if (!Directory.Exists(_baseUploadPath))
