@@ -52,32 +52,80 @@ class ApiService {
       },
     });
 
-    // Request interceptor to add auth token (now reads from localStorage for consistency)
+    console.log('🔧 ApiService initialized:', {
+      baseURL: this.api.defaults.baseURL,
+      hasAuthService: !!authService,
+      initialToken: !!authService?.getAuthToken?.()
+    });
+
+    this.setupInterceptors();
+  }
+
+  private setupInterceptors(): void {
+    // Request interceptor to add auth token - USING authService CONSISTENTLY
     this.api.interceptors.request.use(
       (config) => {
-        const token = localStorage.getItem('token');
+        const token = authService?.getAuthToken?.();
+        console.log('🔐 Interceptor - Token found:', !!token, 'for URL:', config.url);
+        
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
+          console.log('✅ Authorization header set for:', config.url);
+        } else {
+          console.warn('⚠️ No token found for request:', config.url);
         }
         return config;
       },
       (error) => {
+        console.error('❌ Request interceptor error:', error);
         return Promise.reject(error);
       }
     );
 
-    // Response interceptor to handle auth errors
+    // Response interceptor to handle auth errors - USING authService CONSISTENTLY
     this.api.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        console.log('✅ Response received:', response.status, response.config.url);
+        return response;
+      },
       (error) => {
+        console.error('❌ Response error:', {
+          url: error.config?.url,
+          status: error.response?.status,
+          message: error.message
+        });
+        
         if (error.response?.status === 401) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          window.location.href = '/login';
+          console.warn('🚨 401 Unauthorized - Clearing tokens and redirecting');
+          authService?.logout?.();
         }
         return Promise.reject(error);
       }
     );
+  }
+
+  // Debug methods
+  public debugAuthState(): void {
+    console.group('🔐 ApiService Authentication Debug');
+    console.log('AuthService token:', authService?.getAuthToken?.());
+    console.log('LocalStorage token:', localStorage.getItem('token'));
+    console.log('BaseURL:', this.api.defaults.baseURL);
+    console.log('Is authenticated:', this.isAuthenticated());
+    console.groupEnd();
+  }
+
+  public async testApiConnection(): Promise<void> {
+    try {
+      console.log('🧪 Testing API connection...');
+      const response = await this.api.get('/CurrentAccount');
+      console.log('✅ API test successful:', response.status);
+    } catch (error: any) {
+      console.error('❌ API test failed:', {
+        status: error.response?.status,
+        message: error.message,
+        url: error.config?.url
+      });
+    }
   }
 
   // Authentication methods - DELEGATED TO AuthService
@@ -209,8 +257,7 @@ class ApiService {
     return response.data;
   }
 
-  // Utility methods
-  // Backward-compatible token/user helpers now aligned to sessionStorage
+  // Utility methods - CONSISTENTLY USING authService
   setAuthToken(token: string): void {
     authService.setAuthToken(token);
   }
@@ -220,11 +267,15 @@ class ApiService {
   }
 
   getAuthToken(): string | null {
-    return authService.getAuthToken();
+    const token = authService.getAuthToken();
+    console.log('🔑 getAuthToken result:', !!token);
+    return token;
   }
 
   isAuthenticated(): boolean {
-    return !!authService.getAuthToken();
+    const isAuth = !!authService.getAuthToken();
+    console.log('🔐 isAuthenticated:', isAuth);
+    return isAuth;
   }
 
   getCurrentUser(): UserInfo | null {
@@ -237,42 +288,31 @@ class ApiService {
 
   // Branch Management methods
   async getAllBranches(): Promise<Branch[]> {
-    // Apply cache with 30s TTL for branch list
     const response: AxiosResponse<Branch[]> = await this.api.get('/branch', {
-      headers: { 'x-cache-ttl': '30' },
+      headers: { 'x-cache-ttl': '30000' },
     });
     return response.data;
   }
 
   async getBranchById(id: number): Promise<Branch> {
-    // Apply cache with 60s TTL for individual branch details
     const response: AxiosResponse<Branch> = await this.api.get(`/branch/${id}`, {
-      headers: { 'x-cache-ttl': '60' },
+      headers: { 'x-cache-ttl': '60000' },
     });
     return response.data;
   }
 
   async createBranch(branchData: CreateBranchRequest): Promise<Branch> {
     const response: AxiosResponse<Branch> = await this.api.post('/branch', branchData);
-    // Invalidate branch cache after creation
-    const { BaseApiService } = await import('./base/BaseApiService');
-    BaseApiService.invalidateCacheByPrefix('/branch');
     return response.data;
   }
 
   async updateBranch(id: number, branchData: UpdateBranchRequest): Promise<Branch> {
     const response: AxiosResponse<Branch> = await this.api.put(`/branch/${id}`, branchData);
-    // Invalidate branch cache after update
-    const { BaseApiService } = await import('./base/BaseApiService');
-    BaseApiService.invalidateCacheByPrefix('/branch');
     return response.data;
   }
 
   async deleteBranch(id: number): Promise<void> {
     await this.api.delete(`/branch/${id}`);
-    // Invalidate branch cache after deletion
-    const { BaseApiService } = await import('./base/BaseApiService');
-    BaseApiService.invalidateCacheByPrefix('/branch');
   }
 
   async activateBranch(id: number): Promise<void> {
@@ -304,18 +344,16 @@ class ApiService {
 
   // Get available managers for branch assignment
   async getAvailableManagers(): Promise<UserInfo[]> {
-    // Apply cache with 60s TTL
     const response: AxiosResponse<UserInfo[]> = await this.api.get('/users/available-managers', {
-      headers: { 'x-cache-ttl': '60' },
+      headers: { 'x-cache-ttl': '60000' },
     });
     return response.data;
   }
 
   // Get all users
   async getAllUsers(): Promise<UserInfo[]> {
-    // Apply cache with 45s TTL
     const response: AxiosResponse<UserInfo[]> = await this.api.get('/users', {
-      headers: { 'x-cache-ttl': '45' },
+      headers: { 'x-cache-ttl': '45000' },
     });
     return response.data;
   }
@@ -485,11 +523,9 @@ class ApiService {
   async getEmployees(searchDto?: EmployeeSearchDto): Promise<Employee[]> {
     const params = new URLSearchParams();
     if (searchDto) {
-      // Map known params to backend expected names
       if (searchDto.branchId) params.append('branchId', searchDto.branchId.toString());
       if (searchDto.searchTerm) params.append('searchTerm', searchDto.searchTerm.toString());
       if (searchDto.status !== undefined && searchDto.status !== null) {
-        // Convert numeric status to string name
         const statusMap: Record<number, string> = { 0: 'Active', 1: 'Inactive', 2: 'Suspended', 3: 'Terminated' };
         const statusName = statusMap[Number(searchDto.status)];
         if (statusName) params.append('status', statusName);
@@ -498,49 +534,36 @@ class ApiService {
         const pos = this.mapFunctionToPosition(Number((searchDto as any).function));
         if (pos) params.append('position', pos);
       }
-      // pass-through dates/pagination if present
       if ((searchDto as any).hireDateFrom) params.append('hireDateFrom', (searchDto as any).hireDateFrom);
       if ((searchDto as any).hireDateTo) params.append('hireDateTo', (searchDto as any).hireDateTo);
       if ((searchDto as any).page) params.append('page', String((searchDto as any).page));
       if ((searchDto as any).pageSize) params.append('pageSize', String((searchDto as any).pageSize));
     }
-    // Apply cache with 20s TTL for employee lists (may vary frequently)
     const response: AxiosResponse<any[]> = await this.api.get(`/employees?${params}`, {
-      headers: { 'x-cache-ttl': '20' },
+      headers: { 'x-cache-ttl': '20000' },
     });
-    // Map server DTOs to frontend Employee shape
     return (response.data || []).map((dto) => this.mapEmployeeDto(dto));
   }
 
   async getEmployee(id: string): Promise<Employee> {
-    // Apply cache with 45s TTL for individual employee details
     const response: AxiosResponse<any> = await this.api.get(`/employees/${id}`, {
-      headers: { 'x-cache-ttl': '45' },
+      headers: { 'x-cache-ttl': '45000' },
     });
     return this.mapEmployeeDto(response.data);
   }
 
   async createEmployee(employeeData: CreateEmployeeDto): Promise<Employee> {
     const response: AxiosResponse<Employee> = await this.api.post('/employees', employeeData);
-    // Invalidate employee cache after creation
-    const { BaseApiService } = await import('./base/BaseApiService');
-    BaseApiService.invalidateCacheByPrefix('/employees');
     return response.data;
   }
 
   async updateEmployee(employeeData: UpdateEmployeeDto): Promise<Employee> {
     const response: AxiosResponse<Employee> = await this.api.put(`/employees/${employeeData.id}`, employeeData);
-    // Invalidate employee cache after update
-    const { BaseApiService } = await import('./base/BaseApiService');
-    BaseApiService.invalidateCacheByPrefix('/employees');
     return response.data;
   }
 
   async deleteEmployee(id: string): Promise<void> {
     await this.api.delete(`/employees/${id}`);
-    // Invalidate employee cache after deletion
-    const { BaseApiService } = await import('./base/BaseApiService');
-    BaseApiService.invalidateCacheByPrefix('/employees');
   }
 
   async getEmployeesByBranch(branchId: string): Promise<Employee[]> {
@@ -958,7 +981,6 @@ class ApiService {
 
   private mapStatus(value: any): 'ACTIVE' | 'INACTIVE' | 'CLOSED' | 'SUSPENDED' {
     if (typeof value === 'number') {
-      // Backend enum: Active=0, Inactive=1, Closed=2, Suspended=3, Locked=4
       switch (value) {
         case 1: return 'INACTIVE';
         case 2: return 'CLOSED';
@@ -1004,7 +1026,6 @@ class ApiService {
   }
 
   private mapClientAccountSummary(dto: any): ClientAccount {
-    // Compatible with both detailed response and summary
     const accountType = this.mapAccountType(dto?.accountType ?? dto?.AccountType);
     const currency = this.mapCurrency(dto?.currency ?? dto?.Currency);
     const status = this.mapStatus(dto?.status ?? dto?.Status);
@@ -1034,10 +1055,8 @@ class ApiService {
       minimumBalance: dto?.minimumBalance ?? dto?.MinimumBalance ?? undefined,
       dailyWithdrawalLimit: dto?.dailyWithdrawalLimit ?? dto?.DailyWithdrawalLimit ?? undefined,
       monthlyWithdrawalLimit: dto?.monthlyWithdrawalLimit ?? dto?.MonthlyWithdrawalLimit ?? undefined,
-      // Additional current account fields (if provided by backend)
       overdraftLimit: dto?.overdraftLimit ?? dto?.OverdraftLimit ?? undefined,
       dailyDepositLimit: dto?.dailyDepositLimit ?? dto?.DailyDepositLimit ?? undefined,
-      // Derive allowOverdraft when possible
       allowOverdraft: (() => {
         const raw = dto?.allowOverdraft ?? dto?.AllowOverdraft;
         if (typeof raw === 'boolean') return raw;
@@ -1052,7 +1071,6 @@ class ApiService {
   private mapClientAccountTransaction(dto: any): AccountTransaction {
     const mapStatus = (v: any): AccountTransaction['status'] => {
       if (typeof v === 'number') {
-        // SavingsTransactionStatus: 0=Pending,1=Completed,2=Cancelled,3=Failed (common mapping)
         switch (v) {
           case 0: return 'PENDING' as any;
           case 1: return 'COMPLETED' as any;
@@ -1070,7 +1088,6 @@ class ApiService {
     };
     const typeMap = (v: any): AccountTransaction['type'] => {
       if (typeof v === 'number') {
-        // SavingsTransactionType: 0=Deposit,1=Withdrawal,2=Interest,3=Fee,4=Transfer
         switch (v) {
           case 1: return 'WITHDRAWAL';
           case 2: return 'INTEREST';
@@ -1103,9 +1120,7 @@ class ApiService {
       processedAt: typeof processedAt === 'string' ? processedAt : new Date(processedAt || Date.now()).toISOString(),
       reference: dto?.reference ?? dto?.Reference ?? undefined,
       receiptNumber: dto?.receiptNumber ?? dto?.ReceiptNumber ?? undefined,
-      // Add status mapping so UI can render CANCELLED/COMPLETED/etc
       status: mapStatus(dto?.status ?? dto?.Status),
-      // Add branch information
       branchId: dto?.branchId ?? dto?.BranchId ?? undefined,
       branchName: dto?.branchName ?? dto?.BranchName ?? undefined,
       branch: dto?.branchName ?? dto?.BranchName ?? dto?.branch ?? dto?.Branch ?? undefined

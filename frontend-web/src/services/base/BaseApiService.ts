@@ -43,51 +43,113 @@ export abstract class BaseApiService {
       },
     });
 
+    console.log('🔧 BaseApiService initialized:', {
+      baseURL: this.api.defaults.baseURL
+    });
+
     this.setupInterceptors();
   }
 
   private setupInterceptors(): void {
-    // Request interceptor pour ajouter le token d'authentification
+    // Request interceptor pour ajouter le token d'authentification - USING getAuthToken() CONSISTENTLY
     this.api.interceptors.request.use(
       (config) => {
         const token = this.getAuthToken();
+        console.log('🔐 BaseApiService Interceptor - Token found:', !!token, 'for URL:', config.url);
+        
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
+          console.log('✅ BaseApiService Authorization header set for:', config.url);
+        } else {
+          console.warn('⚠️ BaseApiService No token found for request:', config.url);
         }
         return config;
       },
-      (error) => Promise.reject(error)
+      (error) => {
+        console.error('❌ BaseApiService Request interceptor error:', error);
+        return Promise.reject(error);
+      }
     );
 
-    // Response interceptor pour gérer les erreurs d'authentification
+    // Response interceptor pour gérer les erreurs d'authentification - USING clearAuthToken() CONSISTENTLY
     this.api.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        console.log('✅ BaseApiService Response received:', response.status, response.config.url);
+        return response;
+      },
       (error) => {
+        console.error('❌ BaseApiService Response error:', {
+          url: error.config?.url,
+          status: error.response?.status,
+          message: error.message
+        });
+        
         if (error.response?.status === 401) {
-          this.clearAuthToken();
-          window.location.href = '/login';
+          console.warn('🚨 BaseApiService 401 Unauthorized - Clearing tokens');
+          this.handleUnauthorized();
         }
         return Promise.reject(error);
       }
     );
   }
 
+  // Debug methods
+  public debugAuthState(): void {
+    console.group('🔐 BaseApiService Authentication Debug');
+    console.log('getAuthToken result:', !!this.getAuthToken());
+    console.log('LocalStorage token:', localStorage.getItem('token'));
+    console.log('BaseURL:', this.api.defaults.baseURL);
+    console.groupEnd();
+  }
+
+  protected handleUnauthorized(): void {
+    console.warn('🔒 BaseApiService Handling unauthorized access');
+    this.clearAuthToken();
+    
+    // Anpeche redirect loop - only redirect if not already on login page
+    if (!window.location.pathname.includes('/login')) {
+      const redirectUrl = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/login?redirect=${redirectUrl}`;
+    }
+  }
+
   protected getAuthToken(): string | null {
-    return localStorage.getItem('token');
+    // Tcheke plizyè kote kote token ka sere - SÈLMAN localStorage pou konsistans
+    const token = 
+      localStorage.getItem('token') ||
+      localStorage.getItem('authToken');
+    
+    console.log('🔑 BaseApiService getAuthToken result:', !!token);
+    return token;
   }
 
   protected setAuthToken(token: string): void {
+    console.log('💾 BaseApiService Setting auth token');
     localStorage.setItem('token', token);
   }
 
   protected clearAuthToken(): void {
+    console.log('🧹 BaseApiService Clearing all auth tokens');
+    // Efase tout token ki ka egziste - SÈLMAN localStorage pou konsistans
     localStorage.removeItem('token');
+    localStorage.removeItem('authToken');
     localStorage.removeItem('user');
   }
 
   protected async request<T>(config: AxiosRequestConfig): Promise<T> {
-    const response: AxiosResponse<T> = await this.api.request(config);
-    return response.data;
+    console.log('🚀 BaseApiService Making request:', config.method?.toUpperCase(), config.url);
+    try {
+      const response: AxiosResponse<T> = await this.api.request(config);
+      console.log('✅ BaseApiService Request successful:', response.status, config.url);
+      return response.data;
+    } catch (error) {
+      console.error('❌ BaseApiService Request failed:', {
+        url: config.url,
+        method: config.method,
+        error: error
+      });
+      throw error;
+    }
   }
 
   protected async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
@@ -101,8 +163,10 @@ export abstract class BaseApiService {
       const now = Date.now();
       const cached = BaseApiService.cache.get(key) as CacheEntry<T> | undefined;
       if (cached && cached.expiresAt > now) {
+        console.log('💾 BaseApiService Cache hit for:', url);
         return cached.data;
       }
+      console.log('🔍 BaseApiService Cache miss for:', url);
       const data = await this.request<T>({ ...config, method: 'GET', url });
       BaseApiService.cache.set(key, { data, expiresAt: now + ttlMs });
       return data;
