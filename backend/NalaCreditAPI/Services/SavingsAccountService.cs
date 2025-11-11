@@ -67,6 +67,18 @@ namespace NalaCreditAPI.Services.Savings
                 }
 
                 // 2. Créer le compte
+                // Vérifier qu'un compte d'épargne avec cette devise n'existe pas déjà pour ce client
+                var existingAccount = await _context.SavingsAccounts
+                    .FirstOrDefaultAsync(sa => sa.CustomerId == customerId &&
+                                             sa.Currency == dto.Currency &&
+                                             sa.Status == SavingsAccountStatus.Active);
+
+                if (existingAccount != null)
+                {
+                    var currencyName = dto.Currency == SavingsCurrency.HTG ? "HTG" : "USD";
+                    throw new InvalidOperationException($"Le client possède déjà un compte d'épargne en {currencyName}. Un client ne peut avoir qu'un seul compte par devise.");
+                }
+
                 var account = new SavingsAccount
                 {
                     Id = Guid.NewGuid().ToString(),

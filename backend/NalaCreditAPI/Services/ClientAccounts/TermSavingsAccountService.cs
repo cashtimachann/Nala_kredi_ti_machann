@@ -40,6 +40,18 @@ namespace NalaCreditAPI.Services.ClientAccounts
             if (customer == null)
                 throw new ArgumentException("Client introuvable");
 
+            // Vérifier qu'un compte d'épargne à terme avec cette devise n'existe pas déjà pour ce client
+            var existingAccount = await _context.TermSavingsAccounts
+                .FirstOrDefaultAsync(tsa => tsa.CustomerId == dto.CustomerId &&
+                                          tsa.Currency == dto.Currency &&
+                                          tsa.Status == ClientAccountStatus.Active);
+
+            if (existingAccount != null)
+            {
+                var currencyName = dto.Currency == ClientCurrency.HTG ? "HTG" : "USD";
+                throw new InvalidOperationException($"Le client possède déjà un compte d'épargne à terme en {currencyName}. Un client ne peut avoir qu'un seul compte par devise.");
+            }
+
             // Générer le numéro de compte selon la devise: G + 11 chiffres (HTG) ou D + 11 chiffres (USD)
             var accountNumber = await GenerateAccountNumber(dto.Currency);
 

@@ -267,6 +267,8 @@ public class ApplicationDbContext : IdentityDbContext<User>
                   .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(sa => sa.AccountNumber).IsUnique();
+            entity.HasIndex(sa => new { sa.CustomerId, sa.Currency }).IsUnique()
+                  .HasDatabaseName("IX_SavingsAccounts_CustomerId_Currency_Unique");
             entity.HasIndex(sa => new { sa.Status, sa.Currency });
             entity.HasIndex(sa => sa.OpeningDate);
         });
@@ -304,6 +306,8 @@ public class ApplicationDbContext : IdentityDbContext<User>
                   .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(ca => ca.AccountNumber).IsUnique();
+            entity.HasIndex(ca => new { ca.CustomerId, ca.Currency }).IsUnique()
+                  .HasDatabaseName("IX_CurrentAccounts_CustomerId_Currency_Unique");
             entity.HasIndex(ca => new { ca.Status, ca.Currency });
             entity.HasIndex(ca => ca.OpeningDate);
         });
@@ -334,6 +338,8 @@ public class ApplicationDbContext : IdentityDbContext<User>
                   .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(tsa => tsa.AccountNumber).IsUnique();
+            entity.HasIndex(tsa => new { tsa.CustomerId, tsa.Currency }).IsUnique()
+                  .HasDatabaseName("IX_TermSavingsAccounts_CustomerId_Currency_Unique");
             entity.HasIndex(tsa => new { tsa.Status, tsa.Currency });
             entity.HasIndex(tsa => tsa.MaturityDate);
             entity.HasIndex(tsa => tsa.OpeningDate);
