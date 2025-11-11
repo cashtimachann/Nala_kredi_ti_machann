@@ -186,7 +186,23 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "https://localhost:3000", "http://localhost:3001", "https://localhost:3001")
+        // Development origins
+        var origins = new List<string>
+        {
+            "http://localhost:3000",
+            "https://localhost:3000",
+            "http://localhost:3001",
+            "https://localhost:3001"
+        };
+
+        // Add production origins from configuration
+        var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>();
+        if (corsOrigins != null && corsOrigins.Length > 0)
+        {
+            origins.AddRange(corsOrigins);
+        }
+
+        policy.WithOrigins(origins.ToArray())
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials(); // Required for SignalR
