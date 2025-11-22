@@ -47,7 +47,7 @@ public static class DbInitializer
         // }
         // Console.WriteLine("✅ Tous les utilisateurs existants supprimés");
 
-        // Create super admin user if it doesn't exist
+        // Create or reset super admin user
         var superAdminEmail = "superadmin@nalacredit.com";
         var superAdmin = await userManager.FindByEmailAsync(superAdminEmail);
 
@@ -69,6 +69,30 @@ public static class DbInitializer
             {
                 await userManager.AddToRoleAsync(superAdmin, "SuperAdmin");
             }
+        }
+        else
+        {
+            // Reset superadmin user to ensure correct role and password
+            superAdmin.Role = UserRole.SuperAdmin;
+            superAdmin.IsActive = true;
+            superAdmin.EmailConfirmed = true;
+
+            // Reset password
+            var resetToken = await userManager.GeneratePasswordResetTokenAsync(superAdmin);
+            await userManager.ResetPasswordAsync(superAdmin, resetToken, "SuperAdmin123!");
+
+            // Ensure user is in SuperAdmin role
+            if (!await userManager.IsInRoleAsync(superAdmin, "SuperAdmin"))
+            {
+                // Remove from any existing roles first
+                var currentRoles = await userManager.GetRolesAsync(superAdmin);
+                await userManager.RemoveFromRolesAsync(superAdmin, currentRoles);
+
+                // Add to SuperAdmin role
+                await userManager.AddToRoleAsync(superAdmin, "SuperAdmin");
+            }
+
+            await userManager.UpdateAsync(superAdmin);
         }
 
         // Seed system configuration if empty

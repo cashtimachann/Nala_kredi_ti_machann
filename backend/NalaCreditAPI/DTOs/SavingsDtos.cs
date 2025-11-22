@@ -325,6 +325,7 @@ namespace NalaCreditAPI.DTOs.Savings
         public SavingsCurrency Currency { get; set; }
         public decimal Balance { get; set; }
         public decimal AvailableBalance { get; set; }
+        public decimal BlockedBalance { get; set; }
         public decimal MinimumBalance { get; set; }
         public DateTime OpeningDate { get; set; }
         public DateTime? LastTransactionDate { get; set; }

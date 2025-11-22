@@ -14,13 +14,16 @@ namespace NalaCreditAPI.Controllers
     public class MicrocreditLoanApplicationController : ControllerBase
     {
         private readonly IMicrocreditLoanApplicationService _loanApplicationService;
+        private readonly IFileStorageService _fileStorageService;
         private readonly ILogger<MicrocreditLoanApplicationController> _logger;
 
         public MicrocreditLoanApplicationController(
             IMicrocreditLoanApplicationService loanApplicationService,
+            IFileStorageService fileStorageService,
             ILogger<MicrocreditLoanApplicationController> logger)
         {
             _loanApplicationService = loanApplicationService;
+            _fileStorageService = fileStorageService;
             _logger = logger;
         }
 
@@ -167,7 +170,7 @@ namespace NalaCreditAPI.Controllers
         /// Réviser une demande de crédit
         /// </summary>
         [HttpPost("{id}/review")]
-        [Authorize(Roles = "SuperAdmin,Admin,Manager,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,Employee")]
         public async Task<ActionResult<MicrocreditLoanApplicationDto>> ReviewApplication(Guid id, [FromBody] ReviewApplicationDto dto)
         {
             try
@@ -205,7 +208,7 @@ namespace NalaCreditAPI.Controllers
         /// Approuver une demande de crédit
         /// </summary>
         [HttpPost("{id}/approve")]
-        [Authorize(Roles = "SuperAdmin,Admin,Manager,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,Employee")]
         public async Task<ActionResult<MicrocreditLoanApplicationDto>> ApproveApplication(Guid id, [FromBody] ApproveApplicationDto dto)
         {
             try
@@ -221,7 +224,7 @@ namespace NalaCreditAPI.Controllers
                     return Unauthorized("Approver ID not found in token");
                 }
 
-                var application = await _loanApplicationService.ApproveApplicationAsync(id, approverId, dto.Comments, dto.ApprovedAmount);
+                var application = await _loanApplicationService.ApproveApplicationAsync(id, approverId, dto.Comments, dto.ApprovedAmount, dto.DisbursementDate);
                 return Ok(application);
             }
             catch (ArgumentException ex)
@@ -243,7 +246,7 @@ namespace NalaCreditAPI.Controllers
         /// Rejeter une demande de crédit
         /// </summary>
         [HttpPost("{id}/reject")]
-        [Authorize(Roles = "SuperAdmin,Admin,Manager,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,Employee")]
         public async Task<ActionResult<MicrocreditLoanApplicationDto>> RejectApplication(Guid id, [FromBody] RejectApplicationDto dto)
         {
             try
@@ -324,6 +327,193 @@ namespace NalaCreditAPI.Controllers
                 return StatusCode(500, "An error occurred while validating the loan application");
             }
         }
+
+        /// <summary>
+        /// Obtenir les statistiques du tableau de bord
+        /// </summary>
+        [HttpGet("dashboard/stats")]
+        [Authorize]
+        public async Task<ActionResult<MicrocreditDashboardStatsDto>> GetDashboardStats([FromQuery] int? branchId = null)
+        {
+            try
+            {
+                var stats = await _loanApplicationService.GetDashboardStatsAsync(branchId);
+                return Ok(stats);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving dashboard stats");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        /// <summary>
+        /// Obtenir les performances des agents
+        /// </summary>
+        [HttpGet("dashboard/agent-performance")]
+        [Authorize]
+        public async Task<ActionResult<List<AgentPerformanceDto>>> GetAgentPerformance([FromQuery] int? branchId = null, [FromQuery] int months = 6)
+        {
+            try
+            {
+                var performance = await _loanApplicationService.GetAgentPerformanceAsync(branchId, months);
+                return Ok(performance);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving agent performance data");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        /// <summary>
+        /// Obtenir les tendances du portefeuille
+        /// </summary>
+        [HttpGet("dashboard/portfolio-trend")]
+        [Authorize]
+        public async Task<ActionResult<List<PortfolioTrendDto>>> GetPortfolioTrend([FromQuery] int? branchId = null, [FromQuery] int months = 12)
+        {
+            try
+            {
+                var trends = await _loanApplicationService.GetPortfolioTrendAsync(branchId, months);
+                return Ok(trends);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving portfolio trend data");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        /// <summary>
+        /// Upload un document pour une demande de crédit
+        /// </summary>
+        [HttpPost("{id}/documents")]
+        [RequestSizeLimit(5_242_880)] // 5MB max
+        public async Task<ActionResult<MicrocreditApplicationDocumentDto>> UploadDocument(
+            Guid id,
+            [FromForm] IFormFile file,
+            [FromForm] string documentType,
+            [FromForm] string? description = null)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized("Utilisateur non authentifié");
+
+                // Parser le type de document
+                if (!Enum.TryParse<MicrocreditDocumentType>(documentType, out var docType))
+                    return BadRequest(new { message = $"Type de document invalide: {documentType}" });
+
+                var document = await _loanApplicationService.UploadDocumentAsync(id, file, docType, userId, description);
+
+                _logger.LogInformation(
+                    "Document uploaded for application {ApplicationId} by user {UserId}",
+                    id, userId);
+
+                return Ok(document);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error uploading document for application {ApplicationId}", id);
+                return StatusCode(500, new { message = "Erreur lors de l'upload du document" });
+            }
+        }
+
+        /// <summary>
+        /// Obtenir les documents d'une demande de crédit
+        /// </summary>
+        [HttpGet("{id}/documents")]
+        public async Task<ActionResult<List<MicrocreditApplicationDocumentDto>>> GetApplicationDocuments(Guid id)
+        {
+            try
+            {
+                var documents = await _loanApplicationService.GetApplicationDocumentsAsync(id);
+                return Ok(documents);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving documents for application {ApplicationId}", id);
+                return StatusCode(500, new { message = "Erreur lors de la récupération des documents" });
+            }
+        }
+
+        /// <summary>
+        /// Supprimer un document d'une demande de crédit
+        /// </summary>
+        [HttpDelete("documents/{documentId}")]
+        public async Task<IActionResult> DeleteDocument(Guid documentId)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized("Utilisateur non authentifié");
+
+                await _loanApplicationService.DeleteDocumentAsync(documentId, userId);
+
+                _logger.LogInformation(
+                    "Document {DocumentId} deleted by user {UserId}",
+                    documentId, userId);
+
+                return Ok(new { message = "Document supprimé avec succès" });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting document {DocumentId}", documentId);
+                return StatusCode(500, new { message = "Erreur lors de la suppression du document" });
+            }
+        }
+
+        /// <summary>
+        /// Télécharger un document d'une demande de crédit
+        /// </summary>
+        [HttpGet("{id}/documents/{documentId}/download")]
+        public async Task<IActionResult> DownloadDocument(Guid id, Guid documentId)
+        {
+            try
+            {
+                var documents = await _loanApplicationService.GetApplicationDocumentsAsync(id);
+                var doc = documents.FirstOrDefault(d => d.Id == documentId);
+                if (doc == null)
+                {
+                    return NotFound(new { message = "Document introuvable pour cette demande" });
+                }
+
+                // file path stored is 'microcredit/applications/{applicationId}/documents/{fileName}'
+                var fileName = doc.FilePath?.Split('/').Last();
+                if (string.IsNullOrEmpty(fileName))
+                {
+                    return NotFound(new { message = "Nom du fichier introuvable" });
+                }
+
+                var (fileBytes, contentType) = await _fileStorageService.GetFileAsync(fileName);
+                if (fileBytes == null)
+                {
+                    return NotFound(new { message = "Fichier introuvable" });
+                }
+
+                return File(fileBytes, contentType, doc.Name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error downloading document {DocumentId} for application {ApplicationId}", documentId, id);
+                return StatusCode(500, new { message = "Erreur lors du téléchargement du document" });
+            }
+        }
     }
 
     // DTOs pour les actions de révision/approbation/rejet
@@ -340,6 +530,8 @@ namespace NalaCreditAPI.Controllers
         
         [Range(0.01, double.MaxValue, ErrorMessage = "Approved amount must be greater than 0")]
         public decimal? ApprovedAmount { get; set; }
+        
+        public DateTime? DisbursementDate { get; set; }
     }
 
     public class RejectApplicationDto

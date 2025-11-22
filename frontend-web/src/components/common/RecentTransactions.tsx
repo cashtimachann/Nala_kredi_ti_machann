@@ -16,39 +16,9 @@ const RecentTransactions: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate API call - replace with actual API call
-    const mockTransactions: Transaction[] = [
-      {
-        id: 1,
-        type: 'Deposit',
-        amount: 50000,
-        currency: 'HTG',
-        time: new Date().toISOString(),
-        customer: 'Jean Baptiste',
-        status: 'Completed'
-      },
-      {
-        id: 2,
-        type: 'Withdrawal',
-        amount: 200,
-        currency: 'USD',
-        time: new Date(Date.now() - 300000).toISOString(),
-        customer: 'Marie Joseph',
-        status: 'Completed'
-      },
-      {
-        id: 3,
-        type: 'CurrencyExchange',
-        amount: 100,
-        currency: 'USD',
-        time: new Date(Date.now() - 600000).toISOString(),
-        customer: 'Pierre Michel',
-        status: 'Completed'
-      }
-    ];
-
+    // TODO: Replace with actual API call
     setTimeout(() => {
-      setTransactions(mockTransactions);
+      setTransactions([]);
       setLoading(false);
     }, 1000);
   }, []);

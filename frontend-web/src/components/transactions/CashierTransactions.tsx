@@ -63,35 +63,9 @@ const CashierTransactions: React.FC = () => {
   const loadTransactions = async () => {
     setLoading(true);
     try {
-      // Simulated data - replace with API call
-      const mockTransactions: Transaction[] = [
-        {
-          id: '1',
-          type: 'DEPOSIT',
-          accountNumber: 'G00100000001',
-          customerName: 'Marie Dupont',
-          amount: 5000,
-          currency: 'HTG',
-          status: 'COMPLETED',
-          referenceNumber: 'DEP-2025-001',
-          createdAt: new Date().toISOString(),
-          processedBy: 'Caissier 1'
-        },
-        {
-          id: '2',
-          type: 'WITHDRAWAL',
-          accountNumber: 'G00100000002',
-          customerName: 'Jean Baptiste',
-          amount: 3000,
-          currency: 'HTG',
-          status: 'COMPLETED',
-          referenceNumber: 'WDR-2025-001',
-          createdAt: new Date(Date.now() - 3600000).toISOString(),
-          processedBy: 'Caissier 1'
-        }
-      ];
-      setTransactions(mockTransactions);
-      setFilteredTransactions(mockTransactions);
+      // TODO: Replace with actual API call
+      setTransactions([]);
+      setFilteredTransactions([]);
     } catch (error) {
       toast.error('Erreur lors du chargement des transactions');
     } finally {

@@ -16,75 +16,9 @@ interface AccountDetailsProps {
   onUpdate: (account: SavingsAccount) => void;
 }
 
-// Données d'exemple pour l'historique des transactions
-const mockTransactions: Transaction[] = [
-  {
-    id: 'txn1',
-    accountId: '1',
-    accountNumber: '001234567890',
-    type: TransactionType.OPENING_DEPOSIT,
-    amount: 10000,
-    currency: Currency.HTG,
-    balanceBefore: 0,
-    balanceAfter: 10000,
-    description: 'Dépôt initial d\'ouverture de compte',
-    reference: 'TXN-20230115-001',
-    processedBy: 'admin1',
-    processedByName: 'Marie Dupont',
-    branchId: 1,
-    branchName: 'Succursale Centre-Ville',
-    status: TransactionStatus.COMPLETED,
-    processedAt: '2023-01-15T10:30:00Z',
-    createdAt: '2023-01-15T10:30:00Z',
-    fees: 0,
-    receiptNumber: 'RCP-20230115-001'
-  },
-  {
-    id: 'txn2',
-    accountId: '1',
-    accountNumber: '001234567890',
-    type: TransactionType.DEPOSIT,
-    amount: 5000,
-    currency: Currency.HTG,
-    balanceBefore: 10000,
-    balanceAfter: 15000,
-    description: 'Dépôt en espèces',
-    reference: 'TXN-20240108-045',
-    processedBy: 'cashier2',
-    processedByName: 'Jean Baptiste',
-    branchId: 1,
-    branchName: 'Succursale Centre-Ville',
-    status: TransactionStatus.COMPLETED,
-    processedAt: '2024-01-08T14:15:00Z',
-    createdAt: '2024-01-08T14:15:00Z',
-    fees: 0,
-    receiptNumber: 'RCP-20240108-045'
-  },
-  {
-    id: 'txn3',
-    accountId: '1',
-    accountNumber: '001234567890',
-    type: TransactionType.INTEREST,
-    amount: 125.50,
-    currency: Currency.HTG,
-    balanceBefore: 15000,
-    balanceAfter: 15125.50,
-    description: 'Intérêts accumulés - Janvier 2024',
-    reference: 'INT-20240131-001',
-    processedBy: 'system',
-    processedByName: 'Système Automatique',
-    branchId: 1,
-    branchName: 'Succursale Centre-Ville',
-    status: TransactionStatus.COMPLETED,
-    processedAt: '2024-01-31T23:59:00Z',
-    createdAt: '2024-01-31T23:59:00Z',
-    fees: 0
-  }
-];
-
 const AccountDetails: React.FC<AccountDetailsProps> = ({ account, onBack, onUpdate }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'statement'>('overview');
-  const [transactions, setTransactions] = useState<Transaction[]>(mockTransactions);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [transactionType, setTransactionType] = useState<TransactionType.DEPOSIT | TransactionType.WITHDRAWAL>(TransactionType.DEPOSIT);
   const [dateRange, setDateRange] = useState({ from: '', to: '' });

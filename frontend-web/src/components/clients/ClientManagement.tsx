@@ -108,63 +108,8 @@ const ClientManagement: React.FC = () => {
         setTotalCount(data.totalCount);
         setTotalPages(data.totalPages);
       } else {
-        // Fallback demo data
-        const demoBorrowers: Borrower[] = [
-          {
-            id: '1',
-            firstName: 'Jean',
-            lastName: 'Baptiste',
-            fullName: 'Jean Baptiste',
-            dateOfBirth: '1985-03-15',
-            gender: 'M',
-            occupation: 'Commerçant',
-            monthlyIncome: 45000,
-            employmentType: 'Self-employed',
-            creditScore: 720,
-            createdAt: '2024-01-15T10:00:00',
-            updatedAt: '2024-01-15T10:00:00',
-            totalLoans: 3,
-            activeLoans: 1,
-            totalOutstanding: 85000,
-            lastLoanDate: '2024-10-01T00:00:00'
-          },
-          {
-            id: '2',
-            firstName: 'Marie',
-            lastName: 'Jeanne',
-            fullName: 'Marie Jeanne',
-            dateOfBirth: '1990-07-22',
-            gender: 'F',
-            occupation: 'Enseignante',
-            monthlyIncome: 35000,
-            employmentType: 'Employed',
-            creditScore: 680,
-            createdAt: '2024-02-20T14:30:00',
-            updatedAt: '2024-02-20T14:30:00',
-            totalLoans: 2,
-            activeLoans: 0,
-            totalOutstanding: 0,
-            lastLoanDate: '2024-08-15T00:00:00'
-          },
-          {
-            id: '3',
-            firstName: 'Paul',
-            lastName: 'Léon',
-            fullName: 'Paul Léon',
-            dateOfBirth: '1978-11-08',
-            gender: 'M',
-            occupation: 'Agriculteur',
-            monthlyIncome: 25000,
-            employmentType: 'Self-employed',
-            creditScore: 550,
-            createdAt: '2024-03-10T09:15:00',
-            updatedAt: '2024-03-10T09:15:00',
-            totalLoans: 4,
-            activeLoans: 2,
-            totalOutstanding: 125000,
-            lastLoanDate: '2024-09-20T00:00:00'
-          }
-        ];
+        // Fallback demo data - TODO: Remove in production
+        const demoBorrowers: Borrower[] = [];
         setBorrowers(demoBorrowers);
         setTotalCount(demoBorrowers.length);
         setTotalPages(Math.ceil(demoBorrowers.length / pageSize));

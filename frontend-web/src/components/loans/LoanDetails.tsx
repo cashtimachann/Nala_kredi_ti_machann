@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Download,
@@ -18,11 +18,22 @@ import {
   TrendingUp,
   Percent,
   CreditCard,
-  Printer
+  Printer,
+  Loader
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PaymentRecording from './PaymentRecording';
+import {
+  roundCurrency,
+  resolveMonthlyRatePercent,
+  calculateMonthlyPaymentFromMonthlyRate,
+  generateAmortizationSchedule
+} from './loanRateUtils';
 import { LoanType, LoanStatus } from '../../types/microcredit';
+import { microcreditLoanService } from '../../services/microcreditLoanService';
+import { microcreditLoanApplicationService } from '../../services/microcreditLoanApplicationService';
+import { ApplicationDocument } from '../../types/microcredit';
+import { microcreditPaymentService } from '../../services/microcreditPaymentService';
 
 interface Loan {
   id: string;
@@ -30,9 +41,17 @@ interface Loan {
   customerId: string;
   customerName: string;
   customerCode?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  savingsAccountNumber?: string;
+  customerAddress?: string;
+  occupation?: string;
+  monthlyIncome?: number;
+  dependents?: number;
   loanType: LoanType;
   principalAmount: number;
   interestRate: number;
+  monthlyInterestRate?: number;
   termMonths: number;
   monthlyPayment: number;
   disbursementDate: string;
@@ -47,18 +66,21 @@ interface Loan {
   loanOfficer: string;
   createdAt: string;
   approvedBy?: string;
+  approvedByName?: string;
   approvedAt?: string;
   daysOverdue?: number;
   nextPaymentDate?: string;
   nextPaymentAmount?: number;
+  loanRecordId?: string; // Backend loan ID
+  applicationId?: string; // Application ID
 }
 
 interface PaymentScheduleItem {
   installmentNumber: number;
   dueDate: string;
   principalAmount: number;
-  interestAmount: number;
-  totalPayment: number;
+  interestAmount: number | null;
+  totalPayment: number | null;
   remainingBalance: number;
   status: 'PAID' | 'PENDING' | 'OVERDUE' | 'UPCOMING';
   paidDate?: string;
@@ -87,6 +109,272 @@ interface LoanDetailsProps {
 const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPayment }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'schedule' | 'history' | 'documents'>('overview');
   const [showPaymentRecording, setShowPaymentRecording] = useState(false);
+  const [paymentSchedule, setPaymentSchedule] = useState<PaymentScheduleItem[]>([]);
+  const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
+  const [applicationDocuments, setApplicationDocuments] = useState<ApplicationDocument[]>([]);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [loadingSchedule, setLoadingSchedule] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  const getMonthlyInterestRatePercent = (defaultValue = 3.5): number => {
+    return resolveMonthlyRatePercent(loan.monthlyInterestRate, loan.interestRate, defaultValue);
+  };
+
+  // Load payment schedule from backend API
+  useEffect(() => {
+    if (loan.loanRecordId || loan.id) {
+      loadPaymentSchedule();
+    }
+  }, [loan.loanRecordId, loan.id]);
+
+  // Load payment history from backend API
+  useEffect(() => {
+    if (loan.loanRecordId || loan.id) {
+      loadPaymentHistory();
+    }
+  }, [loan.loanRecordId, loan.id]);
+
+  useEffect(() => {
+    if (loan.applicationId) {
+      loadApplicationDocuments();
+    }
+  }, [loan.applicationId]);
+
+  const loadPaymentSchedule = async () => {
+    const loanId = loan.loanRecordId || loan.id;
+    if (!loanId) {
+      setScheduleError('ID du prêt non disponible');
+      return;
+    }
+
+    setLoadingSchedule(true);
+    setScheduleError(null);
+    
+    try {
+      const schedule = await microcreditLoanService.getPaymentSchedule(loanId);
+      
+      // Map backend data to component format
+      const mappedSchedule: PaymentScheduleItem[] = (schedule || []).map(item => ({
+        installmentNumber: item.installmentNumber,
+        dueDate: item.dueDate,
+        // Prefer explicit value, default to 0 if missing
+        principalAmount: item.principalAmount ?? 0,
+        // If backend provided interest amount, use it; otherwise compute from loan monthly rate
+        interestAmount: typeof item.interestAmount === 'number' && item.interestAmount > 0 ? item.interestAmount : null,
+        totalPayment: item.totalAmount ?? null,
+        remainingBalance: 0, // Will be calculated below
+        status: mapPaymentStatus(item.status),
+        paidDate: item.paidDate,
+        paidAmount: item.paidAmount
+      }));
+
+      // If the backend schedule is missing values (interest/total/principal),
+      // compute a full local amortization using the same PMT monthly-rate formula
+      // and use it as a fallback for missing fields so the calendar is consistent.
+      let remainingBalance = roundCurrency(loan.principalAmount);
+      const monthlyRatePercent = getMonthlyInterestRatePercent();
+      const monthlyRate = monthlyRatePercent / 100;
+      const normalizedMonthlyPayment = roundCurrency(
+        loan.monthlyPayment && loan.monthlyPayment > 0 ? loan.monthlyPayment : effectiveMonthlyPayment
+      );
+
+      // prepare an alternate fully-computed schedule to fill missing backend fields
+      // Always compute a local amortization with the same number of installments
+      // so we can render consistent principal/interest/remaining values.
+      const fallbackLocal = generateAmortizationSchedule(
+        loan.principalAmount,
+        monthlyRatePercent,
+        mappedSchedule.length || loan.termMonths,
+        loan.disbursementDate || loan.createdAt
+      );
+
+      mappedSchedule.forEach((item, index) => {
+        const isLastInstallment = index === mappedSchedule.length - 1;
+        
+        // Intérêt calculé sur le solde au DÉBUT de la période
+        // Use the amortization generator's value for principal/interest/total/remaining
+        // to ensure consistency across UI tabs (we still keep backend status/payed info).
+        const fallbackRow = fallbackLocal[index];
+        const interest = fallbackRow ? fallbackRow.interest : (monthlyRate > 0 ? roundCurrency(remainingBalance * monthlyRate) : 0);
+        
+        let principalPortion: number;
+        let totalPayment: number;
+        
+        if (isLastInstallment) {
+          // Dernier versement: capital restant complet + intérêt
+          principalPortion = roundCurrency(remainingBalance);
+          totalPayment = roundCurrency(principalPortion + interest);
+        } else {
+          // Versements normaux: utiliser le paiement mensuel fixe
+          const fallbackPayment = fallbackRow ? fallbackRow.payment : normalizedMonthlyPayment;
+          
+          totalPayment = fallbackPayment;
+          principalPortion = roundCurrency(fallbackPayment - interest);
+          
+          // S'assurer que le capital ne dépasse pas le solde restant
+          if (principalPortion > remainingBalance) {
+            principalPortion = roundCurrency(remainingBalance);
+          }
+        }
+
+        // Mettre à jour l'item avec les valeurs calculées
+        // Use computed values from the amortization generator (consistent across UI)
+        item.principalAmount = principalPortion;
+        item.interestAmount = interest;
+        item.totalPayment = totalPayment;
+
+        // Nouveau solde après paiement du capital
+        remainingBalance = roundCurrency(Math.max(0, remainingBalance - principalPortion));
+        // Prefer the computed remaining balance from our amortization generator
+        item.remainingBalance = remainingBalance;
+      });
+
+      setPaymentSchedule(mappedSchedule);
+    } catch (error: any) {
+      console.error('Error loading payment schedule:', error);
+      setScheduleError(error.message || 'Erreur lors du chargement du calendrier');
+      setPaymentSchedule([]);
+    } finally {
+      setLoadingSchedule(false);
+    }
+  };
+
+  // Fallback local amortization generator si backend pa voye calendrier oswa li enkonplè
+  const generateLocalAmortization = (): PaymentScheduleItem[] => {
+    const months = loan.termMonths;
+    const principal = loan.principalAmount;
+    if (!months || months <= 0 || !principal || principal <= 0) return [];
+
+    const monthlyRatePercent = getMonthlyInterestRatePercent(3.5); // default 3.5%
+
+    const rows = generateAmortizationSchedule(
+      principal,
+      monthlyRatePercent,
+      months,
+      loan.disbursementDate || loan.createdAt
+    );
+
+    return rows.map(r => ({
+      installmentNumber: r.month,
+      dueDate: r.dueDate || '',
+      principalAmount: r.principalPayment,
+      interestAmount: r.interest,
+      totalPayment: r.payment,
+      remainingBalance: r.endingBalance,
+      status: 'UPCOMING'
+    }));
+  };
+
+  const loadPaymentHistory = async () => {
+    const loanId = loan.loanRecordId || loan.id;
+    if (!loanId) {
+      setHistoryError('ID du prêt non disponible');
+      return;
+    }
+
+    setLoadingHistory(true);
+    setHistoryError(null);
+    
+    try {
+      const payments = await microcreditPaymentService.getLoanPayments(loanId);
+      
+      // Map backend data to component format
+      const mappedHistory: PaymentHistory[] = payments.map(payment => ({
+        id: payment.id,
+        paymentDate: payment.paymentDate,
+        amount: payment.amount,
+        principal: payment.principalAmount,
+        interest: payment.interestAmount,
+        penalty: payment.penaltyAmount || 0,
+        paymentMethod: mapPaymentMethod(payment.paymentMethod),
+        receiptNumber: payment.receiptNumber,
+        receivedBy: payment.processedByName || payment.processedBy,
+        notes: payment.notes
+      }));
+
+      setPaymentHistory(mappedHistory.reverse()); // Most recent first
+    } catch (error: any) {
+      console.error('Error loading payment history:', error);
+      setHistoryError(error.message || 'Erreur lors du chargement de l\'historique');
+      setPaymentHistory([]);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const loadApplicationDocuments = async () => {
+    const applicationId = loan.applicationId || loan.id;
+    if (!applicationId) {
+      setDocumentsError('ID de la demande non disponible');
+      setApplicationDocuments([]);
+      return;
+    }
+    setLoadingDocuments(true);
+    setDocumentsError(null);
+    try {
+      const docs = await microcreditLoanApplicationService.getDocuments(applicationId);
+      setApplicationDocuments(docs || []);
+    } catch (error: any) {
+      console.error('Error loading application documents:', error);
+      setDocumentsError(error?.message || 'Erreur lors du chargement des documents');
+      setApplicationDocuments([]);
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
+  const handleDownloadApplicationDocument = async (doc: ApplicationDocument) => {
+    try {
+      const applicationId = loan.applicationId || loan.id;
+      if (!applicationId) return;
+      const blob = await microcreditLoanApplicationService.downloadDocument(applicationId, doc.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.name || `${doc.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      console.error('Error downloading document:', error);
+      toast.error('Échec du téléchargement du document');
+    }
+  };
+
+  const mapPaymentStatus = (status: string): 'PAID' | 'PENDING' | 'OVERDUE' | 'UPCOMING' => {
+    switch (status.toUpperCase()) {
+      case 'COMPLETED':
+        return 'PAID';
+      case 'PENDING':
+        return 'PENDING';
+      case 'OVERDUE':
+        return 'OVERDUE';
+      case 'PARTIAL':
+        return 'PENDING';
+      default:
+        return 'UPCOMING';
+    }
+  };
+
+  const mapPaymentMethod = (method: string): 'CASH' | 'CHECK' | 'TRANSFER' | 'MOBILE_MONEY' => {
+    switch (method) {
+      case 'Cash':
+        return 'CASH';
+      case 'Check':
+        return 'CHECK';
+      case 'BankTransfer':
+      case 'Transfer':
+        return 'TRANSFER';
+      case 'MobileMoney':
+        return 'MOBILE_MONEY';
+      default:
+        return 'CASH';
+    }
+  };
 
   const formatCurrency = (amount: number, currency: string) => {
     if (currency === 'HTG') {
@@ -101,8 +389,10 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
     }).format(amount);
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return 'N/A';
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'N/A';
     return new Intl.DateTimeFormat('fr-FR', {
       year: 'numeric',
       month: 'long',
@@ -110,127 +400,202 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
     }).format(date);
   };
 
+  const calculateMonthlyPayment = (principal: number, annualInterestRatePercent: number, months: number) => {
+    // Calculate monthly payment using the annual interest rate percent
+    if (!principal || months <= 0) return 0;
+    const monthlyRate = (annualInterestRatePercent || 0) / 100 / 12;
+    if (monthlyRate === 0) return principal / months;
+    const numerator = monthlyRate * Math.pow(1 + monthlyRate, months);
+    const denominator = Math.pow(1 + monthlyRate, months) - 1;
+    return principal * (numerator / denominator);
+  };
+
+  // Ensure we always use a normalized monthly rate percent (3.5 means 3.5%).
+  // Some records store monthlyInterestRate as a decimal (0.035); getMonthlyInterestRatePercent
+  // will normalize either format to the expected percent value.
+  const normalizedMonthlyRatePercent = getMonthlyInterestRatePercent();
+  
+  // Force recalculation to ensure consistency with the displayed rate (3.5%)
+  // ignoring potentially incorrect historical values in loan.monthlyPayment
+  const effectiveMonthlyPayment = (typeof normalizedMonthlyRatePercent === 'number' && normalizedMonthlyRatePercent > 0)
+      ? calculateMonthlyPaymentFromMonthlyRate(loan.principalAmount, normalizedMonthlyRatePercent, loan.termMonths)
+      : (loan.monthlyPayment || calculateMonthlyPayment(loan.principalAmount, loan.interestRate, loan.termMonths));
+
+  // If paymentSchedule is empty after loading and no scheduleError OR schedule has zero principals, generate fallback
+  useEffect(() => {
+    if (!loadingSchedule && paymentSchedule.length === 0 && !scheduleError) {
+      const local = generateLocalAmortization();
+      if (local.length > 0) {
+        setPaymentSchedule(local);
+      }
+    } else if (!loadingSchedule && paymentSchedule.length > 0) {
+      // Detect broken schedule (all principalAmount 0)
+      const allZeroCapital = paymentSchedule.every(p => !p.principalAmount || p.principalAmount === 0);
+      if (allZeroCapital) {
+        const local = generateLocalAmortization();
+        if (local.length > 0) setPaymentSchedule(local);
+      }
+    }
+  }, [loadingSchedule, paymentSchedule, scheduleError]);
+
   const getLoanTypeInfo = (type: string) => {
-    const types = {
+    const types: Record<string, { label: string; color: string; emoji: string }> = {
       COMMERCIAL: { label: 'Commercial', color: 'blue', emoji: '🏪' },
       AGRICULTURAL: { label: 'Agricole', color: 'green', emoji: '🌾' },
       PERSONAL: { label: 'Personnel', color: 'purple', emoji: '👤' },
-      EMERGENCY: { label: 'Urgence', color: 'red', emoji: '🚨' }
+      EMERGENCY: { label: 'Urgence', color: 'red', emoji: '🚨' },
+      CREDIT_LOYER: { label: 'Crédit Loyer', color: 'indigo', emoji: '🏠' },
+      CREDIT_AUTO: { label: 'Crédit Auto', color: 'cyan', emoji: '🚗' },
+      CREDIT_MOTO: { label: 'Crédit Moto', color: 'teal', emoji: '🏍️' },
+      CREDIT_PERSONNEL: { label: 'Crédit Personnel', color: 'pink', emoji: '💳' },
+      CREDIT_SCOLAIRE: { label: 'Crédit Scolaire', color: 'amber', emoji: '📚' },
+      CREDIT_AGRICOLE: { label: 'Crédit Agricole', color: 'lime', emoji: '🚜' },
+      CREDIT_PROFESSIONNEL: { label: 'Crédit Professionnel', color: 'violet', emoji: '💼' },
+      CREDIT_APPUI: { label: 'Crédit d\'Appui', color: 'orange', emoji: '🤝' },
+      CREDIT_HYPOTHECAIRE: { label: 'Crédit Hypothécaire', color: 'slate', emoji: '🏡' }
     };
-    return types[type as keyof typeof types] || types.PERSONAL;
+    return types[type] || types.PERSONAL;
   };
 
   const getStatusBadge = (status: string) => {
-    const badges = {
-      PENDING: { label: 'En attente', color: 'yellow', icon: Clock },
-      APPROVED: { label: 'Approuvé', color: 'blue', icon: CheckCircle },
-      DISBURSED: { label: 'Décaissé', color: 'indigo', icon: DollarSign },
-      ACTIVE: { label: 'Actif', color: 'green', icon: CheckCircle },
-      OVERDUE: { label: 'En retard', color: 'red', icon: AlertTriangle },
-      PAID: { label: 'Payé', color: 'emerald', icon: CheckCircle },
-      REJECTED: { label: 'Rejeté', color: 'gray', icon: XCircle }
+    const badges: Record<string, { label: string; color: string; icon: React.ComponentType<any> }> = {
+      PENDING: { label: 'En attente', color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: Clock },
+      APPROVED: { label: 'Approuvé', color: 'bg-blue-100 text-blue-800 border-blue-200', icon: CheckCircle },
+      DISBURSED: { label: 'Décaissé', color: 'bg-indigo-100 text-indigo-800 border-indigo-200', icon: DollarSign },
+      ACTIVE: { label: 'Actif', color: 'bg-green-100 text-green-800 border-green-200', icon: CheckCircle },
+      OVERDUE: { label: 'En retard', color: 'bg-red-100 text-red-800 border-red-200', icon: AlertTriangle },
+      PAID: { label: 'Payé', color: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: CheckCircle },
+      REJECTED: { label: 'Rejeté', color: 'bg-gray-100 text-gray-800 border-gray-200', icon: XCircle }
     };
-    const badge = badges[status as keyof typeof badges] || badges.PENDING;
+    const badge = badges[status] || badges.PENDING;
     const Icon = badge.icon;
-    
     return (
-      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-${badge.color}-100 text-${badge.color}-800 border border-${badge.color}-200`}>
+      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border ${badge.color}`}>
         <Icon className="w-4 h-4" />
         {badge.label}
       </span>
     );
   };
 
-  // Générer le calendrier d'amortissement
-  const generatePaymentSchedule = (): PaymentScheduleItem[] => {
-    const schedule: PaymentScheduleItem[] = [];
-    const monthlyRate = loan.interestRate / 100 / 12;
-    let remainingBalance = loan.principalAmount;
-    const startDate = new Date(loan.disbursementDate);
-
-    for (let i = 1; i <= loan.termMonths; i++) {
-      const interestAmount = remainingBalance * monthlyRate;
-      const principalAmount = loan.monthlyPayment - interestAmount;
-      remainingBalance -= principalAmount;
-
-      const dueDate = new Date(startDate);
-      dueDate.setMonth(dueDate.getMonth() + i);
-
-      // Déterminer le statut (simulé pour la démo)
-      let status: 'PAID' | 'PENDING' | 'OVERDUE' | 'UPCOMING' = 'UPCOMING';
-      const today = new Date();
-      
-      if (dueDate < today) {
-        // Pour la démo, marquer les premiers paiements comme payés
-        status = i <= Math.floor(loan.termMonths * (loan.paidAmount / (loan.principalAmount + (loan.principalAmount * loan.interestRate / 100 * loan.termMonths / 12)))) ? 'PAID' : 'OVERDUE';
-      } else if (dueDate.getTime() - today.getTime() < 30 * 24 * 60 * 60 * 1000) {
-        status = 'PENDING';
-      }
-
-      schedule.push({
-        installmentNumber: i,
-        dueDate: dueDate.toISOString().split('T')[0],
-        principalAmount: Math.max(0, principalAmount),
-        interestAmount,
-        totalPayment: loan.monthlyPayment,
-        remainingBalance: Math.max(0, remainingBalance),
-        status,
-        paidDate: status === 'PAID' ? dueDate.toISOString().split('T')[0] : undefined,
-        paidAmount: status === 'PAID' ? loan.monthlyPayment : undefined
-      });
+  // Helpers & derived values that were missing
+  const getPaymentMethodLabel = (method: PaymentHistory['paymentMethod']) => {
+    switch (method) {
+      case 'CASH': return 'Espèces';
+      case 'CHECK': return 'Chèque';
+      case 'TRANSFER': return 'Virement';
+      case 'MOBILE_MONEY': return 'Mobile Money';
+      default: return method;
     }
-
-    return schedule;
-  };
-
-  // Générer l'historique des paiements (démo)
-  const generatePaymentHistory = (): PaymentHistory[] => {
-    const history: PaymentHistory[] = [];
-    const schedule = generatePaymentSchedule();
-    
-    schedule.filter(s => s.status === 'PAID').forEach((payment, index) => {
-      history.push({
-        id: `PAY-${index + 1}`,
-        paymentDate: payment.paidDate!,
-        amount: payment.paidAmount!,
-        principal: payment.principalAmount,
-        interest: payment.interestAmount,
-        paymentMethod: index % 3 === 0 ? 'CASH' : index % 3 === 1 ? 'TRANSFER' : 'MOBILE_MONEY',
-        receiptNumber: `REC-${loan.loanNumber}-${String(index + 1).padStart(3, '0')}`,
-        receivedBy: loan.loanOfficer,
-        notes: index === 0 ? 'Premier paiement' : undefined
-      });
-    });
-
-    return history.reverse(); // Plus récent en premier
-  };
-
-  const paymentSchedule = generatePaymentSchedule();
-  const paymentHistory = generatePaymentHistory();
-
-  const handleDownloadContract = () => {
-    toast.success('Téléchargement du contrat en cours...');
-    // TODO: Implement PDF generation
-  };
-
-  const handlePrintSchedule = () => {
-    toast.success('Impression du calendrier de paiement...');
-    // TODO: Implement print functionality
   };
 
   const handleDownloadReceipt = (receiptNumber: string) => {
-    toast.success(`Téléchargement du reçu ${receiptNumber}...`);
-    // TODO: Implement receipt download
+    // Placeholder: implement backend receipt download endpoint when available
+    toast.error('Téléchargement du reçu non implémenté');
+    console.log('Download receipt requested:', receiptNumber);
   };
 
-  // Calculer les statistiques
-  const totalPaid = paymentHistory.reduce((sum, p) => sum + p.amount, 0);
-  const totalPrincipalPaid = paymentHistory.reduce((sum, p) => sum + p.principal, 0);
-  const totalInterestPaid = paymentHistory.reduce((sum, p) => sum + p.interest, 0);
-  const progressPercentage = (totalPrincipalPaid / loan.principalAmount) * 100;
+  const handleDownloadContract = () => {
+    toast.error('Téléchargement du contrat non implémenté');
+  };
+
+  const handlePrintSchedule = () => {
+    if (paymentSchedule.length === 0) {
+      toast.error('Aucun calendrier à exporter');
+      return;
+    }
+
+    try {
+      // CSV header with UTF-8 BOM for Excel compatibility
+      let csvContent = '\ufeff';
+      csvContent += '"#","Date d\'Échéance","Capital","Intérêt","Total","Solde Restant","Statut"\n';
+
+      // Add data rows
+      paymentSchedule.forEach(item => {
+        const statusText = 
+          item.status === 'PAID' ? 'Payé' :
+          item.status === 'PENDING' ? 'En cours' :
+          item.status === 'OVERDUE' ? 'En retard' :
+          item.status === 'UPCOMING' ? 'À venir' : '';
+
+        csvContent += `${item.installmentNumber},`;
+        csvContent += `"${formatDate(item.dueDate)}",`;
+        csvContent += `"${formatCurrency(item.principalAmount, loan.currency)}",`;
+        csvContent += `"${formatCurrency(item.interestAmount ?? 0, loan.currency)}",`;
+        csvContent += `"${formatCurrency(item.totalPayment ?? 0, loan.currency)}",`;
+        csvContent += `"${formatCurrency(item.remainingBalance, loan.currency)}",`;
+        csvContent += `"${statusText}"\n`;
+      });
+
+      // Add totals row
+      csvContent += '\n';
+      csvContent += `"TOTAL","",`;
+      csvContent += `"${formatCurrency(scheduleTotals.principal, loan.currency)}",`;
+      csvContent += `"${formatCurrency(scheduleTotals.interest, loan.currency)}",`;
+      csvContent += `"${formatCurrency(scheduleTotals.total, loan.currency)}","",""\n`;
+
+      // Create and trigger download
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', `calendrier_amortissement_${loan.loanNumber}_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success('Calendrier exporté avec succès');
+    } catch (error) {
+      console.error('Error exporting schedule:', error);
+      toast.error('Erreur lors de l\'export du calendrier');
+    }
+  };
+
+  // Totals & progress metrics
+  const totalPrincipalPaid = paymentHistory.reduce((sum, p) => sum + (p.principal || 0), 0);
+  const totalInterestPaid = paymentHistory.reduce((sum, p) => sum + (p.interest || 0), 0);
+  const progressPercentage = loan.principalAmount > 0 ? Math.min(100, (totalPrincipalPaid / loan.principalAmount) * 100) : 0;
+
+  // Interest totals derived from effective payment estimation
+  const estimatedTotalInterest = roundCurrency((effectiveMonthlyPayment * loan.termMonths) - loan.principalAmount);
+
+  const scheduleTotals = React.useMemo(() => {
+    if (!paymentSchedule.length) {
+      return { principal: 0, interest: 0, total: 0 };
+    }
+    const totals = paymentSchedule.reduce(
+      (acc, item) => {
+        acc.principal += item.principalAmount || 0;
+        acc.interest += item.interestAmount || 0;
+        acc.total += item.totalPayment || 0;
+        return acc;
+      },
+      { principal: 0, interest: 0, total: 0 }
+    );
+    return {
+      principal: roundCurrency(totals.principal),
+      interest: roundCurrency(totals.interest),
+      total: roundCurrency(totals.total)
+    };
+  }, [paymentSchedule]);
+
+  // Si on a un calendrier, utiliser ses totaux; sinon estimer
+  const plannedInterestTotal = scheduleTotals.interest > 0
+    ? scheduleTotals.interest
+    : estimatedTotalInterest;
+
+  // Le total à rembourser doit être basé sur le calendrier réel, pas mensualité × durée
+  // car le dernier versement peut être différent
+  const plannedTotalRepayment = scheduleTotals.total > 0
+    ? scheduleTotals.total
+    : roundCurrency(loan.principalAmount + estimatedTotalInterest);
+
+  const remainingPlannedInterest = Math.max(0, roundCurrency(plannedInterestTotal - totalInterestPaid));
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[95vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 flex justify-between items-start">
@@ -239,6 +604,10 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
             <div className="flex items-center gap-4">
               <p className="text-indigo-100">#{loan.loanNumber}</p>
               <div>{getStatusBadge(loan.status)}</div>
+              <div className="ml-3">
+                <p className="text-sm text-indigo-200">Numéro Compte Épargne</p>
+                <p className="text-indigo-100 text-sm">{loan.savingsAccountNumber || loan.customerCode || loan.customerId}</p>
+              </div>
             </div>
           </div>
           <div className="flex gap-2">
@@ -322,7 +691,7 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                 <div className="w-full bg-gray-200 rounded-full h-6 mb-4">
                   <div
                     className="bg-gradient-to-r from-indigo-500 to-purple-500 h-6 rounded-full flex items-center justify-end pr-3"
-                    style={{ width: `${progressPercentage}%` }}
+                    style={{ width: `${Math.min(100, progressPercentage)}%` }}
                   >
                     {progressPercentage > 10 && (
                       <span className="text-white text-xs font-medium">{progressPercentage.toFixed(0)}%</span>
@@ -363,13 +732,15 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Montant Principal:</span>
-                      <span className="font-semibold text-indigo-600">
-                        {formatCurrency(loan.principalAmount, loan.currency)}
-                      </span>
+                      <span className="font-semibold text-indigo-600">{formatCurrency(loan.principalAmount, loan.currency)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Taux d'Intérêt:</span>
-                      <span className="font-semibold">{loan.interestRate}%</span>
+                      <span className="text-gray-600">Taux mensuel (effectif):</span>
+                      <span className="font-semibold">{getMonthlyInterestRatePercent().toFixed(2)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Taux annuel (équivalent):</span>
+                      <span className="font-semibold">{(getMonthlyInterestRatePercent() * 12).toFixed(2)}%</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Durée:</span>
@@ -377,15 +748,23 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Paiement Mensuel:</span>
-                      <span className="font-semibold text-blue-600">
-                        {formatCurrency(loan.monthlyPayment, loan.currency)}
-                      </span>
+                      <span className="font-semibold text-blue-600">{formatCurrency(effectiveMonthlyPayment, loan.currency)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Intérêt Total (estimé):</span>
+                      <span className="font-semibold text-purple-600">{formatCurrency(plannedInterestTotal, loan.currency)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Intérêt Payé:</span>
+                      <span className="font-semibold">{formatCurrency(totalInterestPaid, loan.currency)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Intérêt Restant (estimé):</span>
+                      <span className="font-semibold text-red-600">{formatCurrency(remainingPlannedInterest, loan.currency)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Total à Rembourser:</span>
-                      <span className="font-semibold">
-                        {formatCurrency(loan.monthlyPayment * loan.termMonths, loan.currency)}
-                      </span>
+                      <span className="font-semibold">{formatCurrency(plannedTotalRepayment, loan.currency)}</span>
                     </div>
                   </div>
                 </div>
@@ -402,16 +781,34 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                       <p className="font-semibold text-gray-900">{loan.customerName}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600">Code Client</p>
+                      <p className="text-sm text-gray-600">Numéro Compte Épargne</p>
                       <p className="font-semibold text-gray-900">{loan.customerCode || loan.customerId}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Phone className="w-4 h-4 text-gray-400" />
                       <div>
                         <p className="text-sm text-gray-600">Téléphone</p>
-                        <p className="font-semibold text-gray-900">509-XXXX-XXXX</p>
+                        <p className="font-semibold text-gray-900">{loan.customerPhone || 'N/A'}</p>
                       </div>
                     </div>
+                    {loan.customerEmail && (
+                      <div>
+                        <p className="text-sm text-gray-600">Email</p>
+                        <p className="font-semibold text-gray-900">{loan.customerEmail}</p>
+                      </div>
+                    )}
+                    {loan.customerAddress && (
+                      <div>
+                        <p className="text-sm text-gray-600">Adresse</p>
+                        <p className="font-semibold text-gray-900">{loan.customerAddress}</p>
+                      </div>
+                    )}
+                    {loan.occupation && (
+                      <div>
+                        <p className="text-sm text-gray-600">Profession</p>
+                        <p className="font-semibold text-gray-900">{loan.occupation}</p>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <Home className="w-4 h-4 text-gray-400" />
                       <div>
@@ -444,19 +841,23 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                       <div>
                         <p className="text-sm text-gray-600">Date d'Approbation</p>
                         <p className="font-semibold text-gray-900">{formatDate(loan.approvedAt)}</p>
-                        {loan.approvedBy && (
-                          <p className="text-xs text-gray-500">Par: {loan.approvedBy}</p>
-                        )}
+                        { (loan as any).approvedByName || loan.approvedBy ? (
+                          <p className="text-xs text-gray-500">Par: {(loan as any).approvedByName || loan.approvedBy}</p>
+                        ) : null }
                       </div>
                     )}
-                    <div>
-                      <p className="text-sm text-gray-600">Date de Décaissement</p>
-                      <p className="font-semibold text-gray-900">{formatDate(loan.disbursementDate)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Date d'Échéance Finale</p>
-                      <p className="font-semibold text-gray-900">{formatDate(loan.maturityDate)}</p>
-                    </div>
+                    {loan.disbursementDate && (
+                      <div>
+                        <p className="text-sm text-gray-600">Date de Décaissement</p>
+                        <p className="font-semibold text-gray-900">{formatDate(loan.disbursementDate)}</p>
+                      </div>
+                    )}
+                    {loan.maturityDate && (
+                      <div>
+                        <p className="text-sm text-gray-600">Date d'Échéance Finale</p>
+                        <p className="font-semibold text-gray-900">{formatDate(loan.maturityDate)}</p>
+                      </div>
+                    )}
                     {loan.nextPaymentDate && (
                       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                         <p className="text-sm font-medium text-yellow-800 mb-1">Prochain Paiement</p>
@@ -509,17 +910,26 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Calendrier d'Amortissement</h3>
-                <button
-                  onClick={handlePrintSchedule}
-                  className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <Printer className="w-4 h-4" />
-                  Imprimer
-                </button>
+                {paymentSchedule.length > 0 && !loadingSchedule && (
+                  <button
+                    onClick={handlePrintSchedule}
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <Printer className="w-4 h-4" />
+                  </button>
+                )}
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+              {paymentSchedule.length === 0 && !loadingSchedule ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 text-center">
+                  <p className="text-yellow-700">
+                    Le calendrier d'amortissement sera généré automatiquement après que l'administrateur 
+                    ait approuvé le prêt et défini la date de décaissement.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -558,10 +968,10 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                           {formatCurrency(item.principalAmount, loan.currency)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-600">
-                          {formatCurrency(item.interestAmount, loan.currency)}
+                          {formatCurrency(item.interestAmount ?? 0, loan.currency)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-semibold text-gray-900">
-                          {formatCurrency(item.totalPayment, loan.currency)}
+                          {formatCurrency(item.totalPayment ?? 0, loan.currency)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-600">
                           {formatCurrency(item.remainingBalance, loan.currency)}
@@ -601,19 +1011,20 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                         TOTAL
                       </td>
                       <td className="px-6 py-4 text-sm text-right text-gray-900">
-                        {formatCurrency(loan.principalAmount, loan.currency)}
+                        {formatCurrency(scheduleTotals.principal, loan.currency)}
                       </td>
                       <td className="px-6 py-4 text-sm text-right text-gray-900">
-                        {formatCurrency((loan.monthlyPayment * loan.termMonths) - loan.principalAmount, loan.currency)}
+                        {formatCurrency(scheduleTotals.interest, loan.currency)}
                       </td>
                       <td className="px-6 py-4 text-sm text-right text-indigo-600">
-                        {formatCurrency(loan.monthlyPayment * loan.termMonths, loan.currency)}
+                        {formatCurrency(scheduleTotals.total, loan.currency)}
                       </td>
                       <td colSpan={2}></td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
+              )}
             </div>
           )}
 
@@ -622,7 +1033,7 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Historique des Paiements</h3>
-                {loan.status === 'ACTIVE' && (
+                {loan.status === 'ACTIVE' && !loadingHistory && (
                   <button
                     onClick={() => setShowPaymentRecording(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
@@ -633,10 +1044,41 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                 )}
               </div>
 
-              {paymentHistory.length === 0 ? (
-                <div className="text-center py-12">
-                  <Clock className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500">Aucun paiement enregistré</p>
+              {loadingHistory ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
+                  <Loader className="w-12 h-12 text-blue-500 mx-auto mb-3 animate-spin" />
+                  <h4 className="text-lg font-semibold text-blue-900 mb-2">
+                    Chargement de l'historique...
+                  </h4>
+                  <p className="text-blue-700">
+                    Veuillez patienter pendant que nous chargeons l'historique des paiements.
+                  </p>
+                </div>
+              ) : historyError ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-8 text-center">
+                  <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+                  <h4 className="text-lg font-semibold text-red-900 mb-2">
+                    Erreur de chargement
+                  </h4>
+                  <p className="text-red-700 mb-4">{historyError}</p>
+                  <button
+                    onClick={loadPaymentHistory}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    Réessayer
+                  </button>
+                </div>
+              ) : paymentHistory.length === 0 ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
+                  <Clock className="w-12 h-12 text-blue-500 mx-auto mb-3" />
+                  <h4 className="text-lg font-semibold text-blue-900 mb-2">
+                    Aucun Paiement Enregistré
+                  </h4>
+                  <p className="text-blue-700">
+                    {!loan.disbursementDate 
+                      ? "L'historique des paiements sera disponible après l'approbation et le décaissement du prêt."
+                      : "Aucun paiement n'a encore été effectué sur ce prêt."}
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -667,7 +1109,7 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                             </div>
                           </div>
                           <div className="flex items-center gap-4 text-xs text-gray-600">
-                            <span>Méthode: <span className="font-medium">{payment.paymentMethod}</span></span>
+                            <span>Méthode: <span className="font-medium">{getPaymentMethodLabel(payment.paymentMethod)}</span></span>
                             <span>Reçu par: <span className="font-medium">{payment.receivedBy}</span></span>
                           </div>
                           {payment.notes && (
@@ -693,59 +1135,130 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
           {activeTab === 'documents' && (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">Documents du Dossier</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <FileText className="w-6 h-6 text-blue-600" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900">Contrat de Prêt</p>
-                      <p className="text-sm text-gray-600">PDF • {formatDate(loan.disbursementDate)}</p>
-                    </div>
-                    <Download className="w-5 h-5 text-gray-400" />
-                  </div>
+              {loadingDocuments ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
+                  <Loader className="w-12 h-12 text-blue-500 mx-auto mb-3 animate-spin" />
+                  <h4 className="text-lg font-semibold text-blue-900 mb-2">Chargement des documents...</h4>
                 </div>
+              ) : documentsError ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-8 text-center">
+                  <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+                  <h4 className="text-lg font-semibold text-red-900 mb-2">Erreur de chargement</h4>
+                  <p className="text-red-700 mb-4">{documentsError}</p>
+                  <button
+                    onClick={loadApplicationDocuments}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    Réessayer
+                  </button>
+                </div>
+              ) : applicationDocuments.length === 0 ? (
+                (loan.disbursementDate || loan.approvedAt || loan.collateral || (loan.guarantors && loan.guarantors.length > 0)) ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div 
+                    className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={handleDownloadContract}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <FileText className="w-6 h-6 text-blue-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">Contrat de Prêt</p>
+                        <p className="text-sm text-gray-600">PDF • {formatDate(loan.disbursementDate)}</p>
+                      </div>
+                      <Download className="w-5 h-5 text-gray-400" />
+                    </div>
+                  </div>
 
-                <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                      <CheckCircle className="w-6 h-6 text-green-600" />
+                  <div 
+                    className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={handleDownloadContract}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                        <CheckCircle className="w-6 h-6 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">Document d'Approbation</p>
+                        <p className="text-sm text-gray-600">PDF • {loan.approvedAt ? formatDate(loan.approvedAt) : 'N/A'}</p>
+                      </div>
+                      <Download className="w-5 h-5 text-gray-400" />
                     </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900">Document d'Approbation</p>
-                      <p className="text-sm text-gray-600">PDF • {loan.approvedAt ? formatDate(loan.approvedAt) : 'N/A'}</p>
-                    </div>
-                    <Download className="w-5 h-5 text-gray-400" />
                   </div>
-                </div>
 
-                <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <Shield className="w-6 h-6 text-purple-600" />
+                  <div 
+                    className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={handleDownloadContract}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <Shield className="w-6 h-6 text-purple-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">Documents de Garantie</p>
+                        <p className="text-sm text-gray-600">PDF • {loan.collateral || 'N/A'}</p>
+                      </div>
+                      <Download className="w-5 h-5 text-gray-400" />
                     </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900">Documents de Garantie</p>
-                      <p className="text-sm text-gray-600">PDF • {loan.collateral || 'N/A'}</p>
-                    </div>
-                    <Download className="w-5 h-5 text-gray-400" />
                   </div>
-                </div>
 
-                <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                      <Users className="w-6 h-6 text-yellow-600" />
+                  <div 
+                    className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={handleDownloadContract}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                        <Users className="w-6 h-6 text-yellow-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">Info Garants</p>
+                        <p className="text-sm text-gray-600">PDF • {loan.guarantors?.length || 0} garant(s)</p>
+                      </div>
+                      <Download className="w-5 h-5 text-gray-400" />
                     </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900">Info Garants</p>
-                      <p className="text-sm text-gray-600">PDF • {loan.guarantors?.length || 0} garant(s)</p>
-                    </div>
-                    <Download className="w-5 h-5 text-gray-400" />
                   </div>
                 </div>
-              </div>
+                ) : (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 text-center">
+                  <FileText className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
+                  <h4 className="text-lg font-semibold text-yellow-900 mb-2">Aucun document disponible</h4>
+                  <p className="text-yellow-700">Aucun document n'a été uploadé pour cette demande.</p>
+                </div>
+                )
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {applicationDocuments.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center">
+                          <FileText className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">{doc.name || 'Document'}</p>
+                          <p className="text-sm text-gray-600">{doc.description || ''}</p>
+                          <p className="text-xs text-gray-500">{formatDate(doc.uploadedAt)} • {Math.round(doc.fileSize/1024)} KB</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {doc.verified && (
+                            <span className="text-sm text-green-600">Vérifié</span>
+                          )}
+                          <button
+                            onClick={() => handleDownloadApplicationDocument(doc)}
+                            className="text-indigo-600 hover:text-indigo-700 p-2"
+                            title="Télécharger"
+                          >
+                            <Download className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -767,24 +1280,23 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
             </button>
           )}
         </div>
-      </div>
 
-      {/* Payment Recording Modal */}
-      {showPaymentRecording && (
-        <PaymentRecording
-          loan={loan}
-          onClose={() => setShowPaymentRecording(false)}
-          onSubmit={(payment) => {
-            console.log('Payment submitted:', payment);
-            toast.success('Paiement enregistré avec succès!');
-            setShowPaymentRecording(false);
-            // TODO: Refresh loan data
-            if (onRecordPayment) {
-              onRecordPayment();
-            }
-          }}
-        />
-      )}
+        {/* Payment Recording Modal */}
+        {showPaymentRecording && (
+          <PaymentRecording
+            loan={loan}
+            onClose={() => setShowPaymentRecording(false)}
+            onSubmit={(payment) => {
+              console.log('Payment submitted:', payment);
+              toast.success('Paiement enregistré avec succès!');
+              setShowPaymentRecording(false);
+              loadPaymentSchedule();
+              loadPaymentHistory();
+              if (onRecordPayment) onRecordPayment();
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 };

@@ -35,6 +35,8 @@ interface AccountDetails {
   customerName: string;
   accountType: string;
   balance: number;
+  availableBalance: number;
+  blockedBalance: number;
   currency: string;
   interestRate: number;
   status: string;
@@ -477,10 +479,18 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
                 <X className="h-5 w-5 text-gray-600" />
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-3 mt-3 text-sm">
+            <div className="grid grid-cols-4 gap-3 mt-3 text-sm">
               <div>
-                <div className="text-gray-500">Solde</div>
+                <div className="text-gray-500">Solde Total</div>
                 <div className="font-semibold">{formatCurrency(account.balance ?? 0, displayCurrency(account.currency))}</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  Dispo: {formatCurrency(account.availableBalance ?? 0, displayCurrency(account.currency))}
+                </div>
+                {(account.blockedBalance ?? 0) > 0 && (
+                  <div className="text-xs text-red-600 font-medium mt-0.5">
+                    Blokè: {formatCurrency(account.blockedBalance, displayCurrency(account.currency))}
+                  </div>
+                )}
               </div>
               <div>
                 <div className="text-gray-500">Taux</div>

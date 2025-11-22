@@ -101,6 +101,7 @@ interface SavingsAccount {
   currency: 'HTG' | 'USD';
   balance: number;
   availableBalance: number;
+  blockedBalance: number;
   minimumBalance: number;
   openingDate: string;
   lastTransactionDate?: string;
@@ -678,6 +679,11 @@ const CompleteSavingsAccountManagement: React.FC = () => {
                       <div className="text-xs text-gray-500">
                         Dispo: {formatCurrency(account.availableBalance, account.currency)}
                       </div>
+                      {account.blockedBalance > 0 && (
+                        <div className="text-xs text-red-600 font-medium">
+                          Blokè: {formatCurrency(account.blockedBalance, account.currency)}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="text-sm font-medium text-purple-600">

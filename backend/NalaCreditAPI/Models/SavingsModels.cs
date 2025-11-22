@@ -340,6 +340,10 @@ namespace NalaCreditAPI.Models
         [Column(TypeName = "decimal(18,2)")]
         public decimal MinimumBalance { get; set; } = 0;
 
+        // Optimistic Concurrency Control
+        [Timestamp]
+        public byte[]? RowVersion { get; set; }
+
         [Required]
         public DateTime OpeningDate { get; set; }
 

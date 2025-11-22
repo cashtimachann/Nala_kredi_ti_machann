@@ -7,6 +7,7 @@ namespace NalaCreditAPI.DTOs
     public class MicrocreditBorrowerDto
     {
         public Guid Id { get; set; }
+        public string AccountNumber { get; set; } = string.Empty;
         public string FirstName { get; set; } = string.Empty;
         public string LastName { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
@@ -44,6 +45,10 @@ namespace NalaCreditAPI.DTOs
         public string EmergencyContactName { get; set; } = string.Empty;
         public string EmergencyContactPhone { get; set; } = string.Empty;
         public string EmergencyContactRelation { get; set; } = string.Empty;
+        
+        // Aliases for frontend compatibility
+        public string Phone => PrimaryPhone;
+        public string PhoneNumber => PrimaryPhone;
     }
 
     public class BorrowerIdentityDto
@@ -76,10 +81,19 @@ namespace NalaCreditAPI.DTOs
     // DTOs pour les demandes de crédit
     public class MicrocreditLoanApplicationDto
     {
+        // Snapshot fields from the application
+        public string? CustomerName { get; set; }
+        public string? CustomerPhone { get; set; }
+        public string? CustomerEmail { get; set; }
+    // Snapshot of customer address as a single string for display
+    public string? CustomerAddress { get; set; }
+        public string? Occupation { get; set; }
         public Guid Id { get; set; }
         public string ApplicationNumber { get; set; } = string.Empty;
+        public string SavingsAccountNumber { get; set; } = string.Empty;
         public Guid BorrowerId { get; set; }
         public MicrocreditBorrowerDto? Borrower { get; set; }
+        public Guid? LoanId { get; set; } // ID of the loan created from this application (if approved)
         public string LoanType { get; set; } = string.Empty;
         public decimal RequestedAmount { get; set; }
         public int RequestedDurationMonths { get; set; }
@@ -96,6 +110,34 @@ namespace NalaCreditAPI.DTOs
         public decimal? CollateralValue { get; set; }
         public decimal DebtToIncomeRatio { get; set; }
         
+        // Additional personal and financial information
+        public int Dependents { get; set; }
+        public decimal InterestRate { get; set; }
+        public decimal MonthlyInterestRate { get; set; }
+        public string? CollateralType { get; set; }
+        public string? CollateralDescription { get; set; }
+        
+        // Guarantor information
+        public string? Guarantor1Name { get; set; }
+        public string? Guarantor1Phone { get; set; }
+        public string? Guarantor1Relation { get; set; }
+        public string? Guarantor2Name { get; set; }
+        public string? Guarantor2Phone { get; set; }
+        public string? Guarantor2Relation { get; set; }
+        
+        // Reference information
+        public string? Reference1Name { get; set; }
+        public string? Reference1Phone { get; set; }
+        public string? Reference2Name { get; set; }
+        public string? Reference2Phone { get; set; }
+        
+        // Document verification flags
+        public bool HasNationalId { get; set; }
+        public bool HasProofOfResidence { get; set; }
+        public bool HasProofOfIncome { get; set; }
+        public bool HasCollateralDocs { get; set; }
+        public string? Notes { get; set; }
+        
         // Workflow d'approbation
         public List<MicrocreditApprovalStepDto> ApprovalSteps { get; set; } = new();
         public string CurrentApprovalLevel { get; set; } = string.Empty;
@@ -110,6 +152,7 @@ namespace NalaCreditAPI.DTOs
         public DateTime? ReviewedAt { get; set; }
         public DateTime? ApprovedAt { get; set; }
         public DateTime? RejectedAt { get; set; }
+        public DateTime? DisbursementDate { get; set; }
         public string? RejectionReason { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
@@ -304,6 +347,24 @@ namespace NalaCreditAPI.DTOs
         public DateTime UpdatedAt { get; set; }
     }
 
+    // DTOs pour notes de recouvrement
+    public class CreateMicrocreditCollectionNoteDto
+    {
+        [Required]
+        [MaxLength(2000)]
+        public string Note { get; set; } = string.Empty;
+    }
+
+    public class MicrocreditCollectionNoteDto
+    {
+        public Guid Id { get; set; }
+        public Guid LoanId { get; set; }
+        public string Note { get; set; } = string.Empty;
+        public string CreatedBy { get; set; } = string.Empty;
+        public string? CreatedByName { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
     // DTOs pour les créations/mises à jour
     public class CreateMicrocreditBorrowerDto
     {
@@ -380,6 +441,17 @@ namespace NalaCreditAPI.DTOs
         
         [Required]
         public int BranchId { get; set; }
+    // Snapshot of applicant information
+    [MaxLength(200)]
+    public string? CustomerName { get; set; }
+    [MaxLength(20)]
+    public string? Phone { get; set; }
+    [MaxLength(200)]
+    public string? Email { get; set; }
+    // Snapshot address label as simple string for loan application (front-end sends single-line address)
+    public string? CustomerAddress { get; set; }
+    [MaxLength(100)]
+    public string? Occupation { get; set; }
         
         // Évaluation financière
         [Required]
@@ -396,6 +468,63 @@ namespace NalaCreditAPI.DTOs
         
         [Range(0, double.MaxValue)]
         public decimal? CollateralValue { get; set; }
+        
+        // Additional personal and financial information
+        [Range(0, 50)]
+        public int Dependents { get; set; }
+        
+        [Range(0, 1)]
+        public decimal InterestRate { get; set; }
+        
+        [Range(0, 1)]
+        public decimal MonthlyInterestRate { get; set; }
+        
+        [MaxLength(200)]
+        public string? CollateralType { get; set; }
+        
+        [MaxLength(1000)]
+        public string? CollateralDescription { get; set; }
+        
+        // Guarantor information
+        [MaxLength(100)]
+        public string? Guarantor1Name { get; set; }
+        
+        [MaxLength(20)]
+        public string? Guarantor1Phone { get; set; }
+        
+        [MaxLength(50)]
+        public string? Guarantor1Relation { get; set; }
+        
+        [MaxLength(100)]
+        public string? Guarantor2Name { get; set; }
+        
+        [MaxLength(20)]
+        public string? Guarantor2Phone { get; set; }
+        
+        [MaxLength(50)]
+        public string? Guarantor2Relation { get; set; }
+        
+        // Reference information
+        [MaxLength(100)]
+        public string? Reference1Name { get; set; }
+        
+        [MaxLength(20)]
+        public string? Reference1Phone { get; set; }
+        
+        [MaxLength(100)]
+        public string? Reference2Name { get; set; }
+        
+        [MaxLength(20)]
+        public string? Reference2Phone { get; set; }
+        
+        // Document verification flags
+        public bool HasNationalId { get; set; }
+        public bool HasProofOfResidence { get; set; }
+        public bool HasProofOfIncome { get; set; }
+        public bool HasCollateralDocs { get; set; }
+        
+        [MaxLength(2000)]
+        public string? Notes { get; set; }
         
         // Garanties
         public List<CreateMicrocreditGuaranteeDto> Guarantees { get; set; } = new();
@@ -635,6 +764,38 @@ namespace NalaCreditAPI.DTOs
     {
         public int Count { get; set; }
         public CurrencyAmountDto Amount { get; set; } = new();
+    }
+
+    // DTOs pour les performances des agents
+    public class AgentPerformanceDto
+    {
+        public string AgentId { get; set; } = string.Empty;
+        public string AgentName { get; set; } = string.Empty;
+        public int TotalLoansManaged { get; set; }
+        public int ActiveLoans { get; set; }
+        public decimal TotalDisbursed { get; set; }
+        public decimal TotalCollected { get; set; }
+        public decimal OutstandingBalance { get; set; }
+        public int OverdueLoans { get; set; }
+        public decimal CollectionRate { get; set; }
+        public decimal AverageLoanSize { get; set; }
+        public int NewLoansThisMonth { get; set; }
+        public decimal PortfolioGrowth { get; set; }
+        public string PerformanceRating { get; set; } = string.Empty;
+    }
+
+    // DTOs pour les tendances du portefeuille
+    public class PortfolioTrendDto
+    {
+        public string Period { get; set; } = string.Empty; // Month-Year format
+        public decimal Disbursements { get; set; }
+        public decimal Collections { get; set; }
+        public decimal OutstandingBalance { get; set; }
+        public int NewLoans { get; set; }
+        public int CompletedLoans { get; set; }
+        public decimal PortfolioGrowth { get; set; }
+        public decimal CollectionRate { get; set; }
+        public int ActiveClients { get; set; }
     }
 
     public class LoanTypeStatsDto

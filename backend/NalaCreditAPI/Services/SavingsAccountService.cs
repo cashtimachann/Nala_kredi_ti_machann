@@ -596,6 +596,7 @@ namespace NalaCreditAPI.Services.Savings
                 Currency = account.Currency,
                 Balance = account.Balance,
                 AvailableBalance = account.AvailableBalance,
+                BlockedBalance = account.BlockedBalance,
                 MinimumBalance = account.MinimumBalance,
                 OpeningDate = account.OpeningDate,
                 LastTransactionDate = account.LastTransactionDate,

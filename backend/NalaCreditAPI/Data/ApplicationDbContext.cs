@@ -46,6 +46,7 @@ public class ApplicationDbContext : IdentityDbContext<User>
     public DbSet<MicrocreditLoan> MicrocreditLoans { get; set; }
     public DbSet<MicrocreditPaymentSchedule> MicrocreditPaymentSchedules { get; set; }
     public DbSet<MicrocreditPayment> MicrocreditPayments { get; set; }
+      public DbSet<MicrocreditCollectionNote> MicrocreditCollectionNotes { get; set; }
     
     // Payroll Module DbSets
     public DbSet<Employee> Employees { get; set; }
@@ -489,6 +490,18 @@ public class ApplicationDbContext : IdentityDbContext<User>
             entity.HasIndex(mp => new { mp.LoanId, mp.PaymentDate });
             entity.HasIndex(mp => mp.PaymentDate);
         });
+
+            // Microcredit Collection Note configurations
+            builder.Entity<MicrocreditCollectionNote>(entity =>
+            {
+                  entity.HasOne(n => n.Loan)
+                          .WithMany(l => l.CollectionNotes)
+                          .HasForeignKey(n => n.LoanId)
+                          .OnDelete(DeleteBehavior.Cascade);
+
+                  entity.HasIndex(n => n.LoanId);
+                  entity.HasIndex(n => n.CreatedAt);
+            });
 
         // Payroll Module Configurations
         

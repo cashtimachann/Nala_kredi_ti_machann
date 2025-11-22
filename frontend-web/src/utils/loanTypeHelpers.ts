@@ -8,9 +8,7 @@ import {
 export interface LoanTypeInfo {
   type: LoanType;
   name: string;
-  nameKreyol: string;
   description: string;
-  descriptionKreyol: string;
   icon: any; // Lucide React icon component
   color: string;
   bgColor: string;
@@ -27,9 +25,7 @@ export const LOAN_TYPE_INFO: Record<LoanType, LoanTypeInfo> = {
   [LoanType.COMMERCIAL]: {
     type: LoanType.COMMERCIAL,
     name: 'Crédit Commercial',
-    nameKreyol: 'Kredi Komèsyal',
     description: 'Financement pour activités commerciales',
-    descriptionKreyol: 'Finansman pou aktivite komèsyal',
     icon: ShoppingCart,
     color: '#3B82F6',
     bgColor: '#EFF6FF',
@@ -44,9 +40,7 @@ export const LOAN_TYPE_INFO: Record<LoanType, LoanTypeInfo> = {
   [LoanType.AGRICULTURAL]: {
     type: LoanType.AGRICULTURAL,
     name: 'Crédit Agricole (Standard)',
-    nameKreyol: 'Kredi Agrikòl (Estanda)',
     description: 'Financement pour activités agricoles',
-    descriptionKreyol: 'Finansman pou aktivite agrikòl',
     icon: Leaf,
     color: '#10B981',
     bgColor: '#ECFDF5',
@@ -61,9 +55,7 @@ export const LOAN_TYPE_INFO: Record<LoanType, LoanTypeInfo> = {
   [LoanType.PERSONAL]: {
     type: LoanType.PERSONAL,
     name: 'Crédit Personnel (Standard)',
-    nameKreyol: 'Kredi Pèsonèl (Estanda)',
     description: 'Prêt personnel à usage général',
-    descriptionKreyol: 'Prè pèsonèl pou tout sa w bezwen',
     icon: User,
     color: '#8B5CF6',
     bgColor: '#F5F3FF',
@@ -78,9 +70,7 @@ export const LOAN_TYPE_INFO: Record<LoanType, LoanTypeInfo> = {
   [LoanType.EMERGENCY]: {
     type: LoanType.EMERGENCY,
     name: "Crédit d'Urgence",
-    nameKreyol: 'Kredi Ijans',
     description: "Prêt d'urgence pour situations critiques",
-    descriptionKreyol: 'Prè rapid pou sitiyasyon ijans',
     icon: AlertCircle,
     color: '#EF4444',
     bgColor: '#FEF2F2',
@@ -95,9 +85,7 @@ export const LOAN_TYPE_INFO: Record<LoanType, LoanTypeInfo> = {
   [LoanType.CREDIT_LOYER]: {
     type: LoanType.CREDIT_LOYER,
     name: 'Crédit Loyer',
-    nameKreyol: 'Kredi Lwaye',
     description: 'Financement pour le paiement du loyer résidentiel ou commercial',
-    descriptionKreyol: 'Finansman pou peye lwaye lakay oswa biznis',
     icon: Home,
     color: '#F59E0B',
     bgColor: '#FFFBEB',
@@ -112,9 +100,7 @@ export const LOAN_TYPE_INFO: Record<LoanType, LoanTypeInfo> = {
   [LoanType.CREDIT_AUTO]: {
     type: LoanType.CREDIT_AUTO,
     name: 'Crédit Auto',
-    nameKreyol: 'Kredi Machin',
     description: "Financement pour l'achat d'un véhicule automobile",
-    descriptionKreyol: 'Finansman pou achte machin',
     icon: Car,
     color: '#06B6D4',
     bgColor: '#ECFEFF',
@@ -129,9 +115,7 @@ export const LOAN_TYPE_INFO: Record<LoanType, LoanTypeInfo> = {
   [LoanType.CREDIT_MOTO]: {
     type: LoanType.CREDIT_MOTO,
     name: 'Crédit Moto',
-    nameKreyol: 'Kredi Motosiklèt',
     description: "Financement pour l'achat d'une motocyclette",
-    descriptionKreyol: 'Finansman pou achte motosiklèt',
     icon: Bike,
     color: '#14B8A6',
     bgColor: '#F0FDFA',
@@ -146,9 +130,7 @@ export const LOAN_TYPE_INFO: Record<LoanType, LoanTypeInfo> = {
   [LoanType.CREDIT_PERSONNEL]: {
     type: LoanType.CREDIT_PERSONNEL,
     name: 'Crédit Personnel',
-    nameKreyol: 'Kredi Pèsonèl',
     description: 'Prêt personnel pour besoins divers (événements, urgences, etc.)',
-    descriptionKreyol: 'Prè pèsonèl pou divès bezwen (seremoni, ijans, elatriye)',
     icon: Users,
     color: '#A855F7',
     bgColor: '#FAF5FF',
@@ -163,9 +145,7 @@ export const LOAN_TYPE_INFO: Record<LoanType, LoanTypeInfo> = {
   [LoanType.CREDIT_SCOLAIRE]: {
     type: LoanType.CREDIT_SCOLAIRE,
     name: 'Crédit Scolaire',
-    nameKreyol: 'Kredi Eskolè',
     description: 'Financement pour frais scolaires, universitaires et matériel éducatif',
-    descriptionKreyol: 'Finansman pou lekòl, inivèsite ak materyèl eskolè',
     icon: BookOpen,
     color: '#6366F1',
     bgColor: '#EEF2FF',
@@ -180,9 +160,7 @@ export const LOAN_TYPE_INFO: Record<LoanType, LoanTypeInfo> = {
   [LoanType.CREDIT_AGRICOLE]: {
     type: LoanType.CREDIT_AGRICOLE,
     name: 'Crédit Agricole',
-    nameKreyol: 'Kredi Agrikòl',
     description: 'Financement pour activités agricoles (semences, équipement, intrants)',
-    descriptionKreyol: 'Finansman pou aktivite agrikòl (semans, zouti, pwodwi)',
     icon: Sprout,
     color: '#22C55E',
     bgColor: '#F0FDF4',
@@ -197,9 +175,7 @@ export const LOAN_TYPE_INFO: Record<LoanType, LoanTypeInfo> = {
   [LoanType.CREDIT_PROFESSIONNEL]: {
     type: LoanType.CREDIT_PROFESSIONNEL,
     name: 'Crédit Professionnel',
-    nameKreyol: 'Kredi Pwofesyonèl',
     description: 'Financement pour activités professionnelles et entrepreneuriales',
-    descriptionKreyol: 'Finansman pou aktivite pwofesyonèl ak biznis',
     icon: Briefcase,
     color: '#0EA5E9',
     bgColor: '#F0F9FF',
@@ -214,9 +190,7 @@ export const LOAN_TYPE_INFO: Record<LoanType, LoanTypeInfo> = {
   [LoanType.CREDIT_APPUI]: {
     type: LoanType.CREDIT_APPUI,
     name: "Crédit d'Appui",
-    nameKreyol: 'Kredi Sipò',
     description: "Prêt de soutien pour situations d'urgence ou besoins immédiats",
-    descriptionKreyol: 'Prè sipò pou sitiyasyon ijans oswa bezwen imedya',
     icon: HandMetal,
     color: '#F97316',
     bgColor: '#FFF7ED',
@@ -231,9 +205,7 @@ export const LOAN_TYPE_INFO: Record<LoanType, LoanTypeInfo> = {
   [LoanType.CREDIT_HYPOTHECAIRE]: {
     type: LoanType.CREDIT_HYPOTHECAIRE,
     name: 'Crédit Hypothécaire',
-    nameKreyol: 'Kredi Ipotekè',
     description: 'Financement pour achat immobilier avec garantie hypothécaire',
-    descriptionKreyol: 'Finansman pou achte kay/tè ak garanti ipotekè',
     icon: Building,
     color: '#EC4899',
     bgColor: '#FDF2F8',
@@ -271,22 +243,6 @@ export function getLoanTypesByCategory() {
   });
 
   return categories;
-}
-
-/**
- * Obtenir le nom d'un type de crédit en français
- */
-export function getLoanTypeName(loanType: LoanType, useKreyol: boolean = false): string {
-  const info = LOAN_TYPE_INFO[loanType];
-  return useKreyol ? info.nameKreyol : info.name;
-}
-
-/**
- * Obtenir la description d'un type de crédit
- */
-export function getLoanTypeDescription(loanType: LoanType, useKreyol: boolean = false): string {
-  const info = LOAN_TYPE_INFO[loanType];
-  return useKreyol ? info.descriptionKreyol : info.description;
 }
 
 /**

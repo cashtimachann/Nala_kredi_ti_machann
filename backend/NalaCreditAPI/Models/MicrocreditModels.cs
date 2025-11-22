@@ -238,6 +238,10 @@ namespace NalaCreditAPI.Models
         public string ApplicationNumber { get; set; } = string.Empty;
         
         [Required]
+        [MaxLength(12)]
+        public string SavingsAccountNumber { get; set; } = string.Empty;
+        
+        [Required]
         public Guid BorrowerId { get; set; }
         
         [Required]
@@ -261,6 +265,17 @@ namespace NalaCreditAPI.Models
         
         [Required]
         public int BranchId { get; set; }
+    // Optional snapshot fields saved with the application for auditing and display
+    [MaxLength(200)]
+    public string? CustomerName { get; set; }
+    [MaxLength(20)]
+    public string? CustomerPhone { get; set; }
+    [MaxLength(200)]
+    public string? CustomerEmail { get; set; }
+    // Address stored as JSON in the Borrower entity but we may snapshot it here optionally
+    public string? CustomerAddressJson { get; set; }
+    [MaxLength(100)]
+    public string? Occupation { get; set; }
         
         [Required]
         [MaxLength(100)]
@@ -291,6 +306,70 @@ namespace NalaCreditAPI.Models
         [Column(TypeName = "decimal(5,4)")]
         public decimal DebtToIncomeRatio { get; set; }
         
+        // Additional personal and financial information
+        [Required]
+        public int Dependents { get; set; } = 0;
+        
+        [Required]
+        [Column(TypeName = "decimal(5,4)")]
+        public decimal InterestRate { get; set; }
+        
+        [Required]
+        [Column(TypeName = "decimal(5,4)")]
+        public decimal MonthlyInterestRate { get; set; }
+        
+        [MaxLength(200)]
+        public string? CollateralType { get; set; }
+        
+        public string? CollateralDescription { get; set; }
+        
+        // Guarantor information
+        [MaxLength(100)]
+        public string? Guarantor1Name { get; set; }
+        
+        [MaxLength(20)]
+        public string? Guarantor1Phone { get; set; }
+        
+        [MaxLength(50)]
+        public string? Guarantor1Relation { get; set; }
+        
+        [MaxLength(100)]
+        public string? Guarantor2Name { get; set; }
+        
+        [MaxLength(20)]
+        public string? Guarantor2Phone { get; set; }
+        
+        [MaxLength(50)]
+        public string? Guarantor2Relation { get; set; }
+        
+        // Reference information
+        [MaxLength(100)]
+        public string? Reference1Name { get; set; }
+        
+        [MaxLength(20)]
+        public string? Reference1Phone { get; set; }
+        
+        [MaxLength(100)]
+        public string? Reference2Name { get; set; }
+        
+        [MaxLength(20)]
+        public string? Reference2Phone { get; set; }
+        
+        // Document verification flags
+        [Required]
+        public bool HasNationalId { get; set; } = false;
+        
+        [Required]
+        public bool HasProofOfResidence { get; set; } = false;
+        
+        [Required]
+        public bool HasProofOfIncome { get; set; } = false;
+        
+        [Required]
+        public bool HasCollateralDocs { get; set; } = false;
+        
+        public string? Notes { get; set; }
+        
         // Workflow d'approbation
         public MicrocreditApprovalLevel CurrentApprovalLevel { get; set; } = MicrocreditApprovalLevel.LoanOfficer;
         
@@ -306,6 +385,7 @@ namespace NalaCreditAPI.Models
         public DateTime? ReviewedAt { get; set; }
         public DateTime? ApprovedAt { get; set; }
         public DateTime? RejectedAt { get; set; }
+        public DateTime? DisbursementDate { get; set; }
         
         [MaxLength(500)]
         public string? RejectionReason { get; set; }
@@ -586,6 +666,36 @@ namespace NalaCreditAPI.Models
         
         public virtual ICollection<MicrocreditPaymentSchedule> PaymentSchedule { get; set; } = new List<MicrocreditPaymentSchedule>();
         public virtual ICollection<MicrocreditPayment> Payments { get; set; } = new List<MicrocreditPayment>();
+
+        // Collection notes for recovery/collections
+        public virtual ICollection<MicrocreditCollectionNote> CollectionNotes { get; set; } = new List<MicrocreditCollectionNote>();
+    }
+
+    // Notes de recouvrement/collection
+    [Table("microcredit_collection_notes")]
+    public class MicrocreditCollectionNote
+    {
+        [Key]
+        public Guid Id { get; set; }
+
+        [Required]
+        public Guid LoanId { get; set; }
+
+        [Required]
+        [MaxLength(2000)]
+        public string Note { get; set; } = string.Empty;
+
+        [Required]
+        [MaxLength(100)]
+        public string CreatedBy { get; set; } = string.Empty;
+
+        [MaxLength(100)]
+        public string? CreatedByName { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        [ForeignKey("LoanId")]
+        public virtual MicrocreditLoan Loan { get; set; } = null!;
     }
 
     // Échéancier de paiement

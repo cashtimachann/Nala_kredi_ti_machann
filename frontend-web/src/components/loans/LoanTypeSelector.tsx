@@ -6,7 +6,6 @@ import { Check, Info } from 'lucide-react';
 interface LoanTypeSelectorProps {
   selectedType?: LoanType;
   onSelect: (loanType: LoanType) => void;
-  useKreyol?: boolean;
   disabled?: boolean;
 }
 
@@ -15,7 +14,6 @@ type ViewMode = 'grid' | 'category';
 const LoanTypeSelector: React.FC<LoanTypeSelectorProps> = ({
   selectedType,
   onSelect,
-  useKreyol = false,
   disabled = false
 }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('category');
@@ -26,12 +24,12 @@ const LoanTypeSelector: React.FC<LoanTypeSelectorProps> = ({
   const categorizedTypes = getLoanTypesByCategory();
 
   const categories = [
-    { id: 'all', name: useKreyol ? 'Tout Kalite' : 'Tous les types', nameKreyol: 'Tout Kalite' },
-    { id: 'personal', name: useKreyol ? 'Pèsonèl' : 'Personnel', nameKreyol: 'Pèsonèl' },
-    { id: 'business', name: useKreyol ? 'Biznis' : 'Affaires', nameKreyol: 'Biznis' },
-    { id: 'vehicle', name: useKreyol ? 'Transpò' : 'Véhicule', nameKreyol: 'Transpò' },
-    { id: 'property', name: useKreyol ? 'Pwopriyete' : 'Propriété', nameKreyol: 'Pwopriyete' },
-    { id: 'education', name: useKreyol ? 'Edikasyon' : 'Éducation', nameKreyol: 'Edikasyon' }
+    { id: 'all', name: 'Tous les types' },
+    { id: 'personal', name: 'Personnel' },
+    { id: 'business', name: 'Affaires' },
+    { id: 'vehicle', name: 'Véhicule' },
+    { id: 'property', name: 'Propriété' },
+    { id: 'education', name: 'Éducation' }
   ];
 
   const getTypesToDisplay = (): LoanTypeInfo[] => {
@@ -76,7 +74,7 @@ const LoanTypeSelector: React.FC<LoanTypeSelectorProps> = ({
         {/* Badge de garantie requise */}
         {typeInfo.requiresCollateral && (
           <div className="absolute top-2 left-2 bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-medium">
-            {useKreyol ? 'Garanti' : 'Garantie'}
+            Garantie
           </div>
         )}
 
@@ -90,47 +88,23 @@ const LoanTypeSelector: React.FC<LoanTypeSelectorProps> = ({
 
         {/* Nom */}
         <h3 className="text-center font-semibold text-gray-900 mb-2">
-          {useKreyol ? typeInfo.nameKreyol : typeInfo.name}
+          {typeInfo.name}
         </h3>
 
         {/* Description */}
         <p className="text-sm text-gray-600 text-center mb-3 line-clamp-2">
-          {useKreyol ? typeInfo.descriptionKreyol : typeInfo.description}
+          {typeInfo.description}
         </p>
-
-        {/* Informations clés */}
-        <div className="space-y-1 text-xs text-gray-500">
-          <div className="flex justify-between">
-            <span>{useKreyol ? 'Montan:' : 'Montant:'}</span>
-            <span className="font-medium">
-              {typeInfo.defaultMinAmount.toLocaleString()} - {typeInfo.defaultMaxAmount.toLocaleString()}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span>{useKreyol ? 'Dire:' : 'Durée:'}</span>
-            <span className="font-medium">
-              {typeInfo.defaultMinDuration}-{typeInfo.defaultMaxDuration} {useKreyol ? 'mwa' : 'mois'}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span>{useKreyol ? 'Enterè:' : 'Intérêt:'}</span>
-            <span className="font-medium">
-              ~{(typeInfo.defaultInterestRate * 100).toFixed(1)}%
-            </span>
-          </div>
-        </div>
 
         {/* Info détaillée au survol */}
         {isHovered && (
           <div className="absolute inset-0 bg-black bg-opacity-90 rounded-lg p-4 flex flex-col justify-center z-10 transition-opacity">
             <p className="text-white text-sm text-center">
-              {useKreyol ? typeInfo.descriptionKreyol : typeInfo.description}
+              {typeInfo.description}
             </p>
             {typeInfo.requiresCollateral && (
               <p className="text-yellow-300 text-xs text-center mt-2">
-                {useKreyol
-                  ? '⚠️ Sa mande garanti'
-                  : '⚠️ Garantie requise'}
+                ⚠️ Garantie requise
               </p>
             )}
           </div>
@@ -142,17 +116,13 @@ const LoanTypeSelector: React.FC<LoanTypeSelectorProps> = ({
   return (
     <div className="space-y-6">
       {/* En-tête */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">
-            {useKreyol ? 'Chwazi Tip Kredi' : 'Choisir le type de crédit'}
-          </h2>
-          <p className="text-sm text-gray-600 mt-1">
-            {useKreyol
-              ? 'Seleksyone tip kredi ki pi bon pou bezwen ou'
-              : 'Sélectionnez le type de crédit qui correspond à vos besoins'}
-          </p>
-        </div>
+      <div>
+        <h2 className="text-xl font-bold text-gray-900">
+          Choisir le type de crédit
+        </h2>
+        <p className="text-sm text-gray-600 mt-1">
+          Sélectionnez le type de crédit qui correspond à vos besoins
+        </p>
       </div>
 
       {/* Filtres par catégorie */}
@@ -169,7 +139,7 @@ const LoanTypeSelector: React.FC<LoanTypeSelectorProps> = ({
               }
             `}
           >
-            {useKreyol ? category.nameKreyol : category.name}
+            {category.name}
           </button>
         ))}
       </div>
@@ -184,12 +154,10 @@ const LoanTypeSelector: React.FC<LoanTypeSelectorProps> = ({
         <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
         <div className="text-sm text-blue-900">
           <p className="font-medium mb-1">
-            {useKreyol ? 'Enfòmasyon enpòtan' : 'Information importante'}
+            Information importante
           </p>
           <p>
-            {useKreyol
-              ? 'Kondisyon ak enterè ka varye selon monta ak dire kredi a. Yon ajan ap ede w finalizer detay yo.'
-              : 'Les conditions et taux d\'intérêt peuvent varier selon le montant et la durée. Un agent vous aidera à finaliser les détails.'}
+            Les conditions et taux d'intérêt peuvent varier selon le montant et la durée. Un agent vous aidera à finaliser les détails.
           </p>
         </div>
       </div>
@@ -200,10 +168,7 @@ const LoanTypeSelector: React.FC<LoanTypeSelectorProps> = ({
           <div className="flex items-center gap-2 text-green-800">
             <Check className="w-5 h-5" />
             <span className="font-medium">
-              {useKreyol ? 'Seleksyone:' : 'Sélectionné:'}{' '}
-              {useKreyol
-                ? LOAN_TYPE_INFO[selectedType].nameKreyol
-                : LOAN_TYPE_INFO[selectedType].name}
+              Sélectionné: {LOAN_TYPE_INFO[selectedType].name}
             </span>
           </div>
         </div>

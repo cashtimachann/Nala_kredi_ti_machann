@@ -84,86 +84,16 @@ const CashManagementModule: React.FC = () => {
   const loadCashData = async () => {
     // TODO: Replace with actual API calls
     const mockMainCash: CashBalance = {
-      htg: 2500000,
-      usd: 45000,
+      htg: 0,
+      usd: 0,
       htgLimit: 3000000,
       usdLimit: 50000,
       lastUpdate: new Date().toLocaleTimeString('fr-HT'),
     };
 
-    const mockCashiers: CashierCash[] = [
-      {
-        id: '1',
-        cashierName: 'Marie Laurent',
-        htgBalance: 425000,
-        usdBalance: 3200,
-        htgLimit: 500000,
-        usdLimit: 5000,
-        sessionStart: '08:00',
-        todayStats: {
-          deposits: 45,
-          withdrawals: 32,
-          exchanges: 12,
-        },
-      },
-      {
-        id: '2',
-        cashierName: 'Jean Pierre',
-        htgBalance: 380000,
-        usdBalance: 2800,
-        htgLimit: 500000,
-        usdLimit: 5000,
-        sessionStart: '07:55',
-        todayStats: {
-          deposits: 42,
-          withdrawals: 30,
-          exchanges: 10,
-        },
-      },
-      {
-        id: '3',
-        cashierName: 'Sophie Michel',
-        htgBalance: 290000,
-        usdBalance: 1900,
-        htgLimit: 500000,
-        usdLimit: 5000,
-        sessionStart: '08:15',
-        todayStats: {
-          deposits: 35,
-          withdrawals: 25,
-          exchanges: 8,
-        },
-      },
-      {
-        id: '4',
-        cashierName: 'Pierre Dubois',
-        htgBalance: 445000,
-        usdBalance: 4500,
-        htgLimit: 500000,
-        usdLimit: 5000,
-        sessionStart: '08:02',
-        todayStats: {
-          deposits: 38,
-          withdrawals: 28,
-          exchanges: 11,
-        },
-      },
-    ];
+    const mockCashiers: CashierCash[] = [];
 
-    const mockRates: ExchangeRate[] = [
-      {
-        currency: 'USD',
-        buyRate: 137.50,
-        sellRate: 139.00,
-        lastUpdate: '08:00',
-      },
-      {
-        currency: 'EUR',
-        buyRate: 148.25,
-        sellRate: 150.50,
-        lastUpdate: '08:00',
-      },
-    ];
+    const mockRates: ExchangeRate[] = [];
 
     setMainCash(mockMainCash);
     setCashiers(mockCashiers);

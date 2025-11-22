@@ -16,191 +16,27 @@ interface AccountManagementProps {
   branches: Branch[];
 }
 
-// Données d'exemple pour le développement
-const mockAccounts: SavingsAccount[] = [
-  {
-    id: '1',
-    accountNumber: '001234567890',
-    customerId: 'cust1',
-    customer: {
-      id: 'cust1',
-      firstName: 'Jean',
-      lastName: 'Pierre',
-      fullName: 'Jean Pierre',
-      dateOfBirth: '1985-03-15',
-      gender: 'M',
-      address: {
-        street: '123 Rue Delmas',
-        commune: 'Delmas',
-        department: 'Ouest',
-        country: 'Haiti'
-      },
-      contact: {
-        primaryPhone: '+509 3712 3456',
-        email: 'jean.pierre@example.com'
-      },
-      identity: {
-        documentType: IdentityDocumentType.CIN,
-        documentNumber: 'CIN123456789',
-        issuedDate: '2020-01-15',
-        issuingAuthority: 'ONI'
-      },
-      createdAt: '2023-01-15T10:00:00Z',
-      updatedAt: '2023-01-15T10:00:00Z',
-      isActive: true
-    },
-    branchId: 1,
-    branchName: 'Succursale Centre-Ville',
-    currency: Currency.HTG,
-    balance: 15000,
-    availableBalance: 15000,
-    minimumBalance: 500,
-    openingDate: '2023-01-15',
-    lastTransactionDate: '2024-01-10',
-    status: AccountStatus.ACTIVE,
-    interestRate: 0.03,
-    accruedInterest: 125.50,
-    accountLimits: {
-      dailyWithdrawalLimit: 50000,
-      dailyDepositLimit: 100000,
-      monthlyWithdrawalLimit: 500000,
-      maxBalance: 1000000,
-      minWithdrawalAmount: 100,
-      maxWithdrawalAmount: 50000
-    },
-    createdAt: '2023-01-15T10:00:00Z',
-    updatedAt: '2024-01-10T14:30:00Z'
-  },
-  {
-    id: '2',
-    accountNumber: '001234567891',
-    customerId: 'cust2',
-    customer: {
-      id: 'cust2',
-      firstName: 'Marie',
-      lastName: 'Joseph',
-      fullName: 'Marie Joseph',
-      dateOfBirth: '1990-07-22',
-      gender: 'F',
-      address: {
-        street: '456 Avenue John Brown',
-        commune: 'Port-au-Prince',
-        department: 'Ouest',
-        country: 'Haiti'
-      },
-      contact: {
-        primaryPhone: '+509 2812 7890',
-        email: 'marie.joseph@example.com'
-      },
-      identity: {
-        documentType: IdentityDocumentType.CIN,
-        documentNumber: 'CIN987654321',
-        issuedDate: '2019-05-10',
-        issuingAuthority: 'ONI'
-      },
-      createdAt: '2023-02-20T09:00:00Z',
-      updatedAt: '2023-02-20T09:00:00Z',
-      isActive: true
-    },
-    branchId: 1,
-    branchName: 'Succursale Centre-Ville',
-    currency: Currency.USD,
-    balance: 850.75,
-    availableBalance: 850.75,
-    minimumBalance: 25,
-    openingDate: '2023-02-20',
-    lastTransactionDate: '2024-01-08',
-    status: AccountStatus.ACTIVE,
-    interestRate: 0.015,
-    accruedInterest: 8.25,
-    accountLimits: {
-      dailyWithdrawalLimit: 1000,
-      dailyDepositLimit: 2000,
-      monthlyWithdrawalLimit: 10000,
-      maxBalance: 50000,
-      minWithdrawalAmount: 5,
-      maxWithdrawalAmount: 1000
-    },
-    createdAt: '2023-02-20T09:00:00Z',
-    updatedAt: '2024-01-08T16:15:00Z'
-  },
-  {
-    id: '3',
-    accountNumber: '001234567892',
-    customerId: 'cust3',
-    customer: {
-      id: 'cust3',
-      firstName: 'Paul',
-      lastName: 'Moïse',
-      fullName: 'Paul Moïse',
-      dateOfBirth: '1978-11-03',
-      gender: 'M',
-      address: {
-        street: '789 Rue Pavée',
-        commune: 'Carrefour',
-        department: 'Ouest',
-        country: 'Haiti'
-      },
-      contact: {
-        primaryPhone: '+509 4711 2345'
-      },
-      identity: {
-        documentType: IdentityDocumentType.PASSPORT,
-        documentNumber: 'HT1234567',
-        issuedDate: '2022-03-12',
-        expiryDate: '2027-03-12',
-        issuingAuthority: 'Direction de l\'Immigration'
-      },
-      createdAt: '2023-03-10T11:00:00Z',
-      updatedAt: '2023-03-10T11:00:00Z',
-      isActive: true
-    },
-    branchId: 2,
-    branchName: 'Succursale Carrefour',
-    currency: Currency.HTG,
-    balance: 2500,
-    availableBalance: 2500,
-    minimumBalance: 500,
-    openingDate: '2023-03-10',
-    status: AccountStatus.INACTIVE,
-    interestRate: 0.03,
-    accruedInterest: 45.80,
-    accountLimits: {
-      dailyWithdrawalLimit: 50000,
-      dailyDepositLimit: 100000,
-      monthlyWithdrawalLimit: 500000,
-      maxBalance: 1000000,
-      minWithdrawalAmount: 100,
-      maxWithdrawalAmount: 50000
-    },
-    createdAt: '2023-03-10T11:00:00Z',
-    updatedAt: '2023-12-15T10:00:00Z'
-  }
-];
-
-const mockStatistics: AccountStatistics = {
-  totalAccounts: 3,
-  activeAccounts: 2,
-  totalBalanceHTG: 17500,
-  totalBalanceUSD: 850.75,
-  averageBalance: 9125.25,
-  accountsByStatus: {
-    [AccountStatus.ACTIVE]: 2,
-    [AccountStatus.INACTIVE]: 1,
-    [AccountStatus.CLOSED]: 0,
-    [AccountStatus.SUSPENDED]: 0
-  },
-  accountsByCurrency: {
-    [Currency.HTG]: 2,
-    [Currency.USD]: 1
-  },
-  newAccountsThisMonth: 0,
-  dormantAccounts: 1
-};
-
 const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
-  const [accounts, setAccounts] = useState<SavingsAccount[]>(mockAccounts);
-  const [statistics, setStatistics] = useState<AccountStatistics>(mockStatistics);
+  const [accounts, setAccounts] = useState<SavingsAccount[]>([]);
+  const [statistics, setStatistics] = useState<AccountStatistics>({
+    totalAccounts: 0,
+    activeAccounts: 0,
+    totalBalanceHTG: 0,
+    totalBalanceUSD: 0,
+    averageBalance: 0,
+    accountsByStatus: {
+      [AccountStatus.ACTIVE]: 0,
+      [AccountStatus.INACTIVE]: 0,
+      [AccountStatus.CLOSED]: 0,
+      [AccountStatus.SUSPENDED]: 0
+    },
+    accountsByCurrency: {
+      [Currency.HTG]: 0,
+      [Currency.USD]: 0
+    },
+    newAccountsThisMonth: 0,
+    dormantAccounts: 0
+  });
   const [filters, setFilters] = useState<AccountFilters>({
     search: '',
     currency: '',

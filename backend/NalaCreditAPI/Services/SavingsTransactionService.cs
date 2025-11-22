@@ -78,7 +78,8 @@ namespace NalaCreditAPI.Services.Savings
                 };
 
                 account.Balance += balanceChange;
-                account.AvailableBalance = account.Balance; // Pour l'instant, pas de fonds bloqués
+                // ✅ FIX: Respect blocked balance - Balance = AvailableBalance + BlockedBalance
+                account.AvailableBalance = account.Balance - account.BlockedBalance;
                 account.LastTransactionDate = DateTime.UtcNow;
                 account.UpdatedAt = DateTime.UtcNow;
 
@@ -212,7 +213,8 @@ namespace NalaCreditAPI.Services.Savings
                 };
 
                 transaction.Account.Balance += balanceChange;
-                transaction.Account.AvailableBalance = transaction.Account.Balance;
+                // ✅ FIX: Respect blocked balance - Balance = AvailableBalance + BlockedBalance
+                transaction.Account.AvailableBalance = transaction.Account.Balance - transaction.Account.BlockedBalance;
                 transaction.Account.UpdatedAt = DateTime.UtcNow;
 
                 reversalTransaction.BalanceAfter = transaction.Account.Balance;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   CheckCircle, 
@@ -20,45 +20,17 @@ import {
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
-import { LoanType } from '../../types/microcredit';
+import { LoanType, ApplicationStatus } from '../../types/microcredit';
+import {
+  calculateMonthlyPaymentFromMonthlyRate,
+  resolveMonthlyRatePercent,
+  resolveAnnualRatePercent,
+  roundCurrency
+} from './loanRateUtils';
 
-interface LoanApplication {
-  id: string;
-  loanNumber: string;
-  loanType: LoanType;
-  customerId: string;
-  customerCode?: string;
-  customerName: string;
-  phone: string;
-  email?: string;
-  address: string;
-  occupation: string;
-  monthlyIncome: number;
-  dependents: number;
-  requestedAmount: number;
-  currency: 'HTG' | 'USD';
-  termMonths: number;
-  interestRate: number;
-  monthlyPayment: number;
-  purpose: string;
-  collateralType?: string;
-  collateralValue?: number;
-  collateralDescription?: string;
-  guarantor1Name?: string;
-  guarantor1Phone?: string;
-  guarantor1Relation?: string;
-  guarantor2Name?: string;
-  guarantor2Phone?: string;
-  guarantor2Relation?: string;
-  reference1Name?: string;
-  reference1Phone?: string;
-  reference2Name?: string;
-  reference2Phone?: string;
-  submittedDate: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  currentApprovalLevel: number;
-  branchId: string;
-}
+import type { LoanApplication as LoanApplicationType, ApprovalStep as ApprovalStepType } from '../../types/microcredit';
+
+// Using LoanApplicationType imported from our shared types to ensure we use backend fields
 
 interface ApprovalLevel {
   level: number;
@@ -83,18 +55,19 @@ interface SolvencyEvaluation {
 }
 
 interface LoanApprovalWorkflowProps {
-  application: LoanApplication;
+  application: LoanApplicationType;
   onClose: () => void;
-  onApprove: (applicationId: string, level: number, comment: string) => void;
+  onApprove: (applicationId: string, level: number, comment: string, disbursementDate?: string) => void;
   onReject: (applicationId: string, level: number, reason: string) => void;
 }
 
 type ApprovalFormData = {
-  decision: 'APPROVE' | 'REJECT';
+  decision: 'APPROVE' | 'REJECT' | '';
+  disbursementDate?: string;
   comment: string;
 };
 
-// Note: Validation handled manually below with simple checks; schema resolver removed for now.
+type GuarantorRelation = 'FAMILY' | 'FRIEND' | 'COLLEAGUE' | 'BUSINESS_PARTNER' | 'NEIGHBOR' | 'OTHER';
 
 const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
   application,
@@ -103,76 +76,142 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
   onReject
 }) => {
   const [activeTab, setActiveTab] = useState<'application' | 'evaluation' | 'approval'>('application');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Simulation des niveaux d'approbation
-  const [approvalLevels, setApprovalLevels] = useState<ApprovalLevel[]>([
-    {
-      level: 1,
-      title: 'Superviseur de Succursale',
-      approver: 'Marie Dupont',
-      status: application.currentApprovalLevel > 1 ? 'APPROVED' : 'PENDING',
-      decision: application.currentApprovalLevel > 1 ? 'APPROVE' : undefined,
-      comment: application.currentApprovalLevel > 1 ? 'Dossier complet et conforme aux critères' : undefined,
-      decidedAt: application.currentApprovalLevel > 1 ? '2025-10-14 10:30' : undefined,
-      decidedBy: application.currentApprovalLevel > 1 ? 'Marie Dupont' : undefined
-    },
-    {
-      level: 2,
-      title: 'Gestionnaire Régional',
-      approver: 'Jean Baptiste',
-      status: application.currentApprovalLevel > 2 ? 'APPROVED' : application.currentApprovalLevel === 2 ? 'PENDING' : 'NOT_STARTED',
-      decision: application.currentApprovalLevel > 2 ? 'APPROVE' : undefined,
-      comment: application.currentApprovalLevel > 2 ? 'Garanties suffisantes, client solvable' : undefined,
-      decidedAt: application.currentApprovalLevel > 2 ? '2025-10-14 14:15' : undefined,
-      decidedBy: application.currentApprovalLevel > 2 ? 'Jean Baptiste' : undefined
-    },
-    {
-      level: 3,
-      title: 'Comité de Crédit',
-      approver: 'Comité (3 membres)',
-      status: application.currentApprovalLevel === 3 ? 'PENDING' : 'NOT_STARTED'
-    }
-  ]);
+  // Approval steps coming from the backend application; use real data
+  const [approvalLevels, setApprovalLevels] = useState<ApprovalLevel[]>([]);
+
+  useEffect(() => {
+    if (!application) return;
+    // Map backend ApprovalSteps to local ApprovalLevel format used by UI
+    const mapped: ApprovalLevel[] = ((application as any).ApprovalSteps || (application as any).approvals || application.approvals || []).map((s: any, idx: number) => ({
+      level: s.Level ? parseInt(s.Level as string, 10) || idx + 1 : idx + 1,
+      title: s.Level || `Niveau ${idx + 1}`,
+      approver: s.ApproverName || s.approverName || 'Comité de Crédit',
+      status: (s.Status || s.status || 'NOT_STARTED').toUpperCase() as any,
+      decision: s.Status || s.status,
+      comment: s.Comments || s.comments,
+      decidedAt: s.ProcessedAt || s.processedAt ? new Date(s.ProcessedAt || s.processedAt).toLocaleString('fr-FR') : undefined,
+      decidedBy: s.ApproverName || s.approverName
+    }));
+
+    setApprovalLevels(mapped);
+  }, [application]);
+
+  // Consolidate borrower / snapshot fields into local variables (prefer backend returned borrower snapshot)
+  const borrower = application.borrower;
+  const customerName = (application as any).customerName ?? (borrower ? `${borrower.firstName} ${borrower.lastName}` : 'Client');
+  const customerPhone = (application as any).customerPhone ?? borrower?.contact?.primaryPhone ?? '';
+  const customerAddress = (application as any).customerAddress ?? (borrower ? `${borrower.address?.street ?? ''} ${borrower.address?.city ?? ''}`.trim() : '');
+  const occupation = (application as any).occupation ?? borrower?.occupation ?? '';
+  const monthlyIncome = (application as any).monthlyIncome ?? borrower?.monthlyIncome ?? 0;
+  const dependents = (application as any).dependents ?? 0;
+  // Collateral and guarantors normalization
+  const collateralType = (application as any).collateralType ?? application.guarantees?.find((g: any) => (g.type || g.Type || '').toString().toLowerCase().includes('collat'))?.description ?? undefined;
+  const collateralValue = (application as any).collateralValue ?? application.guarantees?.find((g: any) => (g.type || g.Type || '').toString().toLowerCase().includes('collat'))?.value ?? 0;
+  const collateralDescription = (application as any).collateralDescription ?? application.guarantees?.find((g: any) => (g.type || g.Type || '').toString().toLowerCase().includes('collat'))?.description ?? undefined;
+  const guarantors = (application as any).guarantees?.filter((g: any) => (g.type || g.Type || '').toString().toLowerCase().includes('personal'))?.map((g: any) => ({ name: g.guarantorInfo?.name || g.contactName || g.description, phone: g.guarantorInfo?.phone || g.contactPhone })) ?? [];
+  const referencesArr = (application as any).references ?? [];
+
+  // Extract guarantor and reference fields from backend snapshot
+  const guarantor1Name = (application as any).guarantor1Name ?? '';
+  const guarantor1Phone = (application as any).guarantor1Phone ?? '';
+  const guarantor1Relation = (application as any).guarantor1Relation ?? '';
+  const guarantor2Name = (application as any).guarantor2Name ?? '';
+  const guarantor2Phone = (application as any).guarantor2Phone ?? '';
+  const guarantor2Relation = (application as any).guarantor2Relation ?? '';
+  const reference1Name = (application as any).reference1Name ?? '';
+  const reference1Phone = (application as any).reference1Phone ?? '';
+  const reference2Name = (application as any).reference2Name ?? '';
+  const reference2Phone = (application as any).reference2Phone ?? '';
+
+  // Calculate current numeric approval level from approval steps
+  const currentLevel = approvalLevels.find(lvl => lvl.status === 'PENDING' || lvl.status === 'NOT_STARTED');
+  const currentApprovalLevelNumber = currentLevel ? currentLevel.level : (approvalLevels.length > 0 ? approvalLevels[approvalLevels.length - 1].level + 1 : 1);
+
+  // Derive a displayable monthly interest rate and compute monthly payment if not provided
+  const monthlyRatePercent = resolveMonthlyRatePercent(
+    (application as any).monthlyInterestRate,
+    (application as any).interestRate ?? (application as any).annualInterestRate
+  );
+
+  const annualRatePercent = resolveAnnualRatePercent(
+    monthlyRatePercent,
+    (application as any).interestRate ?? (application as any).annualInterestRate,
+    monthlyRatePercent > 0 ? monthlyRatePercent * 12 : 0
+  );
+
+  const durationMonths = application.requestedDurationMonths ?? 12;
+  const requestedAmount = application.requestedAmount ?? 0;
+  
+  // Calculate monthly payment using amortization formula: P * [r(1+r)^n] / [(1+r)^n - 1]
+  // where P = principal, r = monthly interest rate (as decimal), n = number of months
+  const computedMonthlyPayment = roundCurrency(
+    (application as any).monthlyPayment && (application as any).monthlyPayment > 0
+      ? (application as any).monthlyPayment
+      : calculateMonthlyPaymentFromMonthlyRate(requestedAmount, monthlyRatePercent, durationMonths)
+  );
 
   // Calcul de l'évaluation de solvabilité
   const calculateSolvency = (): SolvencyEvaluation => {
-    const monthlyPayment = application.monthlyPayment;
-    const monthlyIncome = application.monthlyIncome;
-    const debtToIncomeRatio = (monthlyPayment / monthlyIncome) * 100;
+    const monthlyPayment = computedMonthlyPayment;
+    // Use the consolidated monthlyIncome value (derived from application or borrower snapshot)
+    const monthlyIncomeUsed = monthlyIncome;
+    const debtToIncomeRatio = monthlyIncomeUsed > 0 ? (monthlyPayment / monthlyIncomeUsed) * 100 : Infinity;
     
-    const collateralCoverageRatio = application.collateralValue 
-      ? (application.collateralValue / application.requestedAmount) * 100 
+    const collateralCoverageRatio = collateralValue > 0
+      ? (collateralValue / requestedAmount) * 100 
       : 0;
     
-    // Score de capacité de paiement (sur 30 points)
+    // Score de capacité de paiement (sur 30 points) - amélioré
     let paymentCapacityScore = 0;
-    if (debtToIncomeRatio <= 30) paymentCapacityScore = 30;
-    else if (debtToIncomeRatio <= 40) paymentCapacityScore = 20;
-    else if (debtToIncomeRatio <= 50) paymentCapacityScore = 10;
+    if (debtToIncomeRatio <= 25) paymentCapacityScore = 30;
+    else if (debtToIncomeRatio <= 35) paymentCapacityScore = 25;
+    else if (debtToIncomeRatio <= 45) paymentCapacityScore = 15;
+    else if (debtToIncomeRatio <= 55) paymentCapacityScore = 5;
     else paymentCapacityScore = 0;
 
-    // Score de garantie (sur 30 points)
+    // Score de garantie (sur 30 points) - amélioré
     let collateralScore = 0;
-    // Pour épargne bloquée: critères différents (15% minimum)
-    if (application.collateralType === 'Épargne bloquée') {
-      if (collateralCoverageRatio >= 20) collateralScore = 30; // Excellent (20% ou plus)
-      else if (collateralCoverageRatio >= 15) collateralScore = 25; // Bon (15-20%)
-      else if (collateralCoverageRatio >= 10) collateralScore = 15; // Acceptable (10-15%)
-      else collateralScore = 5; // Faible (moins de 10%)
+  const isSavingsCollateral = collateralType === 'Épargne bloquée';
+    
+    if (isSavingsCollateral) {
+      // Pour épargne bloquée: critères plus stricts
+      if (collateralCoverageRatio >= 25) collateralScore = 30;
+      else if (collateralCoverageRatio >= 20) collateralScore = 25;
+      else if (collateralCoverageRatio >= 15) collateralScore = 20;
+      else if (collateralCoverageRatio >= 10) collateralScore = 10;
+      else collateralScore = 0;
     } else {
-      // Pour autres garanties: critères standards (120% minimum)
-      if (collateralCoverageRatio >= 150) collateralScore = 30;
-      else if (collateralCoverageRatio >= 120) collateralScore = 25;
-      else if (collateralCoverageRatio >= 100) collateralScore = 15;
+      // Pour autres garanties
+      if (collateralCoverageRatio >= 200) collateralScore = 30;
+      else if (collateralCoverageRatio >= 150) collateralScore = 25;
+      else if (collateralCoverageRatio >= 120) collateralScore = 20;
+      else if (collateralCoverageRatio >= 100) collateralScore = 10;
       else collateralScore = 0;
     }
 
-    // Score d'historique de crédit (sur 25 points) - simulé
-    const creditHistoryScore = 20; // GOOD
-    const creditHistory: 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR' | 'UNKNOWN' = 'GOOD';
+    // Score d'historique de crédit (sur 25 points) - utilisez les données réelles si disponibles
+    const creditHistoryMap = {
+      EXCELLENT: 25,
+      GOOD: 20,
+      FAIR: 15,
+      POOR: 5,
+      UNKNOWN: 10
+    };
+    const creditHistory = application.creditScore && application.creditScore >= 800 ? 'EXCELLENT' :
+                         application.creditScore && application.creditScore >= 700 ? 'GOOD' :
+                         application.creditScore && application.creditScore >= 600 ? 'FAIR' : 'UNKNOWN';
+    const creditHistoryScore = creditHistoryMap[creditHistory];
 
-    // Score de stabilité professionnelle (sur 15 points) - simulé
-    const stabilityScore = 12;
+    // Score de stabilité (sur 15 points) - basé sur la profession et dépendants
+    let stabilityScore = 10; // Base
+    const stableProfessions = ['Fonctionnaire', 'Cadre', 'Enseignant', 'Infirmier', 'Médecin', 'Ingénieur'];
+    if (stableProfessions.some(prof => occupation.toLowerCase().includes(prof.toLowerCase()))) {
+      stabilityScore += 3;
+    }
+    const dependents = (application as any).dependents ?? 0;
+    if (dependents <= 3) stabilityScore += 2;
 
     const totalScore = paymentCapacityScore + collateralScore + creditHistoryScore + stabilityScore;
     const maxScore = 100;
@@ -180,15 +219,18 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
     let riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
     let recommendation: string;
 
-    if (totalScore >= 75) {
+    if (totalScore >= 80) {
       riskLevel = 'LOW';
       recommendation = 'Recommandation: APPROUVER - Excellent profil, risque faible';
-    } else if (totalScore >= 50) {
+    } else if (totalScore >= 60) {
       riskLevel = 'MEDIUM';
       recommendation = 'Recommandation: APPROUVER avec conditions - Profil acceptable, risque modéré';
+    } else if (totalScore >= 40) {
+      riskLevel = 'MEDIUM';
+      recommendation = 'Recommandation: APPROUVER avec garanties supplémentaires - Risque modéré-élevé';
     } else {
       riskLevel = 'HIGH';
-      recommendation = 'Recommandation: REJETER ou demander garanties supplémentaires - Risque élevé';
+      recommendation = 'Recommandation: REJETER - Risque trop élevé';
     }
 
     return {
@@ -210,14 +252,16 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
     handleSubmit,
     watch,
     formState: { errors }
-  } = useForm({
+  } = useForm<ApprovalFormData>({
     defaultValues: {
-      decision: '' as 'APPROVE' | 'REJECT',
+      decision: '',
       comment: ''
     }
   });
 
-  const decision = watch('decision') as 'APPROVE' | 'REJECT' | '';
+  const decision = watch('decision');
+
+  // (definitions moved earlier so remove duplicates here)
 
   const formatCurrency = (amount: number, currency: string) => {
     if (currency === 'HTG') {
@@ -233,27 +277,37 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
   };
 
   const getLoanTypeInfo = (type: string) => {
-    const types = {
+    const types: Record<string, { label: string; color: string; emoji: string }> = {
       COMMERCIAL: { label: 'Commercial', color: 'blue', emoji: '🏪' },
       AGRICULTURAL: { label: 'Agricole', color: 'green', emoji: '🌾' },
       PERSONAL: { label: 'Personnel', color: 'purple', emoji: '👤' },
-      EMERGENCY: { label: 'Urgence', color: 'red', emoji: '🚨' }
+      EMERGENCY: { label: 'Urgence', color: 'red', emoji: '🚨' },
+      CREDIT_LOYER: { label: 'Crédit Loyer', color: 'indigo', emoji: '🏠' },
+      CREDIT_AUTO: { label: 'Crédit Auto', color: 'cyan', emoji: '🚗' },
+      CREDIT_MOTO: { label: 'Crédit Moto', color: 'teal', emoji: '🏍️' },
+      CREDIT_PERSONNEL: { label: 'Crédit Personnel', color: 'pink', emoji: '💳' },
+      CREDIT_SCOLAIRE: { label: 'Crédit Scolaire', color: 'amber', emoji: '📚' },
+      CREDIT_AGRICOLE: { label: 'Crédit Agricole', color: 'lime', emoji: '🚜' },
+      CREDIT_PROFESSIONNEL: { label: 'Crédit Professionnel', color: 'violet', emoji: '💼' },
+      CREDIT_APPUI: { label: 'Crédit d\'Appui', color: 'orange', emoji: '🤝' },
+      CREDIT_HYPOTHECAIRE: { label: 'Crédit Hypothécaire', color: 'slate', emoji: '🏡' }
     };
-    return types[type as keyof typeof types] || types.PERSONAL;
+    return types[type] || types.PERSONAL;
   };
 
   const getStatusBadge = (status: string) => {
-    const badges = {
-      PENDING: { label: 'En attente', color: 'yellow', icon: Clock },
-      APPROVED: { label: 'Approuvé', color: 'green', icon: CheckCircle },
-      REJECTED: { label: 'Rejeté', color: 'red', icon: XCircle },
-      NOT_STARTED: { label: 'Non commencé', color: 'gray', icon: Clock }
+    const badges: Record<string, { label: string; color: string; icon: React.ComponentType<any> }> = {
+      PENDING: { label: 'En attente', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
+      APPROVED: { label: 'Approuvé', color: 'bg-green-100 text-green-800', icon: CheckCircle },
+      REJECTED: { label: 'Rejeté', color: 'bg-red-100 text-red-800', icon: XCircle },
+      NOT_STARTED: { label: 'Non commencé', color: 'bg-gray-100 text-gray-800', icon: Clock }
     };
-    const badge = badges[status as keyof typeof badges] || badges.PENDING;
+    
+    const badge = badges[status] || badges.PENDING;
     const Icon = badge.icon;
     
     return (
-      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-${badge.color}-100 text-${badge.color}-800`}>
+      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${badge.color}`}>
         <Icon className="w-4 h-4" />
         {badge.label}
       </span>
@@ -261,40 +315,71 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
   };
 
   const getRiskBadge = (level: string) => {
-    const badges = {
-      LOW: { label: 'Risque Faible', color: 'green' },
-      MEDIUM: { label: 'Risque Modéré', color: 'yellow' },
-      HIGH: { label: 'Risque Élevé', color: 'red' }
+    const badges: Record<string, { label: string; color: string }> = {
+      LOW: { label: 'Risque Faible', color: 'bg-green-100 text-green-800 border-green-200' },
+      MEDIUM: { label: 'Risque Modéré', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+      HIGH: { label: 'Risque Élevé', color: 'bg-red-100 text-red-800 border-red-200' }
     };
-    const badge = badges[level as keyof typeof badges] || badges.MEDIUM;
+    
+    const badge = badges[level] || badges.MEDIUM;
     
     return (
-      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-${badge.color}-100 text-${badge.color}-800 border border-${badge.color}-200`}>
+      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border ${badge.color}`}>
         <Shield className="w-4 h-4" />
         {badge.label}
       </span>
     );
   };
 
-  const onSubmit = (data: any) => {
-    if (!data.decision || !data.comment) {
-      toast.error('Veuillez remplir tous les champs');
-      return;
-    }
-    
-    if (data.comment.length < 10) {
-      toast.error('Le commentaire doit contenir au moins 10 caractères');
-      return;
-    }
+  const onSubmit = async (data: ApprovalFormData) => {
+    try {
+      setIsSubmitting(true);
 
-    if (data.decision === 'APPROVE') {
-      onApprove(application.id, application.currentApprovalLevel, data.comment);
-      toast.success('Demande approuvée avec succès');
-    } else if (data.decision === 'REJECT') {
-      onReject(application.id, application.currentApprovalLevel, data.comment);
-      toast.error('Demande rejetée');
+      if (!data.decision || !data.comment) {
+        toast.error('Veuillez remplir tous les champs');
+        return;
+      }
+      
+      if (data.comment.length < 10) {
+        toast.error('Le commentaire doit contenir au moins 10 caractères');
+        return;
+      }
+
+      // Validate disbursement date if approving
+      if (data.decision === 'APPROVE' && !data.disbursementDate) {
+        toast.error('Veuillez sélectionner une date de décaissement');
+        return;
+      }
+
+      const toastId = toast.loading('Traitement en cours...');
+
+      if (data.decision === 'APPROVE') {
+        await onApprove(application.id, currentApprovalLevelNumber, data.comment, data.disbursementDate);
+        toast.success('Demande approuvée avec succès', { id: toastId });
+      } else {
+        await onReject(application.id, currentApprovalLevelNumber, data.comment);
+        toast.error('Demande rejetée', { id: toastId });
+      }
+      
+      onClose();
+    } catch (error) {
+      console.error('Error in approval workflow:', error);
+      toast.error('Erreur lors du traitement de la demande');
+    } finally {
+      setIsSubmitting(false);
     }
-    onClose();
+  };
+
+  const getRelationLabel = (relation?: string) => {
+    const relations: Record<string, string> = {
+      FAMILY: 'Famille',
+      FRIEND: 'Ami',
+      COLLEAGUE: 'Collègue',
+      BUSINESS_PARTNER: 'Partenaire',
+      NEIGHBOR: 'Voisin',
+      OTHER: 'Autre'
+    };
+    return relation ? relations[relation] || relation : 'Non spécifié';
   };
 
   return (
@@ -305,12 +390,21 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
           <div>
             <h2 className="text-2xl font-bold mb-2">Approbation de Demande de Prêt</h2>
             <p className="text-indigo-100">
-              Dossier #{application.loanNumber} - {application.customerName}
+              Dossier #{(application as any).applicationNumber ?? (application as any).loanNumber} - {customerName}
             </p>
+            <div className="flex items-center gap-4 mt-2">
+              <span className="text-indigo-200 text-sm">
+                Soumis le {new Date((application as any).submittedAt ?? application.submittedAt ?? application.createdAt).toLocaleDateString('fr-FR')}
+              </span>
+              <span className="text-indigo-200 text-sm">
+                Succursale: {application.branchName ?? application.branchId ?? (application as any).branch}
+              </span>
+            </div>
           </div>
           <button
             onClick={onClose}
             className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-colors"
+            disabled={isSubmitting}
           >
             <X className="w-6 h-6" />
           </button>
@@ -383,21 +477,21 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                   <div className="bg-blue-50 p-4 rounded-lg">
                     <p className="text-sm text-gray-600 mb-1">Paiement Mensuel</p>
                     <p className="text-xl font-bold text-blue-900">
-                      {formatCurrency(application.monthlyPayment, application.currency)}
+                      {formatCurrency(computedMonthlyPayment, application.currency ?? (application as any).currency ?? 'HTG')}
                     </p>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <p className="text-sm text-gray-600 mb-1">Durée</p>
-                    <p className="font-semibold text-gray-900">{application.termMonths} mois</p>
+                    <p className="font-semibold text-gray-900">{durationMonths} mois</p>
                   </div>
                   <div className="bg-purple-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-600 mb-1">Taux d'Intérêt</p>
-                    <p className="text-xl font-bold text-purple-900">{application.interestRate}%</p>
+                    <p className="text-sm text-gray-600 mb-1">Taux d'Intérêt Mensuel</p>
+                    <p className="text-xl font-bold text-purple-900">{(monthlyRatePercent || 0).toFixed(2)}%</p>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <p className="text-sm text-gray-600 mb-1">Total à Rembourser</p>
                     <p className="font-semibold text-gray-900">
-                      {formatCurrency(application.monthlyPayment * application.termMonths, application.currency)}
+                      {formatCurrency(computedMonthlyPayment * durationMonths, application.currency ?? (application as any).currency ?? 'HTG')}
                     </p>
                   </div>
                 </div>
@@ -416,54 +510,54 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-600">Nom Complet</p>
-                    <p className="font-semibold text-gray-900">{application.customerName}</p>
+                    <p className="font-semibold text-gray-900">{customerName}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Code Client</p>
-                    <p className="font-semibold text-gray-900">{application.customerCode || application.customerId}</p>
+                    <p className="text-sm text-gray-600">Numéro Compte Épargne</p>
+                    <p className="font-semibold text-gray-900">{(application as any).savingsAccountNumber || 'N/A'}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Phone className="w-4 h-4 text-gray-400" />
                     <div>
                       <p className="text-sm text-gray-600">Téléphone</p>
-                      <p className="font-semibold text-gray-900">{application.phone}</p>
+                      <p className="font-semibold text-gray-900">{customerPhone}</p>
                     </div>
                   </div>
-                  {application.email && (
+                  {(application as any).email && (
                     <div>
                       <p className="text-sm text-gray-600">Email</p>
-                      <p className="font-semibold text-gray-900">{application.email}</p>
+                      <p className="font-semibold text-gray-900">{(application as any).email}</p>
                     </div>
                   )}
                   <div className="flex items-center gap-2">
                     <Home className="w-4 h-4 text-gray-400" />
                     <div>
                       <p className="text-sm text-gray-600">Adresse</p>
-                      <p className="font-semibold text-gray-900">{application.address}</p>
+                      <p className="font-semibold text-gray-900">{customerAddress}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Briefcase className="w-4 h-4 text-gray-400" />
                     <div>
                       <p className="text-sm text-gray-600">Profession</p>
-                      <p className="font-semibold text-gray-900">{application.occupation}</p>
+                      <p className="font-semibold text-gray-900">{occupation}</p>
                     </div>
                   </div>
                   <div className="bg-green-50 p-3 rounded-lg">
                     <p className="text-sm text-gray-600">Revenu Mensuel</p>
                     <p className="text-lg font-bold text-green-900">
-                      {formatCurrency(application.monthlyIncome, application.currency)}
+                      {formatCurrency(monthlyIncome, application.currency || (application as any).currency || 'HTG')}
                     </p>
                   </div>
-                  <div>
+                  <div className="bg-blue-50 p-3 rounded-lg">
                     <p className="text-sm text-gray-600">Personnes à Charge</p>
-                    <p className="font-semibold text-gray-900">{application.dependents}</p>
+                    <p className="text-lg font-bold text-blue-900">{dependents}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Collateral Information */}
-              {application.collateralType && (
+              {/* Collateral Information: display when either a type, description, or a value is present */}
+              {(collateralType || collateralValue > 0 || collateralDescription) && (
                 <div className="bg-white border border-gray-200 rounded-lg p-6">
                   <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                     <Shield className="w-5 h-5 text-indigo-600" />
@@ -472,69 +566,84 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-gray-600">Type de Garantie</p>
-                      <p className="font-semibold text-gray-900">{application.collateralType}</p>
+                      <p className="font-semibold text-gray-900">{collateralType}</p>
                     </div>
-                    <div className="bg-blue-50 p-3 rounded-lg">
+                    <div className={`p-3 rounded-lg ${
+                      collateralValue >= requestedAmount * 1.2 
+                        ? 'bg-green-50 border border-green-200' 
+                        : 'bg-red-50 border border-red-200'
+                    }`}>
                       <p className="text-sm text-gray-600">Valeur Estimée</p>
-                      <p className="text-lg font-bold text-blue-900">
-                        {formatCurrency(application.collateralValue || 0, application.currency)}
+                      <p className="text-lg font-bold text-gray-900">
+                        {formatCurrency(collateralValue, application.currency)}
                       </p>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Couverture: {((application.collateralValue || 0) / application.requestedAmount * 100).toFixed(0)}%
+                      <p className={`text-sm mt-1 ${
+                        collateralValue >= requestedAmount * 1.2 
+                          ? 'text-green-700' 
+                          : 'text-red-700'
+                      }`}>
+                        Couverture: {(collateralValue / requestedAmount * 100).toFixed(0)}%
+                        {collateralValue >= requestedAmount * 1.2 
+                          ? ' ✓ Suffisant' 
+                          : ' ⚠ Insuffisant'}
                       </p>
                     </div>
                   </div>
-                  {application.collateralDescription && (
+                  {collateralDescription && (
                     <div className="mt-4">
                       <p className="text-sm text-gray-600 mb-2">Description</p>
-                      <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">{application.collateralDescription}</p>
+                      <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">{collateralDescription}</p>
                     </div>
                   )}
                 </div>
               )}
 
               {/* Guarantors Information */}
-              {(application.guarantor1Name || application.guarantor2Name) && (
+              {(guarantor1Name || guarantor2Name) && (
                 <div className="bg-white border border-gray-200 rounded-lg p-6">
                   <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                     <Users className="w-5 h-5 text-indigo-600" />
                     Garants
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {application.guarantor1Name && (
+                    {guarantor1Name && (
                       <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                         <p className="text-sm font-medium text-gray-600 mb-3">Garant Principal</p>
                         <div className="space-y-2">
                           <div>
                             <p className="text-sm text-gray-600">Nom</p>
-                            <p className="font-semibold text-gray-900">{application.guarantor1Name}</p>
+                            <p className="font-semibold text-gray-900">{guarantor1Name}</p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-600">Téléphone</p>
-                            <p className="font-semibold text-gray-900">{application.guarantor1Phone}</p>
+                            <p className="font-semibold text-gray-900">{guarantor1Phone}</p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-600">Relation</p>
-                            <p className="font-semibold text-gray-900">{application.guarantor1Relation}</p>
+                            <p className="font-semibold text-gray-900">
+                              {getRelationLabel(guarantor1Relation)}
+                            </p>
                           </div>
                         </div>
                       </div>
                     )}
-                    {application.guarantor2Name && (
+                    {guarantor2Name && (
                       <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                         <p className="text-sm font-medium text-gray-600 mb-3">Garant Secondaire</p>
                         <div className="space-y-2">
                           <div>
                             <p className="text-sm text-gray-600">Nom</p>
-                            <p className="font-semibold text-gray-900">{application.guarantor2Name}</p>
+                            <p className="font-semibold text-gray-900">{guarantor2Name}</p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-600">Téléphone</p>
-                            <p className="font-semibold text-gray-900">{application.guarantor2Phone}</p>
+                            <p className="font-semibold text-gray-900">{guarantor2Phone}</p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-600">Relation</p>
-                            <p className="font-semibold text-gray-900">{application.guarantor2Relation}</p>
+                            <p className="font-semibold text-gray-900">
+                              {getRelationLabel(guarantor2Relation)}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -544,25 +653,25 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
               )}
 
               {/* References */}
-              {(application.reference1Name || application.reference2Name) && (
+              {(reference1Name || reference2Name) && (
                 <div className="bg-white border border-gray-200 rounded-lg p-6">
                   <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                     <Users className="w-5 h-5 text-indigo-600" />
                     Références Personnelles
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {application.reference1Name && (
+                    {reference1Name && (
                       <div className="bg-gray-50 p-4 rounded-lg">
                         <p className="text-sm text-gray-600">Référence 1</p>
-                        <p className="font-semibold text-gray-900">{application.reference1Name}</p>
-                        <p className="text-sm text-gray-600 mt-1">{application.reference1Phone}</p>
+                        <p className="font-semibold text-gray-900">{reference1Name}</p>
+                        <p className="text-sm text-gray-600 mt-1">{reference1Phone}</p>
                       </div>
                     )}
-                    {application.reference2Name && (
+                    {reference2Name && (
                       <div className="bg-gray-50 p-4 rounded-lg">
                         <p className="text-sm text-gray-600">Référence 2</p>
-                        <p className="font-semibold text-gray-900">{application.reference2Name}</p>
-                        <p className="text-sm text-gray-600 mt-1">{application.reference2Phone}</p>
+                        <p className="font-semibold text-gray-900">{reference2Name}</p>
+                        <p className="text-sm text-gray-600 mt-1">{reference2Phone}</p>
                       </div>
                     )}
                   </div>
@@ -592,8 +701,8 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                   <div className="w-full bg-gray-200 rounded-full h-4 mb-4">
                     <div
                       className={`h-4 rounded-full ${
-                        solvency.score >= 75 ? 'bg-green-500' :
-                        solvency.score >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                        solvency.score >= 80 ? 'bg-green-500' :
+                        solvency.score >= 60 ? 'bg-yellow-500' : 'bg-red-500'
                       }`}
                       style={{ width: `${(solvency.score / solvency.maxScore) * 100}%` }}
                     ></div>
@@ -616,26 +725,31 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                   <div className="text-center mb-4">
                     <p className="text-4xl font-bold text-gray-900">{solvency.debtToIncomeRatio.toFixed(1)}%</p>
                     <p className="text-sm text-gray-600 mt-2">
-                      Paiement mensuel: {formatCurrency(application.monthlyPayment, application.currency)}
+                      Paiement mensuel: {formatCurrency(computedMonthlyPayment, application.currency ?? (application as any).currency ?? 'HTG')}
                     </p>
                     <p className="text-sm text-gray-600">
-                      Revenu mensuel: {formatCurrency(application.monthlyIncome, application.currency)}
+                      Revenu mensuel: {formatCurrency(monthlyIncome, application.currency ?? (application as any).currency ?? 'HTG')}
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <div className={`p-3 rounded-lg ${solvency.debtToIncomeRatio <= 30 ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                    <div className={`p-3 rounded-lg ${solvency.debtToIncomeRatio <= 25 ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
                       <p className="text-sm">
-                        <span className="font-medium">≤ 30%:</span> Excellent {solvency.debtToIncomeRatio <= 30 && '✓'}
+                        <span className="font-medium">≤ 25%:</span> Excellent {solvency.debtToIncomeRatio <= 25 && '✓'}
                       </p>
                     </div>
-                    <div className={`p-3 rounded-lg ${solvency.debtToIncomeRatio > 30 && solvency.debtToIncomeRatio <= 40 ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50'}`}>
+                    <div className={`p-3 rounded-lg ${solvency.debtToIncomeRatio > 25 && solvency.debtToIncomeRatio <= 35 ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
                       <p className="text-sm">
-                        <span className="font-medium">31-40%:</span> Acceptable {solvency.debtToIncomeRatio > 30 && solvency.debtToIncomeRatio <= 40 && '✓'}
+                        <span className="font-medium">26-35%:</span> Très bon {solvency.debtToIncomeRatio > 25 && solvency.debtToIncomeRatio <= 35 && '✓'}
                       </p>
                     </div>
-                    <div className={`p-3 rounded-lg ${solvency.debtToIncomeRatio > 40 ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}>
+                    <div className={`p-3 rounded-lg ${solvency.debtToIncomeRatio > 35 && solvency.debtToIncomeRatio <= 45 ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50'}`}>
                       <p className="text-sm">
-                        <span className="font-medium">&gt; 40%:</span> Risque élevé {solvency.debtToIncomeRatio > 40 && '⚠'}
+                        <span className="font-medium">36-45%:</span> Acceptable {solvency.debtToIncomeRatio > 35 && solvency.debtToIncomeRatio <= 45 && '✓'}
+                      </p>
+                    </div>
+                    <div className={`p-3 rounded-lg ${solvency.debtToIncomeRatio > 45 ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}>
+                      <p className="text-sm">
+                        <span className="font-medium">&gt; 45%:</span> Risque élevé {solvency.debtToIncomeRatio > 45 && '⚠'}
                       </p>
                     </div>
                   </div>
@@ -682,8 +796,14 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <p className="text-sm text-gray-600 mb-2">Historique de Crédit</p>
-                    <p className="text-lg font-semibold text-gray-900">{solvency.creditHistory}</p>
-                    <p className="text-sm text-gray-600 mt-1">20/25 points</p>
+                    <p className="text-lg font-semibold text-gray-900 capitalize">{solvency.creditHistory.toLowerCase()}</p>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {solvency.creditHistory === 'EXCELLENT' && '25/25 points'}
+                      {solvency.creditHistory === 'GOOD' && '20/25 points'}
+                      {solvency.creditHistory === 'FAIR' && '15/25 points'}
+                      {solvency.creditHistory === 'POOR' && '5/25 points'}
+                      {solvency.creditHistory === 'UNKNOWN' && '10/25 points'}
+                    </p>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <p className="text-sm text-gray-600 mb-2">Capacité de Paiement</p>
@@ -694,6 +814,31 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                     <p className="text-sm text-gray-600 mb-2">Stabilité Professionnelle</p>
                     <p className="text-lg font-semibold text-gray-900">12/15</p>
                     <p className="text-sm text-gray-600 mt-1">Points obtenus</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Risk Analysis */}
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <h4 className="font-semibold text-gray-900 mb-4">Analyse du Risque</h4>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm text-gray-600">Niveau de risque</span>
+                    {getRiskBadge(solvency.riskLevel)}
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm text-gray-600">Score total</span>
+                    <span className="font-semibold text-gray-900">{solvency.score}/{solvency.maxScore}</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm text-gray-600">Recommandation</span>
+                    <span className={`font-medium ${
+                      solvency.riskLevel === 'LOW' ? 'text-green-600' :
+                      solvency.riskLevel === 'MEDIUM' ? 'text-yellow-600' : 'text-red-600'
+                    }`}>
+                      {solvency.riskLevel === 'LOW' ? 'APPROUVER' :
+                       solvency.riskLevel === 'MEDIUM' ? 'APPROUVER AVEC CONDITIONS' : 'REJETER'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -711,16 +856,20 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                     <div key={level.level} className="relative">
                       {/* Connector Line */}
                       {index < approvalLevels.length - 1 && (
-                        <div className="absolute left-6 top-12 bottom-0 w-0.5 bg-gray-300"></div>
+                        <div className={`absolute left-6 top-12 bottom-0 w-0.5 ${
+                          level.status === 'APPROVED' ? 'bg-green-300' :
+                          level.status === 'REJECTED' ? 'bg-red-300' :
+                          level.status === 'PENDING' ? 'bg-yellow-300' : 'bg-gray-300'
+                        }`}></div>
                       )}
                       
                       <div className="flex gap-4">
                         {/* Icon */}
                         <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center ${
-                          level.status === 'APPROVED' ? 'bg-green-100' :
-                          level.status === 'REJECTED' ? 'bg-red-100' :
-                          level.status === 'PENDING' ? 'bg-yellow-100' :
-                          'bg-gray-100'
+                          level.status === 'APPROVED' ? 'bg-green-100 border-2 border-green-300' :
+                          level.status === 'REJECTED' ? 'bg-red-100 border-2 border-red-300' :
+                          level.status === 'PENDING' ? 'bg-yellow-100 border-2 border-yellow-300' :
+                          'bg-gray-100 border-2 border-gray-300'
                         }`}>
                           {level.status === 'APPROVED' && <CheckCircle className="w-6 h-6 text-green-600" />}
                           {level.status === 'REJECTED' && <XCircle className="w-6 h-6 text-red-600" />}
@@ -759,7 +908,7 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
               </div>
 
               {/* Decision Form */}
-              {application.currentApprovalLevel <= 3 && application.status === 'PENDING' && (
+              {currentApprovalLevelNumber <= 3 && application.status === ApplicationStatus.SUBMITTED && (
                 <form onSubmit={handleSubmit(onSubmit)} className="bg-white border border-gray-200 rounded-lg p-6">
                   <h3 className="text-lg font-semibold mb-6">Votre Décision</h3>
                   
@@ -800,10 +949,26 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                           <span className="font-medium text-gray-900">Rejeter</span>
                         </label>
                       </div>
-                      {errors.decision && (
-                        <p className="text-red-600 text-sm mt-2">{errors.decision.message}</p>
-                      )}
                     </div>
+
+                    {/* Disbursement Date - Only shown if APPROVE is selected */}
+                    {decision === 'APPROVE' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <Calendar className="w-4 h-4 inline-block mr-2" />
+                          Date de Décaissement <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          {...register('disbursementDate')}
+                          min={new Date().toISOString().split('T')[0]}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                        <p className="mt-2 text-sm text-gray-500">
+                          📅 Sélectionnez la date à laquelle les fonds seront décaissés au client
+                        </p>
+                      </div>
+                    )}
 
                     {/* Comment */}
                     <div>
@@ -818,8 +983,10 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                           ? "Expliquez pourquoi vous approuvez cette demande..." 
                           : "Expliquez les raisons du rejet..."}
                       />
-                      {errors.comment && (
-                        <p className="text-red-600 text-sm mt-2">{errors.comment.message}</p>
+                      {!errors.comment && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Minimum 10 caractères. Ce commentaire sera visible dans l'historique.
+                        </p>
                       )}
                     </div>
 
@@ -834,31 +1001,63 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                       </div>
                     )}
 
+                    {/* Success Alert for Approval */}
+                    {decision === 'APPROVE' && (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex gap-3">
+                        <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-green-900">
+                          <p className="font-medium mb-1">Prêt à approuver</p>
+                          <p>Cette demande passera au niveau d'approbation suivant après votre validation.</p>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Submit Button */}
                     <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                       <button
                         type="button"
                         onClick={onClose}
-                        className="px-6 py-2.5 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                        disabled={isSubmitting}
+                        className="px-6 py-2.5 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
                       >
                         Annuler
                       </button>
                       <button
                         type="submit"
+                        disabled={!decision || isSubmitting}
                         className={`px-6 py-2.5 rounded-lg font-medium text-white transition-colors ${
                           decision === 'APPROVE'
                             ? 'bg-green-600 hover:bg-green-700'
                             : decision === 'REJECT'
                             ? 'bg-red-600 hover:bg-red-700'
                             : 'bg-gray-400 cursor-not-allowed'
-                        }`}
-                        disabled={!decision}
+                        } disabled:opacity-50`}
                       >
-                        {decision === 'APPROVE' ? 'Approuver la Demande' : 'Rejeter la Demande'}
+                        {isSubmitting ? (
+                          <div className="flex items-center gap-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            Traitement...
+                          </div>
+                        ) : (
+                          decision === 'APPROVE' ? 'Approuver la Demande' : 'Rejeter la Demande'
+                        )}
                       </button>
                     </div>
                   </div>
                 </form>
+              )}
+
+              {/* Read-only view if already processed */}
+              {application.status !== ApplicationStatus.SUBMITTED && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+                  <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Demande {application.status === ApplicationStatus.APPROVED ? 'Approuvée' : 'Rejetée'}
+                  </h3>
+                  <p className="text-gray-600">
+                    Cette demande a déjà été traitée et ne peut plus être modifiée.
+                  </p>
+                </div>
               )}
             </div>
           )}

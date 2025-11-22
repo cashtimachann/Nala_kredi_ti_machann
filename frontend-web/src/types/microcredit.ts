@@ -157,6 +157,7 @@ export interface LoanApplication {
   id: string;
   applicationNumber: string;
   borrowerId: string;
+  loanId?: string; // ID of the loan created from this application (if approved)
   borrower: Borrower;
   loanType: LoanType;
   requestedAmount: number;
@@ -312,6 +313,7 @@ export interface Loan {
   
   // Statut et performance
   status: LoanStatus;
+  applicationStatus?: ApplicationStatus; // Original application status
   installmentsPaid: number;
   installmentsRemaining: number;
   daysOverdue: number;

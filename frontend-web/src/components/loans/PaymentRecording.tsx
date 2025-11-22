@@ -16,6 +16,12 @@ import {
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
+import { microcreditPaymentService, PaymentMethod } from '../../services/microcreditPaymentService';
+import {
+  calculateMonthlyPaymentFromMonthlyRate,
+  resolveMonthlyRatePercent,
+  roundCurrency
+} from './loanRateUtils';
 
 interface Loan {
   id: string;
@@ -23,6 +29,7 @@ interface Loan {
   customerName: string;
   principalAmount: number;
   interestRate: number;
+  monthlyInterestRate?: number;
   termMonths: number;
   monthlyPayment: number;
   remainingBalance: number;
@@ -66,14 +73,23 @@ interface FormData {
   notes?: string;
 }
 
+interface PaymentBreakdown {
+  principal: number;
+  interest: number;
+  penalty: number;
+  total: number;
+  newBalance: number;
+}
+
 const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSubmit }) => {
-  const [paymentBreakdown, setPaymentBreakdown] = useState({
+  const [paymentBreakdown, setPaymentBreakdown] = useState<PaymentBreakdown>({
     principal: 0,
     interest: 0,
     penalty: 0,
     total: 0,
     newBalance: loan.remainingBalance
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     register,
@@ -91,6 +107,17 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
   const paymentAmount = watch('amount');
   const paymentMethod = watch('paymentMethod');
 
+  // compute monthly rate and fallback using multiple fields
+  // Force 3.5% as default if not specified, matching LoanManagement logic
+  const monthlyRatePercent = resolveMonthlyRatePercent((loan as any).monthlyInterestRate, loan.interestRate, 3.5);
+  
+  const termMonths = (loan as any).termMonths ?? (loan as any).durationMonths ?? 12;
+  
+  // Force recalculation to ensure consistency with 3.5% rate, ignoring potentially outdated stored values
+  const effectiveMonthlyPayment = roundCurrency(
+    calculateMonthlyPaymentFromMonthlyRate(loan.principalAmount, monthlyRatePercent, termMonths)
+  );
+
   // Calculer la répartition du paiement
   useEffect(() => {
     const amount = parseFloat(paymentAmount) || 0;
@@ -107,39 +134,40 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
 
     // Calculer la pénalité si en retard
     const penalty = loan.daysOverdue && loan.daysOverdue > 0
-      ? calculatePenalty(loan.daysOverdue, loan.nextPaymentAmount || loan.monthlyPayment)
+      ? calculatePenalty(loan.daysOverdue, effectiveMonthlyPayment)
       : 0;
+    const penaltyRounded = roundCurrency(penalty);
 
-    // Calculer l'intérêt du mois en cours
-    const monthlyRate = loan.interestRate / 100 / 12;
-    const interestDue = loan.remainingBalance * monthlyRate;
+    const interestDue = 0; // Le solde inclut déjà les intérêts, pas de calcul additionnel
 
     // Répartir le paiement: d'abord pénalité, puis intérêt, puis capital
     let remaining = amount;
-    let penaltyPaid = Math.min(remaining, penalty);
+    const penaltyPaid = Math.min(remaining, penaltyRounded);
     remaining -= penaltyPaid;
 
-    let interestPaid = Math.min(remaining, interestDue);
+    const interestPaid = Math.min(remaining, interestDue);
     remaining -= interestPaid;
 
-    let principalPaid = remaining;
+    const principalPaid = Math.min(remaining, loan.remainingBalance);
+    remaining -= principalPaid;
 
-    const newBalance = Math.max(0, loan.remainingBalance - principalPaid);
+    // Since loan.remainingBalance is the Total Balance (Principal + Interest),
+    // both principal and interest payments should reduce it.
+    const newBalance = roundCurrency(Math.max(0, loan.remainingBalance - (principalPaid + interestPaid)));
 
     setPaymentBreakdown({
-      principal: principalPaid,
-      interest: interestPaid,
-      penalty: penaltyPaid,
-      total: amount,
+      principal: roundCurrency(principalPaid),
+      interest: roundCurrency(interestPaid),
+      penalty: roundCurrency(penaltyPaid),
+      total: roundCurrency(amount),
       newBalance
     });
-  }, [paymentAmount, loan]);
+  }, [paymentAmount, loan, monthlyRatePercent]);
 
   const calculatePenalty = (daysOverdue: number, paymentAmount: number): number => {
-    // Pénalité: 2% du montant dû par tranche de 7 jours de retard
-    const weeksOverdue = Math.ceil(daysOverdue / 7);
-    const penaltyRate = 0.02 * weeksOverdue;
-    return paymentAmount * penaltyRate;
+    // Pénalité: 1% par mois = 0.0333% par jour (aligné avec backend)
+    const penaltyRate = 0.01 / 30; // 1% monthly penalty converted to daily rate
+    return roundCurrency(paymentAmount * penaltyRate * daysOverdue);
   };
 
   const formatCurrency = (amount: number) => {
@@ -168,7 +196,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
     setValue('amount', amount.toString());
   };
 
-  const onFormSubmit = (data: FormData) => {
+  const onFormSubmit = async (data: FormData) => {
     const amount = parseFloat(data.amount);
 
     if (amount <= 0) {
@@ -181,25 +209,68 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
       return;
     }
 
-    const paymentData: PaymentData = {
-      loanId: loan.id,
-      paymentDate: data.paymentDate,
-      amount,
-      paymentMethod: data.paymentMethod,
-      checkNumber: data.checkNumber,
-      transferReference: data.transferReference,
-      mobileProvider: data.mobileProvider,
-      mobileReference: data.mobileReference,
-      notes: data.notes,
-      principalAmount: paymentBreakdown.principal,
-      interestAmount: paymentBreakdown.interest,
-      penaltyAmount: paymentBreakdown.penalty,
-      newRemainingBalance: paymentBreakdown.newBalance
-    };
+    setIsSubmitting(true);
 
-    onSubmit(paymentData);
-    toast.success('Paiement enregistré avec succès!');
-    onClose();
+    try {
+      // Mapper le payment method du frontend au backend
+      const paymentMethodMap: Record<string, PaymentMethod> = {
+        'CASH': PaymentMethod.CASH,
+        'CHECK': PaymentMethod.CHECK,
+        'TRANSFER': PaymentMethod.TRANSFER,
+        'MOBILE_MONEY': PaymentMethod.MOBILE_MONEY
+      };
+
+      // Construire la référence selon le type de paiement
+      let reference = data.notes || '';
+      if (data.paymentMethod === 'CHECK' && data.checkNumber) {
+        reference = `Chèque #${data.checkNumber}${data.notes ? ` - ${data.notes}` : ''}`;
+      } else if (data.paymentMethod === 'TRANSFER' && data.transferReference) {
+        reference = `Transfert: ${data.transferReference}${data.notes ? ` - ${data.notes}` : ''}`;
+      } else if (data.paymentMethod === 'MOBILE_MONEY' && data.mobileProvider && data.mobileReference) {
+        reference = `${data.mobileProvider}: ${data.mobileReference}${data.notes ? ` - ${data.notes}` : ''}`;
+      }
+
+      // Enregistrer le paiement via l'API
+      const payment = await microcreditPaymentService.recordPayment({
+        loanId: loan.id,
+        amount,
+        paymentDate: data.paymentDate,
+        paymentMethod: paymentMethodMap[data.paymentMethod] || PaymentMethod.CASH,
+        reference,
+        notes: data.notes
+      });
+
+      // ✅ Confirmer le paiement automatiquement pour mettre à jour les balances
+      await microcreditPaymentService.confirmPayment(payment.id, {
+        notes: 'Confirmation automatique après enregistrement'
+      });
+
+      toast.success('Paiement enregistré et confirmé avec succès!');
+
+      // Préparer les données pour le callback parent
+      const paymentData: PaymentData = {
+        loanId: loan.id,
+        paymentDate: data.paymentDate,
+        amount,
+        paymentMethod: data.paymentMethod,
+        checkNumber: data.checkNumber,
+        transferReference: data.transferReference,
+        mobileProvider: data.mobileProvider,
+        mobileReference: data.mobileReference,
+        notes: data.notes,
+        principalAmount: payment.principalAmount,
+        interestAmount: payment.interestAmount,
+        penaltyAmount: payment.penaltyAmount,
+        newRemainingBalance: paymentBreakdown.newBalance
+      };
+
+      onSubmit(paymentData);
+    } catch (error: any) {
+      console.error('Error recording payment:', error);
+      toast.error(error.message || 'Erreur lors de l\'enregistrement du paiement');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handlePrintReceipt = () => {
@@ -207,11 +278,14 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
     // TODO: Implement print receipt functionality
   };
 
-  const totalDue = loan.remainingBalance + paymentBreakdown.interest + paymentBreakdown.penalty;
-  const suggestedPayment = loan.nextPaymentAmount || loan.monthlyPayment;
+  // Use effectiveMonthlyPayment as the base for suggested payment to ensure 3.5% rate consistency
+  const suggestedPayment = effectiveMonthlyPayment;
+  
   const penaltyAmount = loan.daysOverdue && loan.daysOverdue > 0 
     ? calculatePenalty(loan.daysOverdue, suggestedPayment) 
     : 0;
+
+  const totalDue = roundCurrency(loan.remainingBalance + penaltyAmount);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -241,12 +315,12 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-white rounded-lg p-4">
-                  <p className="text-sm text-gray-600 mb-1">Solde du Capital</p>
+                  <p className="text-sm text-gray-600 mb-1">Solde Total Restant</p>
                   <p className="text-xl font-bold text-gray-900">{formatCurrency(loan.remainingBalance)}</p>
                 </div>
                 <div className="bg-white rounded-lg p-4">
                   <p className="text-sm text-gray-600 mb-1">Paiement Mensuel</p>
-                  <p className="text-xl font-bold text-blue-900">{formatCurrency(loan.monthlyPayment)}</p>
+                  <p className="text-xl font-bold text-blue-900">{formatCurrency(effectiveMonthlyPayment)}</p>
                 </div>
                 <div className="bg-white rounded-lg p-4">
                   <p className="text-sm text-gray-600 mb-1">Prochain Paiement</p>
@@ -264,7 +338,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                   <div className="text-sm text-red-900">
                     <p className="font-medium mb-1">Paiement en Retard</p>
                     <p>Ce prêt est en retard de <span className="font-bold">{loan.daysOverdue} jours</span>.</p>
-                    <p className="mt-1">Pénalité applicable: <span className="font-bold">{formatCurrency(calculatePenalty(loan.daysOverdue, suggestedPayment))}</span></p>
+                    <p className="mt-1">Pénalité applicable: <span className="font-bold">{formatCurrency(penaltyAmount)}</span></p>
                   </div>
                 </div>
               )}
@@ -309,7 +383,8 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                       step="0.01"
                       {...register('amount', { 
                         required: 'Le montant est requis',
-                        min: { value: 0.01, message: 'Le montant doit être positif' }
+                        min: { value: 0.01, message: 'Le montant doit être positif' },
+                        max: { value: totalDue, message: `Le montant ne peut pas dépasser ${formatCurrency(totalDue)}` }
                       })}
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                       placeholder="0.00"
@@ -327,6 +402,9 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                       className="px-3 py-1.5 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
                     >
                       Paiement mensuel
+                      <span className="block text-xs text-green-700">
+                        {formatCurrency(effectiveMonthlyPayment)}
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -334,14 +412,20 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                       className="px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
                     >
                       Solde complet
+                      <span className="block text-xs text-blue-700">
+                        {formatCurrency(totalDue)}
+                      </span>
                     </button>
                     {loan.daysOverdue && loan.daysOverdue > 0 && (
                       <button
                         type="button"
-                        onClick={() => handleQuickAmount(suggestedPayment + penaltyAmount)}
+                        onClick={() => handleQuickAmount(roundCurrency(suggestedPayment + penaltyAmount))}
                         className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
                       >
                         Avec pénalité
+                        <span className="block text-xs text-red-700">
+                          {formatCurrency(roundCurrency(suggestedPayment + penaltyAmount))}
+                        </span>
                       </button>
                     )}
                   </div>
@@ -362,7 +446,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                     <input
                       type="radio"
                       value="CASH"
-                      {...register('paymentMethod')}
+                      {...register('paymentMethod', { required: 'Le mode de paiement est requis' })}
                       className="sr-only"
                     />
                     <Banknote className={`w-8 h-8 ${paymentMethod === 'CASH' ? 'text-green-600' : 'text-gray-400'}`} />
@@ -377,7 +461,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                     <input
                       type="radio"
                       value="CHECK"
-                      {...register('paymentMethod')}
+                      {...register('paymentMethod', { required: 'Le mode de paiement est requis' })}
                       className="sr-only"
                     />
                     <CheckCircle className={`w-8 h-8 ${paymentMethod === 'CHECK' ? 'text-green-600' : 'text-gray-400'}`} />
@@ -392,7 +476,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                     <input
                       type="radio"
                       value="TRANSFER"
-                      {...register('paymentMethod')}
+                      {...register('paymentMethod', { required: 'Le mode de paiement est requis' })}
                       className="sr-only"
                     />
                     <CreditCard className={`w-8 h-8 ${paymentMethod === 'TRANSFER' ? 'text-green-600' : 'text-gray-400'}`} />
@@ -407,41 +491,54 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                     <input
                       type="radio"
                       value="MOBILE_MONEY"
-                      {...register('paymentMethod')}
+                      {...register('paymentMethod', { required: 'Le mode de paiement est requis' })}
                       className="sr-only"
                     />
                     <Smartphone className={`w-8 h-8 ${paymentMethod === 'MOBILE_MONEY' ? 'text-green-600' : 'text-gray-400'}`} />
                     <span className="text-sm font-medium text-gray-900">Mobile Money</span>
                   </label>
                 </div>
+                {errors.paymentMethod && (
+                  <p className="text-red-600 text-sm mt-1">{errors.paymentMethod.message}</p>
+                )}
               </div>
 
               {/* Additional Fields Based on Payment Method */}
               {paymentMethod === 'CHECK' && (
                 <div className="mt-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Numéro de Chèque
+                    Numéro de Chèque <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
-                    {...register('checkNumber')}
+                    {...register('checkNumber', { 
+                      required: paymentMethod === 'CHECK' ? 'Le numéro de chèque est requis' : false 
+                    })}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     placeholder="Ex: 123456"
                   />
+                  {errors.checkNumber && (
+                    <p className="text-red-600 text-sm mt-1">{errors.checkNumber.message}</p>
+                  )}
                 </div>
               )}
 
               {paymentMethod === 'TRANSFER' && (
                 <div className="mt-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Référence du Virement
+                    Référence du Virement <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
-                    {...register('transferReference')}
+                    {...register('transferReference', { 
+                      required: paymentMethod === 'TRANSFER' ? 'La référence de virement est requise' : false 
+                    })}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     placeholder="Ex: TRF-20251016-001"
                   />
+                  {errors.transferReference && (
+                    <p className="text-red-600 text-sm mt-1">{errors.transferReference.message}</p>
+                  )}
                 </div>
               )}
 
@@ -449,10 +546,12 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                 <div className="mt-4 grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Opérateur
+                      Opérateur <span className="text-red-500">*</span>
                     </label>
                     <select
-                      {...register('mobileProvider')}
+                      {...register('mobileProvider', { 
+                        required: paymentMethod === 'MOBILE_MONEY' ? 'L\'opérateur est requis' : false 
+                      })}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     >
                       <option value="">Sélectionner...</option>
@@ -461,17 +560,25 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                       <option value="LAJANCASH">Lajancash</option>
                       <option value="OTHER">Autre</option>
                     </select>
+                    {errors.mobileProvider && (
+                      <p className="text-red-600 text-sm mt-1">{errors.mobileProvider.message}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Référence de Transaction
+                      Référence de Transaction <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
-                      {...register('mobileReference')}
+                      {...register('mobileReference', { 
+                        required: paymentMethod === 'MOBILE_MONEY' ? 'La référence de transaction est requise' : false 
+                      })}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                       placeholder="Ex: MC-123456789"
                     />
+                    {errors.mobileReference && (
+                      <p className="text-red-600 text-sm mt-1">{errors.mobileReference.message}</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -510,6 +617,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                     </div>
                   )}
                   
+                  {paymentBreakdown.interest > 0 && (
                   <div className="flex justify-between items-center bg-white rounded-lg p-4">
                     <div className="flex items-center gap-2">
                       <Percent className="w-5 h-5 text-blue-600" />
@@ -519,6 +627,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                       {formatCurrency(paymentBreakdown.interest)}
                     </span>
                   </div>
+                  )}
 
                   <div className="flex justify-between items-center bg-white rounded-lg p-4">
                     <div className="flex items-center gap-2">
@@ -538,7 +647,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                       </span>
                     </div>
                     <div className="flex justify-between items-center bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <span className="text-sm font-medium text-blue-900">Nouveau Solde du Capital</span>
+                      <span className="text-sm font-medium text-blue-900">Nouveau Solde Restant</span>
                       <span className="text-lg font-bold text-blue-900">
                         {formatCurrency(paymentBreakdown.newBalance)}
                       </span>
@@ -581,14 +690,14 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
             </button>
             <button
               onClick={handleSubmit(onFormSubmit)}
-              disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
+              disabled={!paymentAmount || parseFloat(paymentAmount) <= 0 || isSubmitting}
               className={`px-6 py-2.5 rounded-lg font-medium text-white transition-colors ${
-                paymentAmount && parseFloat(paymentAmount) > 0
+                paymentAmount && parseFloat(paymentAmount) > 0 && !isSubmitting
                   ? 'bg-green-600 hover:bg-green-700'
                   : 'bg-gray-400 cursor-not-allowed'
               }`}
             >
-              Enregistrer le Paiement
+              {isSubmitting ? 'Enregistrement en cours...' : 'Enregistrer le Paiement'}
             </button>
           </div>
         </div>

@@ -916,9 +916,11 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("BranchId");
 
-                    b.HasIndex("CustomerId");
-
                     b.HasIndex("OpeningDate");
+
+                    b.HasIndex("CustomerId", "Currency")
+                        .IsUnique()
+                        .HasDatabaseName("IX_CurrentAccounts_CustomerId_Currency_Unique");
 
                     b.HasIndex("Status", "Currency");
 
@@ -1765,6 +1767,41 @@ namespace NalaCreditAPI.Migrations
                     b.ToTable("microcredit_borrowers");
                 });
 
+            modelBuilder.Entity("NalaCreditAPI.Models.MicrocreditCollectionNote", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("LoanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("LoanId");
+
+                    b.ToTable("microcredit_collection_notes");
+                });
+
             modelBuilder.Entity("NalaCreditAPI.Models.MicrocreditGuarantee", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1977,6 +2014,13 @@ namespace NalaCreditAPI.Migrations
                     b.Property<string>("BusinessPlan")
                         .HasColumnType("text");
 
+                    b.Property<string>("CollateralDescription")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CollateralType")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<decimal?>("CollateralValue")
                         .HasColumnType("decimal(18,2)");
 
@@ -1992,11 +2036,71 @@ namespace NalaCreditAPI.Migrations
                     b.Property<int>("CurrentApprovalLevel")
                         .HasColumnType("integer");
 
+                    b.Property<string>("CustomerAddressJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CustomerEmail")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("CustomerName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("CustomerPhone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<decimal>("DebtToIncomeRatio")
                         .HasColumnType("decimal(5,4)");
 
+                    b.Property<int>("Dependents")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DisbursementDate")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<decimal>("ExistingDebts")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Guarantor1Name")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Guarantor1Phone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Guarantor1Relation")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Guarantor2Name")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Guarantor2Phone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Guarantor2Relation")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("HasCollateralDocs")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("HasNationalId")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("HasProofOfIncome")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("HasProofOfResidence")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("InterestRate")
+                        .HasColumnType("decimal(5,4)");
 
                     b.Property<string>("LoanOfficerId")
                         .IsRequired()
@@ -2016,10 +2120,36 @@ namespace NalaCreditAPI.Migrations
                     b.Property<decimal>("MonthlyIncome")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("MonthlyInterestRate")
+                        .HasColumnType("decimal(5,4)");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Occupation")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("Purpose")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Reference1Name")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Reference1Phone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Reference2Name")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Reference2Phone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<DateTime?>("RejectedAt")
                         .HasColumnType("timestamp without time zone");
@@ -2039,6 +2169,11 @@ namespace NalaCreditAPI.Migrations
 
                     b.Property<string>("RiskAssessment")
                         .HasColumnType("text");
+
+                    b.Property<string>("SavingsAccountNumber")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -2736,6 +2871,11 @@ namespace NalaCreditAPI.Migrations
                     b.Property<DateTime>("OpeningDate")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("bytea");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -2749,9 +2889,11 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("BranchId");
 
-                    b.HasIndex("CustomerId");
-
                     b.HasIndex("OpeningDate");
+
+                    b.HasIndex("CustomerId", "Currency")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SavingsAccounts_CustomerId_Currency_Unique");
 
                     b.HasIndex("Status", "Currency");
 
@@ -3274,11 +3416,13 @@ namespace NalaCreditAPI.Migrations
 
                     b.HasIndex("BranchId");
 
-                    b.HasIndex("CustomerId");
-
                     b.HasIndex("MaturityDate");
 
                     b.HasIndex("OpeningDate");
+
+                    b.HasIndex("CustomerId", "Currency")
+                        .IsUnique()
+                        .HasDatabaseName("IX_TermSavingsAccounts_CustomerId_Currency_Unique");
 
                     b.HasIndex("Status", "Currency");
 
@@ -3859,6 +4003,17 @@ namespace NalaCreditAPI.Migrations
                     b.Navigation("Application");
                 });
 
+            modelBuilder.Entity("NalaCreditAPI.Models.MicrocreditCollectionNote", b =>
+                {
+                    b.HasOne("NalaCreditAPI.Models.MicrocreditLoan", "Loan")
+                        .WithMany("CollectionNotes")
+                        .HasForeignKey("LoanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Loan");
+                });
+
             modelBuilder.Entity("NalaCreditAPI.Models.MicrocreditGuarantee", b =>
                 {
                     b.HasOne("NalaCreditAPI.Models.MicrocreditLoanApplication", "Application")
@@ -4220,6 +4375,8 @@ namespace NalaCreditAPI.Migrations
 
             modelBuilder.Entity("NalaCreditAPI.Models.MicrocreditLoan", b =>
                 {
+                    b.Navigation("CollectionNotes");
+
                     b.Navigation("PaymentSchedule");
 
                     b.Navigation("Payments");

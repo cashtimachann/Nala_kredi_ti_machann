@@ -83,20 +83,62 @@ namespace NalaCreditAPI.Controllers
         }
 
         /// <summary>
-        /// Obtenir les prêts d'un client spécifique
+        /// Obtenir les prêts par IDs d'application
         /// </summary>
-        [HttpGet("customer/{customerId}")]
-        public async Task<ActionResult<IList<MicrocreditLoanDto>>> GetCustomerLoans(Guid customerId)
+        [HttpGet("by-application-ids")]
+        public async Task<ActionResult<IList<MicrocreditLoanDto>>> GetLoansByApplicationIds([FromQuery] string applicationIds)
         {
             try
             {
-                var loans = await _loanApplicationService.GetCustomerLoansAsync(customerId);
+                if (string.IsNullOrWhiteSpace(applicationIds))
+                {
+                    return BadRequest("Application IDs are required");
+                }
+
+                var ids = applicationIds.Split(',')
+                    .Select(id => Guid.TryParse(id.Trim(), out var guid) ? guid : (Guid?)null)
+                    .Where(id => id.HasValue)
+                    .Select(id => id.Value)
+                    .ToList();
+
+                if (!ids.Any())
+                {
+                    return BadRequest("No valid application IDs provided");
+                }
+
+                var loans = await _loanApplicationService.GetLoansByApplicationIdsAsync(ids);
                 return Ok(loans);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving loans for customer {CustomerId}", customerId);
-                return StatusCode(500, "An error occurred while retrieving customer loans");
+                _logger.LogError(ex, "Error retrieving loans by application IDs");
+                return StatusCode(500, "An error occurred while retrieving loans");
+            }
+        }
+
+        /// <summary>
+        /// Obtenir les prêts par une liste d'IDs d'application (POST body)
+        /// Utilisé pour éviter les problèmes de longueur d'URL quand la liste est grande
+        /// </summary>
+        [HttpPost("by-application-ids")]
+        public async Task<ActionResult<IList<MicrocreditLoanDto>>> GetLoansByApplicationIdsPost([FromBody] List<Guid> applicationIds)
+        {
+            try
+            {
+                if (applicationIds == null || !applicationIds.Any())
+                    return BadRequest("No application IDs provided");
+
+                var loans = await _loanApplicationService.GetLoansByApplicationIdsAsync(applicationIds);
+                return Ok(loans);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving loans by application IDs (POST)");
+                return StatusCode(500, "An error occurred while retrieving loans by application IDs");
             }
         }
 
@@ -104,7 +146,7 @@ namespace NalaCreditAPI.Controllers
         /// Débourser un prêt approuvé
         /// </summary>
         [HttpPost("{id}/disburse")]
-        [Authorize(Roles = "Admin,Manager,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,Employee")]
         public async Task<ActionResult<MicrocreditLoanDto>> DisburseLoan(Guid id, [FromBody] DisburseLoanDto dto)
         {
             try
@@ -210,7 +252,7 @@ namespace NalaCreditAPI.Controllers
         /// Marquer un prêt comme en défaut
         /// </summary>
         [HttpPost("{id}/mark-default")]
-        [Authorize(Roles = "Admin,Manager,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,Employee")]
         public async Task<ActionResult<MicrocreditLoanDto>> MarkLoanAsDefault(Guid id, [FromBody] MarkDefaultDto dto)
         {
             try
@@ -248,7 +290,7 @@ namespace NalaCreditAPI.Controllers
         /// Réhabiliter un prêt en défaut
         /// </summary>
         [HttpPost("{id}/rehabilitate")]
-        [Authorize(Roles = "Admin,Manager")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager")]
         public async Task<ActionResult<MicrocreditLoanDto>> RehabilitateLoan(Guid id, [FromBody] RehabilitateDto dto)
         {
             try
@@ -331,7 +373,7 @@ namespace NalaCreditAPI.Controllers
         /// Obtenir les prêts en retard
         /// </summary>
         [HttpGet("overdue")]
-        [Authorize(Roles = "Admin,Manager,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,Employee")]
         public async Task<ActionResult<IList<OverdueLoanDto>>> GetOverdueLoans([FromQuery] int daysOverdue = 1)
         {
             try
@@ -345,6 +387,58 @@ namespace NalaCreditAPI.Controllers
             {
                 _logger.LogError(ex, "Error retrieving overdue loans");
                 return StatusCode(500, "An error occurred while retrieving overdue loans");
+            }
+        }
+
+        /// <summary>
+        /// Ajouter une note de recouvrement pour un prêt
+        /// </summary>
+        [HttpPost("{id}/collection-notes")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,Employee,LoanOfficer")]
+        public async Task<ActionResult<MicrocreditCollectionNoteDto>> AddCollectionNote(Guid id, [FromBody] CreateMicrocreditCollectionNoteDto dto)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(ModelState);
+
+                var createdBy = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(createdBy)) return Unauthorized("User ID not found in token");
+
+                var note = await _loanApplicationService.AddCollectionNoteAsync(id, dto, createdBy);
+                return Ok(note);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding collection note for loan {LoanId}", id);
+                return StatusCode(500, "An error occurred while saving the collection note");
+            }
+        }
+
+        /// <summary>
+        /// Obtenir les notes de recouvrement pour un prêt
+        /// </summary>
+        [HttpGet("{id}/collection-notes")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,Employee,LoanOfficer")]
+        public async Task<ActionResult<IList<MicrocreditCollectionNoteDto>>> GetCollectionNotes(Guid id)
+        {
+            try
+            {
+                var notes = await _loanApplicationService.GetCollectionNotesAsync(id);
+                return Ok(notes);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving collection notes for loan {LoanId}", id);
+                return StatusCode(500, "An error occurred while retrieving collection notes");
             }
         }
 

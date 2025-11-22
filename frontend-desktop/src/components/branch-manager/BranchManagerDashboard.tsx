@@ -91,57 +91,32 @@ const BranchManagerDashboard: React.FC = () => {
       // TODO: Replace with actual API call
       const mockData: DashboardStats = {
         cashBalances: {
-          htg: 2500000,
-          usd: 45000,
+          htg: 0,
+          usd: 0,
           lastUpdate: new Date().toLocaleTimeString('fr-HT'),
         },
-        activeClients: 1247,
-        newClientsThisMonth: 43,
+        activeClients: 0,
+        newClientsThisMonth: 0,
         todayTransactions: {
-          deposits: { count: 127, amount: 735000 },
-          withdrawals: { count: 89, amount: 542000 },
-          exchanges: { count: 34, amount: 2300 },
-          loans: { count: 12, amount: 450000 },
+          deposits: { count: 0, amount: 0 },
+          withdrawals: { count: 0, amount: 0 },
+          exchanges: { count: 0, amount: 0 },
+          loans: { count: 0, amount: 0 },
         },
         loanPortfolio: {
-          totalOutstanding: 15750000,
-          activeLoans: 342,
-          recoveryRate: 94.5,
-          par30: 3.2,
+          totalOutstanding: 0,
+          activeLoans: 0,
+          recoveryRate: 0,
+          par30: 0,
         },
         kpis: {
-          depositsVsWithdrawals: { deposits: 3250000, withdrawals: 2890000 },
-          newAccountsThisMonth: 93,
-          loansIssued: 2450000,
-          loansRepaid: 2310000,
-          recoveryRate: 94.5,
+          depositsVsWithdrawals: { deposits: 0, withdrawals: 0 },
+          newAccountsThisMonth: 0,
+          loansIssued: 0,
+          loansRepaid: 0,
+          recoveryRate: 0,
         },
-        alerts: [
-          {
-            id: '1',
-            type: 'error',
-            title: 'Limite caisse atteinte',
-            message: 'Caisse USD proche limite max (95%)',
-            priority: 'high',
-            timestamp: new Date().toISOString(),
-          },
-          {
-            id: '2',
-            type: 'warning',
-            title: 'Demandes validation',
-            message: '8 demandes en attente (5 crédits, 3 comptes)',
-            priority: 'medium',
-            timestamp: new Date().toISOString(),
-          },
-          {
-            id: '3',
-            type: 'warning',
-            title: 'Retards importants',
-            message: '12 crédits > 30 jours - Action recommandée',
-            priority: 'medium',
-            timestamp: new Date().toISOString(),
-          },
-        ],
+        alerts: [],
       };
       setDashboardStats(mockData);
     } catch (error) {
@@ -409,7 +384,7 @@ const DashboardHome: React.FC<{ stats: DashboardStats; onRefresh: () => void }> 
 
             <Box sx={{ mb: 2 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="body2">Taux de Recouvrement (Objectif: >90%)</Typography>
+                <Typography variant="body2">Taux de Recouvrement (Objectif: {'>'}90%)</Typography>
                 <Typography variant="body2" fontWeight="bold" color="success.main">
                   {stats.kpis.recoveryRate}%
                 </Typography>
@@ -424,7 +399,7 @@ const DashboardHome: React.FC<{ stats: DashboardStats; onRefresh: () => void }> 
 
             <Box sx={{ mb: 2 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="body2">PAR 30 (Cible: <5%)</Typography>
+                <Typography variant="body2">PAR 30 (Cible: {'<'}5%)</Typography>
                 <Typography variant="body2" fontWeight="bold" color="success.main">
                   {stats.loanPortfolio.par30}%
                 </Typography>

@@ -119,7 +119,24 @@ export abstract class BaseApiService {
       localStorage.getItem('token') ||
       localStorage.getItem('authToken');
     
-    console.log('🔑 BaseApiService getAuthToken result:', !!token);
+    // When a token is present, decode its payload for debugging (role, expiry, etc.)
+    if (token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = parts[1];
+          const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+          console.log('🔑 BaseApiService getAuthToken result: token present. Decoded payload:', decoded);
+        } else {
+          console.log('🔑 BaseApiService getAuthToken result: token present (non-JWT)');
+        }
+      } catch (err) {
+        console.warn('⚠️ BaseApiService failed to decode token payload for debug:', err);
+      }
+    } else {
+      console.log('🔑 BaseApiService getAuthToken result: no token');
+    }
+
     return token;
   }
 

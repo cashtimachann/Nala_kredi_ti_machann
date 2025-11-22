@@ -20,7 +20,7 @@ Système complet de gestion de microcrédits pour institutions de microfinance, 
 - Évaluation de solvabilité automatique
 - Workflow d'approbation multi-niveau
 
-**Statut:** ✅ 100% Complet - 6 composants majeurs - 5400+ lignes de code - 0 erreur
+**Statut:** ✅ 100% Complet - 7 composants majeurs - 6000+ lignes de code - 0 erreur
 
 ---
 
@@ -34,7 +34,11 @@ frontend-web/src/components/loans/
 ├── LoanApprovalWorkflow.tsx    (1100 lignes) - Approbation multi-niveau
 ├── LoanDetails.tsx             (790 lignes) - Détails avec 4 onglets
 ├── PaymentRecording.tsx        (600 lignes) - Enregistrement paiements
-└── LoanReports.tsx             (1000 lignes) - Rapports analytiques
+├── LoanReports.tsx             (1000 lignes) - Rapports analytiques
+└── LoanTypeSelector.tsx        (300 lignes) - Sélecteur de types
+
+frontend-web/src/components/clients/
+└── ClientManagement.tsx        (741 lignes) - Gestion portefeuille clients
 ```
 
 ### Routes configurées
@@ -75,10 +79,22 @@ SuperAdminDashboard → Onglet "Microcrédits" (icône Banknote)
   * ➕ Nouvelle demande
 
 **Types de prêts:**
-- 🏪 **COMMERCIAL** - Taux 18% HTG / 15% USD - Max 500k HTG / $10k USD
-- 🌾 **AGRICULTURAL** - Taux 15% HTG / 12% USD - Max 300k HTG / $6k USD
-- 👤 **PERSONAL** - Taux 20% HTG / 17% USD - Max 200k HTG / $4k USD
-- 🚨 **EMERGENCY** - Taux 22% HTG / 19% USD - Max 50k HTG / $1k USD
+**Types de prêts:**
+- 🏪 **COMMERCIAL** - Crédit pour petits commerces et fonds de roulement.
+- 🌾 **AGRICULTURAL** - Crédit agricole classique pour intrants/récolte.
+- 👤 **PERSONAL** - Crédit personnel standard (consommation, frais imprévus).
+- 🚨 **EMERGENCY** - Crédit d'urgence à court terme.
+- � **CREDIT_LOYER** - Crédit dédié au paiement du loyer (CREDIT_LOYER).
+- 🚗 **CREDIT_AUTO** - Crédit véhicule automobile (CREDIT_AUTO).
+- 🛵 **CREDIT_MOTO** - Crédit pour l'achat de motos/scooters (CREDIT_MOTO).
+- � **CREDIT_PROFESSIONNEL** - Crédit pour activités professionnelles / investissement (CREDIT_PROFESSIONNEL).
+- 🎓 **CREDIT_SCOLAIRE** - Crédit scolaire / frais de scolarité (CREDIT_SCOLAIRE).
+- 🛠️ **CREDIT_APPUI** - Crédit d'appui / petit financement de soutien (CREDIT_APPUI).
+- 🧾 **CREDIT_PERSONNEL** - Alias / variante de crédit personnel (CREDIT_PERSONNEL).
+- 🌱 **CREDIT_AGRICOLE** - Alias / variante de crédit agricole (CREDIT_AGRICOLE).
+- 🏦 **CREDIT_HYPOTHECAIRE** - Crédit hypothécaire (garantie immobilière) (CREDIT_HYPOTHECAIRE).
+
+Note: certains types dans le code sont des variantes/alias (ex: `CREDIT_PERSONNEL` vs `PERSONAL`, `CREDIT_AGRICOLE` vs `AGRICULTURAL`). Vérifier la configuration `LoanTypeConfiguration` côté backend/frontend pour plafonds, taux et durées exacts par type.
 
 **Statuts possibles:**
 - ⏱️ PENDING - En attente d'approbation
@@ -484,158 +500,35 @@ newBalance = remainingBalance - principalPaid
 
 ---
 
-### 6. 📊 LoanReports
-**Rôle:** Rapports analytiques complets du portefeuille
+### 7. 📊 ClientManagement
+**Rôle:** Gestion complète du portefeuille clients emprunteurs
 
-#### Filtres Globaux
-- **Période:** 7j / 30j / 90j / 1 an / Personnalisé
-- **Devise:** Toutes / HTG / USD
-- **Actions:** 🖨️ Imprimer, 📥 PDF, 📊 Excel
+**Fonctionnalités:**
+- Liste paginée de tous les clients avec recherche et filtres avancés
+- Statistiques clés: Total clients, Clients actifs, Score élevé, À risque
+- Gestion des profils clients avec informations personnelles et financières
+- Suivi des scores de crédit et historique des prêts
+- Export des données clients (Excel, PDF, CSV)
 
-#### Onglet 1: Portefeuille
-**Métriques Clés (4 cartes):**
-1. **Total Prêts**
-   - Nombre total + statut actifs
-   - Icône 👥
+**Filtres disponibles:**
+- Recherche par nom, téléphone, email
+- Filtrage par statut (Actif/Inactif)
+- Plage de scores de crédit
+- Tri par date d'inscription, nom, score
 
-2. **Capital Décaissé**
-   - Montant HTG (grand)
-   - Montant USD (petit)
-   - Icône 📈
+**Informations client:**
+- Données personnelles (nom, date naissance, genre, profession)
+- Informations financières (revenu mensuel, type d'emploi)
+- Score de crédit avec catégorisation (Excellent/Bon/Acceptable/Risqué)
+- Historique des prêts (total, actifs, encours)
 
-3. **Capital Restant**
-   - Montant HTG (grand)
-   - Montant USD (petit)
-   - Icône 💰
+**Actions:**
+- Visualisation du profil détaillé
+- Modification des informations client
+- Ajout de nouveaux clients
+- Export des données pour analyse
 
-4. **Taux de Remboursement**
-   - Pourcentage (grand)
-   - Statut (Excellent/Bon/Moyen)
-   - Icône %
-
-**Portefeuille à Risque (PAR) - 4 cartes:**
-- **PAR Global** - Indicateur principal
-- **PAR 30 jours** - Retard 1-30 jours
-- **PAR 60 jours** - Retard 31-60 jours
-- **PAR 90 jours** - Retard 61+ jours
-
-**Couleurs PAR:**
-- Vert: <5% (Excellent)
-- Jaune: 5-10% (Acceptable)
-- Orange: 10-15% (Attention)
-- Rouge: >15% (Critique)
-
-**Distribution par Type:**
-Pour chaque type (4):
-- Émoji + Nom + Nombre de prêts
-- Barre de progression (% du total)
-- 3 métriques: Montant total, Taux moyen, Remboursement
-- Couleur par type (bleu, vert, violet, rouge)
-
-#### Onglet 2: Performance
-**Table Performance par Succursale:**
-
-**Colonnes:**
-1. Succursale
-2. Nombre de Prêts
-3. Décaissé HTG
-4. Restant HTG
-5. Taux Remboursement (coloré)
-6. PAR 30 (coloré)
-
-**4 succursales:**
-- Port-au-Prince Centre
-- Cap-Haïtien
-- Les Cayes
-- Gonaïves
-
-**Table Performance des Agents:**
-
-**Colonnes:**
-1. Agent (avec 🏆 si taux ≥95%)
-2. Total Prêts
-3. Actifs (vert)
-4. Décaissé HTG
-5. Collecté HTG
-6. Taux Remboursement (coloré)
-7. En Retard (badge coloré)
-
-**4 agents avec statistiques complètes**
-
-**Couleurs Taux:**
-- Vert: ≥95% (Excellent)
-- Bleu: 90-94% (Très bon)
-- Jaune: 85-89% (Bon)
-- Rouge: <85% (Amélioration requise)
-
-#### Onglet 3: Retards
-**Alerte Prioritaire:**
-- Carte rouge avec ⚠️
-- Message d'action immédiate
-
-**Table Prêts en Retard:**
-
-**Colonnes:**
-1. Numéro + Succursale
-2. Client
-3. Montant Prêt
-4. **Jours Retard** (badge coloré avec ⏱️)
-5. Montant Dû (rouge, gras)
-6. Téléphone
-7. Agent
-
-**Couleurs de ligne:**
-- Rouge clair: ≥60 jours (CRITIQUE)
-- Jaune clair: 30-59 jours (URGENT)
-- Blanc: <30 jours (ATTENTION)
-
-**Badge Jours:**
-- Rouge: ≥60 jours
-- Orange: 30-59 jours
-- Jaune: <30 jours
-
-**5 prêts en retard avec données complètes**
-
-#### Onglet 4: Recouvrement
-**Métriques de Collection (3 cartes):**
-
-1. **Capital Collecté (30j)**
-   - Montant HTG + USD
-   - Trend: +12.5% vs mois précédent
-   - Icône ✅
-
-2. **Taux de Collecte**
-   - Pourcentage actuel
-   - Objectif: 95%
-   - Barre de progression
-   - Icône 🎯
-
-3. **Taux de Défaut**
-   - Pourcentage actuel
-   - Limite: 5%
-   - Statut (Sous la limite ✅)
-   - Icône ❌
-
-**Actions de Recouvrement (3 niveaux):**
-
-1. **🔴 Priorité HAUTE** (2 prêts)
-   - >60 jours de retard
-   - Action: Contact immédiat + visite terrain
-   - Carte rouge
-
-2. **🟡 Priorité MOYENNE** (8 prêts)
-   - 30-60 jours de retard
-   - Action: Appel + plan de remboursement
-   - Carte jaune
-
-3. **🔵 Suivi NORMAL** (15 prêts)
-   - 1-30 jours de retard
-   - Action: Rappel SMS/appel
-   - Carte bleue
-
-**Pied de page:**
-- Date de génération du rapport
-- Bouton Fermer
+**Intégration backend:** Utilise `/api/MicrocreditBorrower` pour CRUD operations
 
 ---
 
@@ -746,144 +639,148 @@ toast.loading('Chargement...')
 
 ---
 
-## 🔌 Intégration Backend
+## 🔌 Intégration & Implémentation Backend (détails réels du dépôt)
 
-### Endpoints API Requis
+Cette section explique ce qui existe dans le dépôt côté backend (endpoints, controllers, services, modèles, migrations) et donne des instructions concrètes pour démarrer et vérifier localement.
 
-#### Prêts (Loans)
-```typescript
-// Lister tous les prêts
-GET /api/loans
-Query: { status?, type?, currency?, search? }
-Response: Loan[]
+### Où chercher le code
+- Principal projet backend: `backend/NalaCreditAPI`
+- Contexte DB / EF Core: migrations dans `backend/NalaCreditAPI/Migrations`
 
-// Obtenir un prêt
-GET /api/loans/:id
-Response: Loan
+### Contrôleurs (liste trouvée dans le dépôt)
+Inspectez ces fichiers pour les routes exactes et les DTOs:
+- `Controllers/MicrocreditLoanApplicationController.cs`
+- `Controllers/MicrocreditLoanController.cs`
+- `Controllers/MicrocreditPaymentController.cs`
+- `Controllers/MicrocreditBorrowerController.cs`
+- `Controllers/MicrocreditLoanTypesController.cs`
+- `Controllers/MicrocreditDashboardController.cs`
+- `Controllers/MicrocreditPaymentController.cs` (pouvant inclure endpoints de reçu)
 
-// Créer une demande
-POST /api/loans/applications
-Body: LoanApplicationData
-Response: { id, loanNumber }
+Ces contrôleurs exposent les principales opérations décrites plus haut (create/update/submit/review/approve/reject/disburse/payments/schedules/reports).
 
-// Approuver/Rejeter
-POST /api/loans/:id/approval
-Body: { level, decision, comment }
-Response: Loan
+### Services clés
+- `Services/MicrocreditLoanApplicationService.cs` — implémente le cœur du workflow (Create, Submit, Review, Approve, Reject, Disburse, MarkAsDefault, Rehabilitate, Payments, PaymentSchedules, EarlyPayoff, etc.).
+- `Services/MicrocreditFinancialCalculatorService.cs` — logique de calcul des paiements / intérêts.
+- Autres services utiles: `BranchService`, `FileStorageService`, `CacheService`, `MessageQueueService`, `PayrollService`, etc.
 
-// Décaisser
-POST /api/loans/:id/disburse
-Body: { disbursementDate }
-Response: Loan
+### Modèles, DTOs et Mappings
+- `Models/` contient les entités persistées: MicrocreditLoanApplication, MicrocreditLoan, MicrocreditBorrower, MicrocreditPayment, MicrocreditPaymentSchedule, MicrocreditGuarantee, MicrocreditApprovalStep, MicrocreditApplicationDocument, MicrocreditLoanTypeConfiguration.
+- `DTOs/` contient les objets de transfert utilisés par les controllers et services.
+- `MicrocreditLoanApplicationService` contient des méthodes `MapToDto` et `MapLoanToDto` pour transformer entités → DTOs.
+
+### Migrations & Schéma (tables importantes)
+Les migrations EF Core dans `Migrations/` montrent la structure principale:
+- `microcredit_loan_applications`
+- `microcredit_loans`
+- `microcredit_borrowers`
+- `microcredit_payments`
+- `microcredit_payment_schedules`
+- `microcredit_guarantees`
+- `microcredit_approval_steps`
+- `microcredit_application_documents`
+- `microcredit_loan_type_configurations`
+
+Indexes importants: `ApplicationNumber`, `LoanNumber`, `Status, LoanType`, `SubmittedAt`, `LoanId, PaymentDate`, `LoanId, InstallmentNumber`.
+
+### Endpoints (référence rapide)
+Les routes exactes sont définies dans les controllers; ci-dessous un mapping typique (vérifier attributes Route/Http* dans les fichiers):
+
+- Applications
+   - GET  /api/microcredit/applications
+   - GET  /api/microcredit/applications/{id}
+   - POST /api/microcredit/applications
+   - PUT  /api/microcredit/applications/{id}
+   - POST /api/microcredit/applications/{id}/submit
+   - POST /api/microcredit/applications/{id}/review
+   - POST /api/microcredit/applications/{id}/approve
+   - POST /api/microcredit/applications/{id}/reject
+   - POST /api/microcredit/applications/{id}/cancel
+
+- Loans
+   - GET  /api/microcredit/loans
+   - GET  /api/microcredit/loans/{id}
+   - POST /api/microcredit/loans/{id}/disburse
+   - POST /api/microcredit/loans/{id}/default
+   - POST /api/microcredit/loans/{id}/rehabilitate
+
+- Payments
+   - POST /api/microcredit/payments
+   - GET  /api/microcredit/loans/{loanId}/payments
+   - GET  /api/microcredit/loans/{loanId}/schedule
+   - POST /api/microcredit/payments/{id}/confirm
+   - POST /api/microcredit/payments/{id}/cancel
+
+- Types / Dashboard / Reports
+   - GET /api/microcredit/loan-types
+   - GET /api/microcredit/dashboard
+   - GET /api/microcredit/reports/portfolio
+   - GET /api/microcredit/reports/overdue
+
+Note: les chemins front-end utilisent des routes génériques `/api/loans` ou `/api/reports` — mais le code backend se trouve sous `Microcredit*` controllers. Vérifier les attributs Route dans chaque controller pour l'URL exacte.
+
+### Calculs & Règles critiques (vérifier côté backend)
+- Calcul des paiements mensuels (formule d'annuité / intérêt composé).
+- Répartition d'un paiement (pénalité → intérêts → capital).
+- Pénalités de retard (actuellement: 2% par semaine dans la logique client; assurez-vous que le backend applique la même règle).
+- Score de solvabilité (ratio dette/revenu, coverage garanties, historique crédit, stabilité professionnelle).
+- PAR (Portfolio at Risk) calcul pour rapports.
+
+### Commandes pour démarrer localement (Windows / PowerShell)
+1) Préparer la DB (via Docker Compose si utilisé):
+
+```powershell
+# Depuis la racine du dépôt
+docker-compose up -d
+# (vérifier que service postgres existe dans docker-compose.yml, p.ex. 'nala-postgres')
 ```
 
-#### Paiements (Payments)
-```typescript
-// Enregistrer un paiement
-POST /api/loans/:id/payments
-Body: PaymentData
-Response: { id, receiptNumber, newBalance }
+2) Démarrer l'API backend:
 
-// Historique des paiements
-GET /api/loans/:id/payments
-Response: Payment[]
-
-// Calendrier d'amortissement
-GET /api/loans/:id/schedule
-Response: PaymentScheduleItem[]
-
-// Télécharger reçu
-GET /api/payments/:id/receipt
-Response: PDF
+```powershell
+cd 'C:\\Users\\Administrator\\Desktop\\Kredi Ti Machann\\backend\\NalaCreditAPI'
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
+dotnet run
+# Si besoin d'ef tools et migrations:
+dotnet tool install --global dotnet-ef --version 7.* --ignore-failed-sources
+dotnet ef database update
 ```
 
-#### Rapports (Reports)
-```typescript
-// Métriques du portefeuille
-GET /api/reports/portfolio
-Query: { startDate, endDate, currency? }
-Response: PortfolioMetrics
+3) Démarrer le frontend (depuis `frontend-web`):
 
-// Performance par succursale
-GET /api/reports/branches
-Response: BranchPerformance[]
-
-// Performance des agents
-GET /api/reports/officers
-Response: LoanOfficerPerformance[]
-
-// Prêts en retard
-GET /api/reports/overdue
-Response: OverdueDetail[]
-
-// Export Excel/PDF
-GET /api/reports/export
-Query: { format, type, startDate, endDate }
-Response: File
+```powershell
+cd 'C:\\Users\\Administrator\\Desktop\\Kredi Ti Machann\\frontend-web'
+$env:Path += ';C:\\Program Files\\nodejs'
+npm install
+npm start
 ```
 
-### Structures de Données
+### Tests rapides / vérifications (smoke)
+- Vérifier santé API (si `HealthController` présent):
+   - GET http://localhost:5000/api/health
+- Lister applications:
+   - GET http://localhost:5000/api/microcredit/applications
+- Créer une demande (test minimal) via curl / Invoke-RestMethod avec JSON de test.
 
-#### Loan (Interface principale)
-```typescript
-interface Loan {
-  id: string;
-  loanNumber: string;
-  customerId: string;
-  customerName: string;
-  loanType: 'COMMERCIAL' | 'AGRICULTURAL' | 'PERSONAL' | 'EMERGENCY';
-  principalAmount: number;
-  interestRate: number;
-  termMonths: number;
-  monthlyPayment: number;
-  disbursementDate: string;
-  maturityDate: string;
-  remainingBalance: number;
-  paidAmount: number;
-  status: LoanStatus;
-  currency: 'HTG' | 'USD';
-  collateral?: string;
-  collateralValue?: number;
-  guarantors?: string[];
-  branch: string;
-  loanOfficer: string;
-  createdAt: string;
-  approvedBy?: string;
-  approvedAt?: string;
-  daysOverdue?: number;
-  nextPaymentDate?: string;
-  nextPaymentAmount?: number;
-  currentApprovalLevel?: number;
-}
-```
+### Gaps / TODOs identifiés (depuis le code)
+- `LoanOfficerName = "Officer" // TODO: Get from user service` — l'utilisateur/identité n'est pas encore intégrée aux DTOs.
+- Quelques validations documentaires sont commentées (ex: vérification ID, preuve de revenu) — vérifier que les règles sont activées côté serveur.
+- Vérifier policies d'autorisation: s'assurer que seuls les rôles appropriés (LOAN_OFFICER, MANAGER, COMMITTEE) peuvent appeler les endpoints d'approbation/décaissement.
+- Manque (ou peu) de tests backend automatisés visibles — ajouter unit & integration tests pour workflow critique.
+- Secrets & config: docs contiennent valeurs par défaut (JWT_SECRET, POSTGRES_PASSWORD) — remplacer en production.
 
-#### PaymentData
-```typescript
-interface PaymentData {
-  loanId: string;
-  paymentDate: string;
-  amount: number;
-  paymentMethod: 'CASH' | 'CHECK' | 'TRANSFER' | 'MOBILE_MONEY';
-  checkNumber?: string;
-  transferReference?: string;
-  mobileProvider?: string;
-  mobileReference?: string;
-  notes?: string;
-  principalAmount: number;
-  interestAmount: number;
-  penaltyAmount: number;
-  newRemainingBalance: number;
-}
-```
+### Quality gates / Checklist rapide
+- Build backend: `dotnet build` ✅ (à exécuter localement)
+- Run migrations: `dotnet ef database update` ✅ (si DB accessible)
+- Lint/types frontend: `npm run build` / `npm run type-check` ✅ (à exécuter localement)
+- Tests: ajouter si absent (Jest/ xUnit selon projet).
 
-### Calculs Côté Backend
-**Important:** Les calculs suivants doivent être vérifiés côté backend:
-
-1. **Paiement mensuel** (intérêt composé)
-2. **Répartition paiement** (pénalité → intérêt → capital)
-3. **Pénalités de retard** (2% par semaine)
-4. **Score de solvabilité** (validation)
-5. **PAR** (Portfolio at Risk)
+### Prochaines étapes recommandées (priorisées)
+1. Rattacher `LoanOfficerName` et métadonnées d'utilisateur au service d'auth (UserService) et propager dans DTOs.
+2. Activer / vérifier validations documentaires côté serveur.
+3. Ajouter tests unitaires pour: Create→Submit→Approve→Disburse→Payment flow.
+4. Vérifier / ajouter RBAC (policies) sur controllers d'approbation et paiement.
+5. Mettre à jour la documentation API (routes exactes + exemples request/response) basée sur les attributs Route du controller.
 
 ---
 
@@ -933,12 +830,14 @@ LoanApprovalWorkflow.tsx  → 1,100 lignes
 LoanDetails.tsx           →   790 lignes
 PaymentRecording.tsx      →   600 lignes
 LoanReports.tsx           → 1,000 lignes
+LoanTypeSelector.tsx      →   300 lignes
+ClientManagement.tsx      →   741 lignes
 ─────────────────────────────────────────
-TOTAL                     → 5,402 lignes
+TOTAL                     → 6,443 lignes
 ```
 
 ### Composants
-- 6 composants majeurs
+- 7 composants majeurs
 - 20+ interfaces TypeScript
 - 40+ fonctions utilitaires
 - 0 erreur TypeScript

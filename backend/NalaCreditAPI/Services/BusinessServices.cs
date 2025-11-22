@@ -46,7 +46,7 @@ public class AuthService : IAuthService
             new Claim("FirstName", user.FirstName ?? "Unknown"),
             new Claim("LastName", user.LastName ?? "Unknown"),
             new Claim("Role", user.Role.ToString()),
-            new Claim(ClaimTypes.Role, user.Role.ToString())
+            new Claim(ClaimTypes.Role, GetRoleName(user.Role))
         };
 
         if (user.BranchId.HasValue)
@@ -65,6 +65,20 @@ public class AuthService : IAuthService
 
         var token = tokenHandler.CreateToken(tokenDescriptor);
         return tokenHandler.WriteToken(token);
+    }
+
+    private string GetRoleName(UserRole role)
+    {
+        return role switch
+        {
+            UserRole.Cashier => "Cashier",
+            UserRole.Employee => "Employee",
+            UserRole.Manager => "Manager",
+            UserRole.Admin => "Admin",
+            UserRole.SupportTechnique => "SupportTechnique",
+            UserRole.SuperAdmin => "SuperAdmin",
+            _ => "Unknown"
+        };
     }
 
     public async Task<bool> ValidateCredentials(string email, string password)

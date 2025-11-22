@@ -188,138 +188,63 @@ const ClientProfile: React.FC<ClientProfileProps> = ({ borrowerId, onClose }) =>
         const data = await response.json();
         setProfile(data);
       } else {
-        // Fallback to demo data
+        // Fallback to demo data - TODO: Remove in production
         const demoProfile: BorrowerProfile = {
           id: borrowerId,
-          firstName: 'Jean',
-          lastName: 'Baptiste',
-          fullName: 'Jean Baptiste',
-          dateOfBirth: '1985-03-15',
+          firstName: '',
+          lastName: '',
+          fullName: '',
+          dateOfBirth: '',
           gender: 'M',
-          occupation: 'Commerçant',
-          monthlyIncome: 45000,
-          employmentType: 'Self-employed',
-          creditScore: 720,
+          occupation: '',
+          monthlyIncome: 0,
+          employmentType: '',
+          creditScore: 0,
           creditScoreDetails: {
-            score: 720,
-            factors: [
-              { name: 'Payment History', score: 85, weight: 35, description: 'Excellent payment record' },
-              { name: 'Credit Utilization', score: 75, weight: 30, description: 'Good credit utilization' },
-              { name: 'Length of Credit', score: 70, weight: 15, description: 'Established credit history' },
-              { name: 'New Credit', score: 80, weight: 10, description: 'Limited new credit inquiries' },
-              { name: 'Credit Mix', score: 65, weight: 10, description: 'Diverse credit types' }
-            ],
-            recommendations: [
-              'Continue maintaining excellent payment history',
-              'Consider reducing credit utilization below 30%',
-              'Monitor credit inquiries'
-            ],
-            lastUpdated: '2024-01-15T10:00:00'
+            score: 0,
+            factors: [],
+            recommendations: [],
+            lastUpdated: new Date().toISOString()
           },
           riskAssessment: {
             level: 'LOW',
-            factors: [
-              { category: 'Payment Risk', level: 'LOW', description: 'Consistent payment history', impact: -10 },
-              { category: 'Income Stability', level: 'MEDIUM', description: 'Variable self-employment income', impact: 5 },
-              { category: 'Debt Load', level: 'LOW', description: 'Manageable debt-to-income ratio', impact: -5 },
-              { category: 'Market Conditions', level: 'MEDIUM', description: 'Affected by local economic factors', impact: 3 }
-            ],
-            recommendations: [
-              'Monitor income stability',
-              'Consider diversifying income sources',
-              'Regular credit score reviews'
-            ],
-            nextReviewDate: '2024-04-15T00:00:00'
+            factors: [],
+            recommendations: [],
+            nextReviewDate: new Date().toISOString()
           },
-          createdAt: '2024-01-15T10:00:00',
-          updatedAt: '2024-01-15T10:00:00',
-          totalLoans: 3,
-          activeLoans: 1,
-          totalOutstanding: 85000,
-          lastLoanDate: '2024-10-01T00:00:00',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          totalLoans: 0,
+          activeLoans: 0,
+          totalOutstanding: 0,
+          lastLoanDate: '',
           address: {
-            street: '123 Rue de la Paix',
-            city: 'Port-au-Prince',
-            state: 'Ouest',
-            zipCode: 'HT6110',
+            street: '',
+            city: '',
+            state: '',
+            zipCode: '',
             country: 'Haïti'
           },
           contact: {
-            phone: '+509 1234 5678',
-            email: 'jean.baptiste@email.com',
+            phone: '',
+            email: '',
             emergencyContact: {
-              name: 'Marie Baptiste',
-              phone: '+509 8765 4321',
-              relationship: 'Épouse'
+              name: '',
+              phone: '',
+              relationship: ''
             }
           },
           identity: {
-            idType: 'Carte d\'Identité',
-            idNumber: '001-234-5678',
-            expiryDate: '2028-03-15',
-            issuingAuthority: 'Office National d\'Identification'
+            idType: '',
+            idNumber: '',
+            expiryDate: '',
+            issuingAuthority: ''
           },
-          loans: [
-            {
-              id: 'L001',
-              amount: 100000,
-              outstanding: 85000,
-              status: 'ACTIVE',
-              startDate: '2024-10-01',
-              endDate: '2025-10-01',
-              interestRate: 2.5,
-              payments: [
-                { id: 'P001', amount: 15000, date: '2024-11-01', status: 'PAID' },
-                { id: 'P002', amount: 15000, date: '2024-12-01', status: 'PAID' },
-                { id: 'P003', amount: 15000, date: '2025-01-01', status: 'OVERDUE' }
-              ]
-            }
-          ],
-          savingsAccount: {
-            accountNumber: 'SA001234',
-            balance: 25000,
-            interestRate: 3.5,
-            lastTransaction: '2024-01-10T14:30:00',
-            transactions: [
-              { id: 'T001', type: 'DEPOSIT', amount: 10000, date: '2024-01-05', description: 'Dépôt initial' },
-              { id: 'T002', type: 'DEPOSIT', amount: 15000, date: '2024-01-10', description: 'Épargne mensuelle' }
-            ]
-          },
-          documents: [
-            {
-              id: 'D001',
-              name: 'Carte d\'Identité',
-              type: 'ID',
-              uploadDate: '2024-01-15',
-              url: '/documents/id_jean_baptiste.pdf'
-            },
-            {
-              id: 'D002',
-              name: 'Justificatif de domicile',
-              type: 'ADDRESS',
-              uploadDate: '2024-01-15',
-              url: '/documents/address_jean_baptiste.pdf'
-            }
-          ],
-          notes: [
-            {
-              id: 'N001',
-              content: 'Client très fiable, toujours à jour dans ses paiements. Bonne relation avec l\'institution.',
-              createdBy: 'Marie Joseph',
-              createdAt: '2024-01-10T09:00:00',
-              category: 'GENERAL'
-            }
-          ],
-          interactions: [
-            {
-              id: 'I001',
-              type: 'CALL',
-              date: '2024-01-08T10:00:00',
-              description: 'Appel pour vérifier les informations de contact',
-              outcome: 'Informations mises à jour',
-              agent: 'Marie Joseph'
-            }
-          ]
+          loans: [],
+          savingsAccount: undefined,
+          documents: [],
+          notes: [],
+          interactions: []
         };
         setProfile(demoProfile);
       }
