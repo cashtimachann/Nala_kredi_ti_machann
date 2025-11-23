@@ -7,13 +7,12 @@ WORKDIR /app
 
 # Copy package files and install dependencies (cached layer)
 COPY package*.json ./
-RUN npm ci --only=production --silent
+RUN npm ci --silent
 
-# Copy environment file for production build
-COPY .env.production ./.env
-
-# Copy source code and build
+# Copy source code
 COPY . ./
+
+# Build the application
 RUN npm run build
 
 # Stage 2: Production environment with Nginx
