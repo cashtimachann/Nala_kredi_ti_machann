@@ -278,11 +278,11 @@ const InterBranchTransferList: React.FC<InterBranchTransferListProps> = () => {
 
   const filteredTransfers = transfers.filter(transfer => {
     const matchesSearch =
-      transfer.transferNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transfer.fromBranchName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transfer.toBranchName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transfer.requestedByName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transfer.reason.toLowerCase().includes(searchTerm.toLowerCase());
+      (transfer.transferNumber && transfer.transferNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (transfer.fromBranchName && transfer.fromBranchName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (transfer.toBranchName && transfer.toBranchName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (transfer.requestedByName && transfer.requestedByName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (transfer.reason && transfer.reason.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesStatus = statusFilter === 'all' || transfer.status === statusFilter;
     const matchesCurrency = currencyFilter === 'all' || transfer.currency === currencyFilter;

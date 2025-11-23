@@ -601,8 +601,8 @@ const ClientActions: React.FC = () => {
   };
 
   const filteredBorrowers = borrowers.filter(borrower => {
-    const matchesSearch = borrower.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         borrower.occupation.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (borrower.fullName && borrower.fullName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                         (borrower.occupation && borrower.occupation.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatus = statusFilter === 'ALL' || borrower.status === statusFilter;
     return matchesSearch && matchesStatus;
   });

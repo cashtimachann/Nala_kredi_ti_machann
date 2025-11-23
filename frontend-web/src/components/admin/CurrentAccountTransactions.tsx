@@ -146,9 +146,9 @@ const CurrentAccountTransactions: React.FC = () => {
     // Search filter
     if (searchTerm) {
       filtered = filtered.filter(txn =>
-        txn.accountNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        txn.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        txn.referenceNumber.toLowerCase().includes(searchTerm.toLowerCase())
+        (txn.accountNumber && txn.accountNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (txn.customerName && txn.customerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (txn.referenceNumber && txn.referenceNumber.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
 

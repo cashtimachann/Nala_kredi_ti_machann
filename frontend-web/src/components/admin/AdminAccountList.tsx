@@ -470,10 +470,10 @@ const AdminAccountList: React.FC = () => {
 
   const filteredAccounts = accounts.filter(account => {
     const matchesSearch =
-      account.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      account.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      account.phone.includes(searchTerm) ||
-      account.department.toLowerCase().includes(searchTerm.toLowerCase());
+      (account.fullName && account.fullName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (account.email && account.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (account.phone && account.phone.includes(searchTerm)) ||
+      (account.department && account.department.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesStatus = statusFilter === 'all' || account.status === statusFilter;
     const matchesType = typeFilter === 'all' || account.adminType === typeFilter;

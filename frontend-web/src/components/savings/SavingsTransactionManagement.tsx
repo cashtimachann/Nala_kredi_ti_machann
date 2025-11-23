@@ -668,9 +668,9 @@ const SavingsTransactionManagement: React.FC = () => {
   };
 
   const filteredTransactions = transactions.filter(tx =>
-    tx.accountNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    tx.reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    tx.description.toLowerCase().includes(searchTerm.toLowerCase())
+    (tx.accountNumber && tx.accountNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (tx.reference && tx.reference.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (tx.description && tx.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   // Pagination calculations

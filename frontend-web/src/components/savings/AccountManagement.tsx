@@ -61,9 +61,9 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
     let result = accounts.filter(account => {
       const matchesSearch = 
         filters.search === '' ||
-        account.accountNumber.toLowerCase().includes(filters.search.toLowerCase()) ||
-        account.customer?.fullName.toLowerCase().includes(filters.search.toLowerCase()) ||
-        account.customer?.contact.primaryPhone.includes(filters.search);
+        (account.accountNumber && account.accountNumber.toLowerCase().includes(filters.search.toLowerCase())) ||
+        (account.customer?.fullName && account.customer.fullName.toLowerCase().includes(filters.search.toLowerCase())) ||
+        (account.customer?.contact?.primaryPhone && account.customer.contact.primaryPhone.includes(filters.search));
 
       const matchesCurrency = 
         filters.currency === '' || account.currency === filters.currency;

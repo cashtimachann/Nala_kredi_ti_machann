@@ -140,10 +140,10 @@ const BranchManagement: React.FC<BranchManagementProps> = () => {
 
   const filteredBranches = branches.filter(branch => {
     const matchesSearch = 
-      branch.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-      branch.code.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-      branch.commune.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-      branch.department.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
+      (branch.name && branch.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
+      (branch.code && branch.code.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
+      (branch.commune && branch.commune.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
+      (branch.department && branch.department.toLowerCase().includes(debouncedSearchTerm.toLowerCase()));
     
     const matchesStatus = statusFilter === 'all' || branch.status === statusFilter;
     

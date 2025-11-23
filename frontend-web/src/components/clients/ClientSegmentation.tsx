@@ -270,8 +270,8 @@ const ClientSegmentation: React.FC = () => {
   };
 
   const filteredSegments = segments.filter(segment =>
-    segment.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    segment.description.toLowerCase().includes(searchTerm.toLowerCase())
+    (segment.name && segment.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (segment.description && segment.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   if (loading) {

@@ -87,9 +87,9 @@ const AdminManagement: React.FC<AdminManagementProps> = () => {
 
   const filteredAdmins = admins.filter(admin => {
     const matchesSearch = !filters.search || 
-      admin.fullName.toLowerCase().includes(filters.search.toLowerCase()) ||
-      admin.email.toLowerCase().includes(filters.search.toLowerCase()) ||
-      admin.department.toLowerCase().includes(filters.search.toLowerCase());
+      (admin.fullName && admin.fullName.toLowerCase().includes(filters.search.toLowerCase())) ||
+      (admin.email && admin.email.toLowerCase().includes(filters.search.toLowerCase())) ||
+      (admin.department && admin.department.toLowerCase().includes(filters.search.toLowerCase()));
     
     const matchesType = !filters.adminType || admin.adminType === filters.adminType;
     const matchesDepartment = !filters.department || admin.department === filters.department;

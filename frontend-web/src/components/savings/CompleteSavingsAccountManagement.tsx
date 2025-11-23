@@ -247,9 +247,9 @@ const CompleteSavingsAccountManagement: React.FC = () => {
 
 
   const filteredAccounts = accounts.filter(account =>
-    account.accountNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    account.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    account.customerPhone.includes(searchTerm)
+    (account.accountNumber && account.accountNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (account.customerName && account.customerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (account.customerPhone && account.customerPhone.includes(searchTerm))
   ).filter(account => {
     if (filters.branchId && account.branchId !== filters.branchId) return false;
     if (filters.currency !== undefined && account.currency !== (filters.currency === 0 ? 'HTG' : 'USD')) return false;

@@ -717,8 +717,8 @@ const LoanManagement: React.FC = () => {
     // Search filter
     if (searchTerm) {
       filtered = filtered.filter(loan =>
-        loan.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        loan.loanNumber.toLowerCase().includes(searchTerm.toLowerCase())
+        (loan.customerName && loan.customerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (loan.loanNumber && loan.loanNumber.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
 
@@ -1162,7 +1162,7 @@ const LoanManagement: React.FC = () => {
         if ((l.daysOverdue || 0) <= 0) return false;
         if (searchTerm) {
           const term = searchTerm.toLowerCase();
-          const matchesSearch = l.loanNumber.toLowerCase().includes(term) || l.customerName.toLowerCase().includes(term) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
+          const matchesSearch = (l.loanNumber && l.loanNumber.toLowerCase().includes(term)) || (l.customerName && l.customerName.toLowerCase().includes(term)) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
           if (!matchesSearch) return false;
         }
         if (branchFilter !== 'ALL' && l.branch !== branchFilter) return false;
@@ -1171,7 +1171,7 @@ const LoanManagement: React.FC = () => {
         if (overdueDaysFilter === '1-30' && (days < 1 || days > 30)) return false;
         if (overdueDaysFilter === '31-60' && (days < 31 || days > 60)) return false;
         if (overdueDaysFilter === '60+' && days <= 60) return false;
-        if (agentFilter && !l.loanOfficer.toLowerCase().includes(agentFilter.toLowerCase())) return false;
+        if (agentFilter && l.loanOfficer && !l.loanOfficer.toLowerCase().includes(agentFilter.toLowerCase())) return false;
         return true;
       });
 
@@ -1209,9 +1209,9 @@ const LoanManagement: React.FC = () => {
       const filteredPayments = payments.filter(payment => {
         if (!paymentsSearchTerm) return true;
         const term = paymentsSearchTerm.toLowerCase();
-        return payment.receiptNumber.toLowerCase().includes(term) ||
+        return (payment.receiptNumber && payment.receiptNumber.toLowerCase().includes(term)) ||
                (payment.reference && payment.reference.toLowerCase().includes(term)) ||
-               payment.processedByName.toLowerCase().includes(term);
+               (payment.processedByName && payment.processedByName.toLowerCase().includes(term));
       });
 
       const csvContent = [
@@ -2487,7 +2487,7 @@ const LoanManagement: React.FC = () => {
                     if ((l.daysOverdue || 0) <= 0) return false;
                     if (searchTerm) {
                       const term = searchTerm.toLowerCase();
-                      const matchesSearch = l.loanNumber.toLowerCase().includes(term) || l.customerName.toLowerCase().includes(term) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
+                      const matchesSearch = (l.loanNumber && l.loanNumber.toLowerCase().includes(term)) || (l.customerName && l.customerName.toLowerCase().includes(term)) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
                       if (!matchesSearch) return false;
                     }
                     if (branchFilter !== 'ALL' && l.branch !== branchFilter) return false;
@@ -2496,7 +2496,7 @@ const LoanManagement: React.FC = () => {
                     if (overdueDaysFilter === '1-30' && (days < 1 || days > 30)) return false;
                     if (overdueDaysFilter === '31-60' && (days < 31 || days > 60)) return false;
                     if (overdueDaysFilter === '60+' && days <= 60) return false;
-                    if (agentFilter && !l.loanOfficer.toLowerCase().includes(agentFilter.toLowerCase())) return false;
+                    if (agentFilter && l.loanOfficer && !l.loanOfficer.toLowerCase().includes(agentFilter.toLowerCase())) return false;
                     return true;
                   }).length}
                 </p>
@@ -2513,7 +2513,7 @@ const LoanManagement: React.FC = () => {
                     if ((l.daysOverdue || 0) <= 0) return false;
                     if (searchTerm) {
                       const term = searchTerm.toLowerCase();
-                      const matchesSearch = l.loanNumber.toLowerCase().includes(term) || l.customerName.toLowerCase().includes(term) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
+                      const matchesSearch = (l.loanNumber && l.loanNumber.toLowerCase().includes(term)) || (l.customerName && l.customerName.toLowerCase().includes(term)) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
                       if (!matchesSearch) return false;
                     }
                     if (branchFilter !== 'ALL' && l.branch !== branchFilter) return false;
@@ -2522,7 +2522,7 @@ const LoanManagement: React.FC = () => {
                     if (overdueDaysFilter === '1-30' && (days < 1 || days > 30)) return false;
                     if (overdueDaysFilter === '31-60' && (days < 31 || days > 60)) return false;
                     if (overdueDaysFilter === '60+' && days <= 60) return false;
-                    if (agentFilter && !l.loanOfficer.toLowerCase().includes(agentFilter.toLowerCase())) return false;
+                    if (agentFilter && l.loanOfficer && !l.loanOfficer.toLowerCase().includes(agentFilter.toLowerCase())) return false;
                     return l.currency === 'HTG';
                   }).reduce((sum, l) => sum + l.remainingBalance, 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 })}
                 </p>
@@ -2539,7 +2539,7 @@ const LoanManagement: React.FC = () => {
                     if ((l.daysOverdue || 0) <= 30) return false;
                     if (searchTerm) {
                       const term = searchTerm.toLowerCase();
-                      const matchesSearch = l.loanNumber.toLowerCase().includes(term) || l.customerName.toLowerCase().includes(term) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
+                      const matchesSearch = (l.loanNumber && l.loanNumber.toLowerCase().includes(term)) || (l.customerName && l.customerName.toLowerCase().includes(term)) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
                       if (!matchesSearch) return false;
                     }
                     if (branchFilter !== 'ALL' && l.branch !== branchFilter) return false;
@@ -2548,7 +2548,7 @@ const LoanManagement: React.FC = () => {
                     if (overdueDaysFilter === '1-30' && (days < 1 || days > 30)) return false;
                     if (overdueDaysFilter === '31-60' && (days < 31 || days > 60)) return false;
                     if (overdueDaysFilter === '60+' && days <= 60) return false;
-                    if (agentFilter && !l.loanOfficer.toLowerCase().includes(agentFilter.toLowerCase())) return false;
+                    if (agentFilter && l.loanOfficer && !l.loanOfficer.toLowerCase().includes(agentFilter.toLowerCase())) return false;
                     return true;
                   }).length}
                 </p>
@@ -2565,7 +2565,7 @@ const LoanManagement: React.FC = () => {
                     if ((l.daysOverdue || 0) <= 60) return false;
                     if (searchTerm) {
                       const term = searchTerm.toLowerCase();
-                      const matchesSearch = l.loanNumber.toLowerCase().includes(term) || l.customerName.toLowerCase().includes(term) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
+                      const matchesSearch = (l.loanNumber && l.loanNumber.toLowerCase().includes(term)) || (l.customerName && l.customerName.toLowerCase().includes(term)) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
                       if (!matchesSearch) return false;
                     }
                     if (branchFilter !== 'ALL' && l.branch !== branchFilter) return false;
@@ -2574,7 +2574,7 @@ const LoanManagement: React.FC = () => {
                     if (overdueDaysFilter === '1-30' && (days < 1 || days > 30)) return false;
                     if (overdueDaysFilter === '31-60' && (days < 31 || days > 60)) return false;
                     if (overdueDaysFilter === '60+' && days <= 60) return false;
-                    if (agentFilter && !l.loanOfficer.toLowerCase().includes(agentFilter.toLowerCase())) return false;
+                    if (agentFilter && l.loanOfficer && !l.loanOfficer.toLowerCase().includes(agentFilter.toLowerCase())) return false;
                     return true;
                   }).length}
                 </p>
@@ -2624,8 +2624,8 @@ const LoanManagement: React.FC = () => {
                         if (searchTerm) {
                           const term = searchTerm.toLowerCase();
                           const matchesSearch = 
-                            loan.loanNumber.toLowerCase().includes(term) ||
-                            loan.customerName.toLowerCase().includes(term) ||
+                            (loan.loanNumber && loan.loanNumber.toLowerCase().includes(term)) ||
+                            (loan.customerName && loan.customerName.toLowerCase().includes(term)) ||
                             (loan.customerPhone && loan.customerPhone.toLowerCase().includes(term));
                           if (!matchesSearch) return false;
                         }
@@ -2643,7 +2643,7 @@ const LoanManagement: React.FC = () => {
                         if (overdueDaysFilter === '60+' && days <= 60) return false;
                         
                         // Filtre par agent
-                        if (agentFilter && !loan.loanOfficer.toLowerCase().includes(agentFilter.toLowerCase())) return false;
+                        if (agentFilter && loan.loanOfficer && !loan.loanOfficer.toLowerCase().includes(agentFilter.toLowerCase())) return false;
                         
                         return true;
                       })
@@ -2733,7 +2733,7 @@ const LoanManagement: React.FC = () => {
                   if ((loan.daysOverdue || 0) <= 0) return false;
                   if (searchTerm) {
                     const term = searchTerm.toLowerCase();
-                    const matchesSearch = loan.loanNumber.toLowerCase().includes(term) || loan.customerName.toLowerCase().includes(term) || (loan.customerPhone && loan.customerPhone.toLowerCase().includes(term));
+                    const matchesSearch = (loan.loanNumber && loan.loanNumber.toLowerCase().includes(term)) || (loan.customerName && loan.customerName.toLowerCase().includes(term)) || (loan.customerPhone && loan.customerPhone.toLowerCase().includes(term));
                     if (!matchesSearch) return false;
                   }
                   if (branchFilter !== 'ALL' && loan.branch !== branchFilter) return false;
@@ -2742,7 +2742,7 @@ const LoanManagement: React.FC = () => {
                   if (overdueDaysFilter === '1-30' && (days < 1 || days > 30)) return false;
                   if (overdueDaysFilter === '31-60' && (days < 31 || days > 60)) return false;
                   if (overdueDaysFilter === '60+' && days <= 60) return false;
-                  if (agentFilter && !loan.loanOfficer.toLowerCase().includes(agentFilter.toLowerCase())) return false;
+                  if (agentFilter && loan.loanOfficer && !loan.loanOfficer.toLowerCase().includes(agentFilter.toLowerCase())) return false;
                   return true;
                 }).length === 0 && (
                   <div className="text-center py-12">
@@ -2940,9 +2940,9 @@ const LoanManagement: React.FC = () => {
                       .filter(payment => {
                         if (!paymentsSearchTerm) return true;
                         const term = paymentsSearchTerm.toLowerCase();
-                        return payment.receiptNumber.toLowerCase().includes(term) ||
+                        return (payment.receiptNumber && payment.receiptNumber.toLowerCase().includes(term)) ||
                                (payment.reference && payment.reference.toLowerCase().includes(term)) ||
-                               payment.processedByName.toLowerCase().includes(term);
+                               (payment.processedByName && payment.processedByName.toLowerCase().includes(term));
                       })
                       .map((payment) => (
                       <tr key={payment.id} className="hover:bg-gray-50">
@@ -2998,9 +2998,9 @@ const LoanManagement: React.FC = () => {
                 {payments.filter(payment => {
                   if (!paymentsSearchTerm) return true;
                   const term = paymentsSearchTerm.toLowerCase();
-                  return payment.receiptNumber.toLowerCase().includes(term) ||
+                  return (payment.receiptNumber && payment.receiptNumber.toLowerCase().includes(term)) ||
                          (payment.reference && payment.reference.toLowerCase().includes(term)) ||
-                         payment.processedByName.toLowerCase().includes(term);
+                         (payment.processedByName && payment.processedByName.toLowerCase().includes(term));
                 }).length === 0 && (
                   <div className="text-center py-12">
                     <DollarSign className="w-16 h-16 text-gray-400 mx-auto mb-4" />

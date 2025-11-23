@@ -370,9 +370,9 @@ const PayrollProcessing: React.FC<PayrollProcessingProps> = ({ onClose }) => {
   // Filter payroll items
   const filteredItems = payrollItems.filter(item => {
     const matchesSearch = 
-      item.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.employeeCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.position.toLowerCase().includes(searchTerm.toLowerCase());
+      (item.employeeName && item.employeeName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (item.employeeCode && item.employeeCode.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (item.position && item.position.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesBranch = filterBranch === 'ALL' || item.branch === filterBranch;
     const matchesStatus = filterStatus === 'ALL' || item.status === filterStatus;

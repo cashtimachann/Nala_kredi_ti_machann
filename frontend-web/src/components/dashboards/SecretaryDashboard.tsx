@@ -155,10 +155,10 @@ const SecretaryDashboard: React.FC = () => {
 
   const filteredClients = clients.filter(client =>
     searchTerm === '' ||
-    client.accountNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.phoneNumber.includes(searchTerm)
+    (client.accountNumber && client.accountNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (client.firstName && client.firstName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (client.lastName && client.lastName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (client.phoneNumber && client.phoneNumber.includes(searchTerm))
   );
 
   if (loading) {

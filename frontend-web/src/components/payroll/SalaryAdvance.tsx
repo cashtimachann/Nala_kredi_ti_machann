@@ -272,8 +272,8 @@ const SalaryAdvance: React.FC<SalaryAdvanceProps> = ({ onClose }) => {
   // Filter advances
   const filteredAdvances = advances.filter(advance => {
     const matchesSearch = 
-      advance.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      advance.employeeCode.toLowerCase().includes(searchTerm.toLowerCase());
+      (advance.employeeName && advance.employeeName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (advance.employeeCode && advance.employeeCode.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesStatus = filterStatus === 'ALL' || advance.status === filterStatus;
     const matchesBranch = filterBranch === 'ALL' || advance.branch === filterBranch;

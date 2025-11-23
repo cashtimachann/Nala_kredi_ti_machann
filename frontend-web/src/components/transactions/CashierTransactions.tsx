@@ -83,9 +83,9 @@ const CashierTransactions: React.FC = () => {
 
     if (filters.search) {
       filtered = filtered.filter(t =>
-        t.accountNumber.toLowerCase().includes(filters.search.toLowerCase()) ||
-        t.customerName.toLowerCase().includes(filters.search.toLowerCase()) ||
-        t.referenceNumber.toLowerCase().includes(filters.search.toLowerCase())
+        (t.accountNumber && t.accountNumber.toLowerCase().includes(filters.search.toLowerCase())) ||
+        (t.customerName && t.customerName.toLowerCase().includes(filters.search.toLowerCase())) ||
+        (t.referenceNumber && t.referenceNumber.toLowerCase().includes(filters.search.toLowerCase()))
       );
     }
 

@@ -325,9 +325,9 @@ const CurrentAccountManagement: React.FC<{ showTabs?: boolean }> = ({ showTabs =
 
   const filteredAccounts = accounts.filter(account => {
     const matchesSearch =
-      account.accountNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      account.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      account.customerPhone.includes(searchTerm);
+      (account.accountNumber && account.accountNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (account.customerName && account.customerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (account.customerPhone && account.customerPhone.includes(searchTerm));
 
     const matchesCurrency = currencyFilter === 'ALL' || account.currency === currencyFilter;
     const matchesStatus = !statusFilter || account.status === statusFilter;
