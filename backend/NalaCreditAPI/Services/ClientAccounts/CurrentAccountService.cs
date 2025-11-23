@@ -17,6 +17,7 @@ namespace NalaCreditAPI.Services.ClientAccounts
         Task<ClientAccountBalanceDto> GetBalanceAsync(string accountNumber);
         Task<CurrentAccountStatisticsDto> GetStatisticsAsync();
         Task<CurrentAccountTransactionResponseDto> ProcessTransactionAsync(CurrentAccountTransactionRequestDto dto, string userId);
+        Task<CurrentAccountTransferResponseDto> ProcessTransferAsync(CurrentAccountTransferRequestDto dto, string userId);
         Task<bool> CancelTransactionAsync(string transactionId, string reason, string userId);
     }
 
@@ -212,6 +213,172 @@ namespace NalaCreditAPI.Services.ClientAccounts
                 Fees = tx.Fees,
                 ExchangeRate = tx.ExchangeRate
             };
+        }
+
+        public async Task<CurrentAccountTransferResponseDto> ProcessTransferAsync(CurrentAccountTransferRequestDto dto, string userId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                if (dto.Amount <= 0) throw new ArgumentException("Montant invalide");
+
+                var source = await _context.CurrentAccounts.FirstOrDefaultAsync(a => a.AccountNumber == dto.SourceAccountNumber)
+                    ?? throw new ArgumentException("Numéro de compte source invalide");
+
+                var destination = await _context.CurrentAccounts.FirstOrDefaultAsync(a => a.AccountNumber == dto.DestinationAccountNumber)
+                    ?? throw new ArgumentException("Numéro de compte destinataire invalide");
+
+                if (source.Id == destination.Id) throw new ArgumentException("Le compte source et le compte destinataire ne peuvent pas être identiques");
+
+                if (source.Status != ClientAccountStatus.Active) throw new InvalidOperationException("Le compte source n'est pas actif");
+                if (destination.Status != ClientAccountStatus.Active) throw new InvalidOperationException("Le compte destinataire n'est pas actif");
+
+                if (source.Currency != destination.Currency) throw new InvalidOperationException("Les devises des comptes doivent correspondre pour un transfert");
+
+                // Validate withdrawal rules for source
+                // reuse existing logic from ProcessTransactionAsync
+                var balanceBeforeSource = source.Balance;
+                var afterSource = balanceBeforeSource - dto.Amount;
+                if (source.OverdraftLimit > 0)
+                {
+                    if (afterSource < -source.OverdraftLimit) throw new InvalidOperationException("Fonds insuffisants (limite de découvert dépassée)");
+                }
+                else
+                {
+                    if (afterSource < source.MinimumBalance) throw new InvalidOperationException("Fonds insuffisants (solde minimal requis)");
+                }
+
+                // Build transaction entries and IDs
+                var sourceTxId = Guid.NewGuid().ToString();
+                var destTxId = Guid.NewGuid().ToString();
+
+                var now = DateTime.UtcNow;
+
+                var sourceTx = new CurrentAccountTransaction
+                {
+                    Id = sourceTxId,
+                    AccountId = source.Id,
+                    AccountNumber = source.AccountNumber,
+                    Type = SavingsTransactionType.Withdrawal,
+                    Amount = dto.Amount,
+                    Currency = source.Currency,
+                    BalanceBefore = source.Balance,
+                    Description = string.IsNullOrWhiteSpace(dto.Description) ? "Transfert sortie" : dto.Description!,
+                    Reference = $"CACC-WDR-{now:yyyyMMddHHmmssfff}",
+                    ProcessedBy = userId,
+                    BranchId = source.BranchId,
+                    Status = SavingsTransactionStatus.Processing,
+                    ProcessedAt = now,
+                    CreatedAt = now,
+                };
+
+                var destTx = new CurrentAccountTransaction
+                {
+                    Id = destTxId,
+                    AccountId = destination.Id,
+                    AccountNumber = destination.AccountNumber,
+                    Type = SavingsTransactionType.Deposit,
+                    Amount = dto.Amount,
+                    Currency = destination.Currency,
+                    BalanceBefore = destination.Balance,
+                    Description = string.IsNullOrWhiteSpace(dto.Description) ? "Transfert entrée" : dto.Description!,
+                    Reference = $"CACC-DEP-{now:yyyyMMddHHmmssfff}",
+                    ProcessedBy = userId,
+                    BranchId = destination.BranchId,
+                    Status = SavingsTransactionStatus.Processing,
+                    ProcessedAt = now,
+                    CreatedAt = now,
+                };
+
+                // Update balances
+                source.Balance = source.Balance - dto.Amount;
+                source.AvailableBalance = source.Balance;
+                source.LastTransactionDate = now;
+                source.UpdatedAt = now;
+
+                destTx.BalanceAfter = destination.Balance + dto.Amount;
+                destination.Balance = destination.Balance + dto.Amount;
+                destination.AvailableBalance = destination.Balance;
+                destination.LastTransactionDate = now;
+                destination.UpdatedAt = now;
+
+                sourceTx.BalanceAfter = source.Balance;
+
+                // Cross-link
+                sourceTx.RelatedTransactionId = destTxId;
+                destTx.RelatedTransactionId = sourceTxId;
+
+                sourceTx.Status = SavingsTransactionStatus.Completed;
+                destTx.Status = SavingsTransactionStatus.Completed;
+
+                _context.CurrentAccountTransactions.Add(sourceTx);
+                _context.CurrentAccountTransactions.Add(destTx);
+                await _context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                // Map to response DTOs
+                var branch1 = await _context.Branches.FirstOrDefaultAsync(b => b.Id == sourceTx.BranchId);
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+                var branch2 = await _context.Branches.FirstOrDefaultAsync(b => b.Id == destTx.BranchId);
+
+                var srcDto = new CurrentAccountTransactionResponseDto
+                {
+                    Id = sourceTx.Id,
+                    AccountId = sourceTx.AccountId,
+                    AccountNumber = sourceTx.AccountNumber,
+                    Type = sourceTx.Type,
+                    Amount = sourceTx.Amount,
+                    Currency = sourceTx.Currency,
+                    BalanceBefore = sourceTx.BalanceBefore,
+                    BalanceAfter = sourceTx.BalanceAfter,
+                    Description = sourceTx.Description,
+                    Reference = sourceTx.Reference,
+                    ProcessedBy = sourceTx.ProcessedBy,
+                    ProcessedByName = user != null ? ($"{user.FirstName} {user.LastName}") : null,
+                    BranchId = sourceTx.BranchId,
+                    BranchName = branch1?.Name,
+                    Status = sourceTx.Status,
+                    ProcessedAt = sourceTx.ProcessedAt,
+                    CreatedAt = sourceTx.CreatedAt,
+                    Fees = sourceTx.Fees,
+                    ExchangeRate = sourceTx.ExchangeRate
+                };
+
+                var dstDto = new CurrentAccountTransactionResponseDto
+                {
+                    Id = destTx.Id,
+                    AccountId = destTx.AccountId,
+                    AccountNumber = destTx.AccountNumber,
+                    Type = destTx.Type,
+                    Amount = destTx.Amount,
+                    Currency = destTx.Currency,
+                    BalanceBefore = destTx.BalanceBefore,
+                    BalanceAfter = destTx.BalanceAfter,
+                    Description = destTx.Description,
+                    Reference = destTx.Reference,
+                    ProcessedBy = destTx.ProcessedBy,
+                    ProcessedByName = user != null ? ($"{user.FirstName} {user.LastName}") : null,
+                    BranchId = destTx.BranchId,
+                    BranchName = branch2?.Name,
+                    Status = destTx.Status,
+                    ProcessedAt = destTx.ProcessedAt,
+                    CreatedAt = destTx.CreatedAt,
+                    Fees = destTx.Fees,
+                    ExchangeRate = destTx.ExchangeRate
+                };
+
+                return new CurrentAccountTransferResponseDto
+                {
+                    SourceTransaction = srcDto,
+                    DestinationTransaction = dstDto
+                };
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
 
         public async Task<bool> CancelTransactionAsync(string transactionId, string reason, string userId)

@@ -913,6 +913,9 @@ namespace NalaCreditAPI.Models
         [Column(TypeName = "decimal(10,6)")]
         public decimal? ExchangeRate { get; set; }
 
+        // For linking transfer transactions
+        public string? RelatedTransactionId { get; set; }
+
         // Relations
         [ForeignKey("AccountId")]
         public virtual CurrentAccount Account { get; set; } = null!;

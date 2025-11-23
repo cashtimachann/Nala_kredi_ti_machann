@@ -20,7 +20,7 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({ account, onBack, onUpda
   const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'statement'>('overview');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
-  const [transactionType, setTransactionType] = useState<TransactionType.DEPOSIT | TransactionType.WITHDRAWAL>(TransactionType.DEPOSIT);
+  const [transactionType, setTransactionType] = useState<TransactionType.DEPOSIT | TransactionType.WITHDRAWAL | TransactionType.TRANSFER>(TransactionType.DEPOSIT);
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -91,6 +91,8 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({ account, onBack, onUpda
         return 'text-blue-600';
       case TransactionType.FEE:
         return 'text-orange-600';
+      case TransactionType.TRANSFER:
+        return 'text-blue-600';
       default:
         return 'text-gray-600';
     }
@@ -107,6 +109,8 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({ account, onBack, onUpda
         return '💰';
       case TransactionType.FEE:
         return '💳';
+      case TransactionType.TRANSFER:
+        return '🔁';
       default:
         return '📄';
     }
@@ -128,10 +132,10 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({ account, onBack, onUpda
         amount: transactionData.amount,
         currency: account.currency,
         balanceBefore: account.balance,
-        balanceAfter: transactionData.type === TransactionType.DEPOSIT 
+        balanceAfter: transactionData.type === TransactionType.DEPOSIT
           ? account.balance + transactionData.amount
           : account.balance - transactionData.amount,
-        description: transactionData.description || `${transactionData.type === TransactionType.DEPOSIT ? 'Dépôt' : 'Retrait'} en espèces`,
+        description: transactionData.description || `${transactionData.type === TransactionType.DEPOSIT ? 'Dépôt' : transactionData.type === TransactionType.WITHDRAWAL ? 'Retrait' : 'Transfert'} en espèces`,
         reference: `TXN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(Math.random() * 1000)}`,
         processedBy: 'current_user',
         processedByName: 'Utilisateur Actuel',
@@ -216,6 +220,16 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({ account, onBack, onUpda
           >
             <span>💸</span>
             <span>Retrait</span>
+          </button>
+          <button
+            onClick={() => {
+              setTransactionType(TransactionType.TRANSFER);
+              setShowTransactionForm(true);
+            }}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+          >
+            <span>🔁</span>
+            <span>Transfert</span>
           </button>
         </div>
       </div>
@@ -482,7 +496,7 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({ account, onBack, onUpda
                     </td>
                     <td className="px-6 py-4 text-right">
                       <span className={`text-sm font-medium ${getTransactionTypeColor(transaction.type)}`}>
-                        {transaction.type === TransactionType.WITHDRAWAL ? '-' : '+'}
+                        {transaction.type === TransactionType.WITHDRAWAL || transaction.type === TransactionType.TRANSFER ? '-' : '+'}
                         {formatCurrency(transaction.amount)}
                       </span>
                     </td>

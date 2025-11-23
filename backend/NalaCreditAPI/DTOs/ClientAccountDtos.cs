@@ -242,6 +242,38 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         public string? Notes { get; set; }
     }
 
+    // DTOs for transfers between current accounts
+    public class CurrentAccountTransferRequestDto
+    {
+        [Required]
+        public string SourceAccountNumber { get; set; } = string.Empty;
+
+        [Required]
+        public string DestinationAccountNumber { get; set; } = string.Empty;
+
+        [Required]
+        [Range(0.01, double.MaxValue, ErrorMessage = "Le montant doit être positif")]
+        public decimal Amount { get; set; }
+
+        [Required]
+        public ClientCurrency Currency { get; set; }
+
+        [StringLength(500)]
+        public string? Description { get; set; }
+
+        public bool? CustomerPresent { get; set; }
+        [MaxLength(50)]
+        public string? VerificationMethod { get; set; }
+        [MaxLength(1000)]
+        public string? Notes { get; set; }
+    }
+
+    public class CurrentAccountTransferResponseDto
+    {
+        public CurrentAccountTransactionResponseDto? SourceTransaction { get; set; }
+        public CurrentAccountTransactionResponseDto? DestinationTransaction { get; set; }
+    }
+
     public class CurrentAccountTransactionResponseDto
     {
         public string Id { get; set; } = string.Empty;

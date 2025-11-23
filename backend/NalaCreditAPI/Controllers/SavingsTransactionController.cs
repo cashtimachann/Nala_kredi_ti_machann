@@ -44,6 +44,31 @@ namespace NalaCreditAPI.Controllers.Savings
         }
 
         /// <summary>
+        /// Traiter un transfert entre deux comptes d'épargne (atomique)
+        /// </summary>
+        [HttpPost("transfer")]
+        public async Task<ActionResult<SavingsTransferResponseDto>> ProcessTransfer([FromBody] SavingsTransferCreateDto dto)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? throw new UnauthorizedAccessException("Utilisateur non identifié");
+
+                var result = await _transactionService.ProcessTransferAsync(dto, userId);
+                // return with source transaction id as created location
+                return CreatedAtAction(nameof(GetTransaction), new { id = result.SourceTransaction?.Id }, result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Obtenir une transaction par ID
         /// </summary>
         [HttpGet("{id}")]

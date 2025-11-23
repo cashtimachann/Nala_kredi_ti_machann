@@ -282,6 +282,38 @@ export class ClientAccountService extends BaseApiService {
     }
   }
 
+  async processCurrentAccountTransfer(data: {
+    sourceAccountNumber?: string;
+    destinationAccountNumber: string;
+    currency: 'HTG' | 'USD';
+    amount: number;
+    description?: string;
+    clientPresent?: boolean;
+    verificationMethod?: string;
+    notes?: string;
+  }): Promise<any> {
+    try {
+      const payload = {
+        sourceAccountNumber: data.sourceAccountNumber || undefined,
+        destinationAccountNumber: data.destinationAccountNumber,
+        amount: data.amount,
+        currency: data.currency === 'HTG' ? 0 : 1,
+        description: data.description || undefined,
+        customerPresent: data.clientPresent,
+        verificationMethod: data.verificationMethod,
+        notes: data.notes
+      };
+
+      const account = encodeURIComponent(String(data.sourceAccountNumber || data.destinationAccountNumber));
+      const url = `/CurrentAccount/${account}/transfer`;
+      const response = await this.post(url, payload);
+      return response;
+    } catch (error) {
+      console.error('Error processing current account transfer:', error);
+      throw error;
+    }
+  }
+
   async createSavingsAccount(data: CreateSavingsAccountRequest): Promise<ClientAccount> {
     try {
       const payload = {

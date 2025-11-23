@@ -15,6 +15,7 @@ export enum AccountStatus {
 export enum TransactionType {
   DEPOSIT = 'DEPOSIT',
   WITHDRAWAL = 'WITHDRAWAL',
+  TRANSFER = 'TRANSFER',
   INTEREST = 'INTEREST',
   FEE = 'FEE',
   OPENING_DEPOSIT = 'OPENING_DEPOSIT'
@@ -266,6 +267,7 @@ export interface AccountOpeningFormData {
 
 export interface TransactionFormData {
   accountNumber: string;
+  recipientAccountNumber?: string; // added for transfers
   type: TransactionType;
   amount: number;
   description?: string;

@@ -873,6 +873,10 @@ class ApiService {
     return clientAccountService.processCurrentAccountTransaction(data);
   }
 
+  async processCurrentAccountTransfer(data: any): Promise<any> {
+    return clientAccountService.processCurrentAccountTransfer(data);
+  }
+
   async createSavingsAccount(data: CreateSavingsAccountRequest): Promise<ClientAccount> {
     return clientAccountService.createSavingsAccount(data);
   }
@@ -1368,6 +1372,11 @@ class ApiService {
   // Savings Transaction Management
   async processSavingsTransaction(transactionData: any): Promise<any> {
     const response = await this.api.post('/SavingsTransaction/process', transactionData);
+    return response.data;
+  }
+
+  async processSavingsTransfer(transferData: any): Promise<any> {
+    const response = await this.api.post('/SavingsTransaction/transfer', transferData);
     return response.data;
   }
 

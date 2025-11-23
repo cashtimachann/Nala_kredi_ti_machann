@@ -381,6 +381,43 @@ namespace NalaCreditAPI.DTOs.Savings
         public string? Notes { get; set; }
     }
 
+    // DTO pour transfert entre comptes d'épargne
+    public class SavingsTransferCreateDto
+    {
+        [Required]
+        [StringLength(12, MinimumLength = 12)]
+        public string SourceAccountNumber { get; set; } = string.Empty;
+
+        [Required]
+        [StringLength(12, MinimumLength = 12)]
+        public string DestinationAccountNumber { get; set; } = string.Empty;
+
+        [Required]
+        [Range(0.01, double.MaxValue, ErrorMessage = "Le montant doit être positif")]
+        public decimal Amount { get; set; }
+
+        [StringLength(500)]
+        public string? Description { get; set; }
+
+        [Required]
+        public bool CustomerPresent { get; set; }
+
+        public string? CustomerSignature { get; set; }
+
+        [Required]
+        [StringLength(50)]
+        public string VerificationMethod { get; set; } = string.Empty;
+
+        [StringLength(1000)]
+        public string? Notes { get; set; }
+    }
+
+    public class SavingsTransferResponseDto
+    {
+        public SavingsTransactionResponseDto? SourceTransaction { get; set; }
+        public SavingsTransactionResponseDto? DestinationTransaction { get; set; }
+    }
+
     public class SavingsTransactionResponseDto
     {
         public string Id { get; set; } = string.Empty;

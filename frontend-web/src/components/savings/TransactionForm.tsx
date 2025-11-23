@@ -17,7 +17,7 @@ interface TransactionFormProps {
   onSubmit: (data: TransactionFormData) => void;
   onCancel: () => void;
   isLoading?: boolean;
-  type?: TransactionType.DEPOSIT | TransactionType.WITHDRAWAL;
+  type?: TransactionType.DEPOSIT | TransactionType.WITHDRAWAL | TransactionType.TRANSFER;
 }
 
 // Schéma de validation pour les transactions
@@ -30,7 +30,7 @@ const transactionSchema = yup.object({
   type: yup
     .mixed<TransactionType>()
     .required('Le type de transaction est obligatoire')
-    .oneOf([TransactionType.DEPOSIT, TransactionType.WITHDRAWAL], 'Type de transaction invalide'),
+    .oneOf([TransactionType.DEPOSIT, TransactionType.WITHDRAWAL, TransactionType.TRANSFER], 'Type de transaction invalide'),
   
   amount: yup
     .number()
@@ -63,6 +63,14 @@ const transactionSchema = yup.object({
   customerSignature: yup
     .string()
     .optional(),
+
+  recipientAccountNumber: yup
+    .string()
+    .when('type', {
+      is: TransactionType.TRANSFER,
+      then: (schema) => schema.required('Le numéro du compte destinataire est requis').matches(/^[GD]\d{11}$/i, "Format invalide. Utilisez 'G' ou 'D' suivi de 11 chiffres"),
+      otherwise: (schema) => schema.optional()
+    }),
   
   verificationMethod: yup
     .string()
@@ -83,6 +91,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   type = TransactionType.DEPOSIT
 }) => {
   const [selectedAccount, setSelectedAccount] = useState<SavingsAccount | null>(account || null);
+  const [selectedRecipientAccount, setSelectedRecipientAccount] = useState<SavingsAccount | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [transactionPreview, setTransactionPreview] = useState<TransactionFormData | null>(null);
 
@@ -99,6 +108,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     defaultValues: {
       accountNumber: account?.accountNumber || '',
       type: type,
+      recipientAccountNumber: '',
       amount: 0,
       description: '',
       customerPresent: true,
@@ -112,6 +122,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const watchedType = watch('type');
   const watchedAmount = watch('amount');
   const watchedAccountNumber = watch('accountNumber');
+  const watchedRecipientAccountNumber = watch('recipientAccountNumber');
   const watchedCustomerPresent = watch('customerPresent');
 
   // Rechercher le compte par numéro
@@ -182,12 +193,83 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
   };
 
+  const searchRecipientByNumber = async (accountNumber: string) => {
+    // reuse the same local mock/lookup used for source - in prod this should use api
+    if (accountNumber.length === 12) {
+      // quick mock — if matches the special number return a different account
+      if (accountNumber === '001234567891') {
+        setSelectedRecipientAccount({
+          id: '2',
+          accountNumber: 'D01234567891',
+          customerId: 'cust2',
+          customer: {
+            id: 'cust2',
+            firstName: 'Marie',
+            lastName: 'Jean',
+            fullName: 'Marie Jean',
+            dateOfBirth: '1990-07-10',
+            gender: 'F',
+            address: {
+              street: '45 Rue Cap-Haïtien',
+              commune: 'Cap-Haïtien',
+              department: 'Nord',
+              country: 'Haiti'
+            },
+            contact: { primaryPhone: '+509 3700 0000' },
+            identity: {
+              documentType: IdentityDocumentType.CIN,
+              documentNumber: 'CIN987654321',
+              issuedDate: '2019-08-01',
+              issuingAuthority: 'ONI'
+            },
+            createdAt: '2023-05-12T08:00:00Z',
+            updatedAt: '2024-05-01T10:00:00Z',
+            isActive: true
+          },
+          branchId: 1,
+          branchName: 'Succursale Nord',
+          currency: Currency.HTG,
+          balance: 5000,
+          availableBalance: 5000,
+          minimumBalance: 100,
+          openingDate: '2023-05-12',
+          lastTransactionDate: '2024-05-01',
+          status: AccountStatus.ACTIVE,
+          interestRate: 0.02,
+          accruedInterest: 34.25,
+          accountLimits: {
+            dailyWithdrawalLimit: 20000,
+            dailyDepositLimit: 100000,
+            monthlyWithdrawalLimit: 100000,
+            maxBalance: 1000000,
+            minWithdrawalAmount: 100,
+            maxWithdrawalAmount: 50000
+          },
+          createdAt: '2023-05-12T08:00:00Z',
+          updatedAt: '2024-05-01T10:00:00Z'
+        });
+      } else {
+        setSelectedRecipientAccount(null);
+      }
+    } else {
+      setSelectedRecipientAccount(null);
+    }
+  };
+
   // Rechercher le compte automatiquement quand le numéro change
   useEffect(() => {
     if (watchedAccountNumber && !account) {
       searchAccountByNumber(watchedAccountNumber);
     }
   }, [watchedAccountNumber, account]);
+
+  useEffect(() => {
+    if (watchedRecipientAccountNumber) {
+      searchRecipientByNumber(watchedRecipientAccountNumber);
+    } else {
+      setSelectedRecipientAccount(null);
+    }
+  }, [watchedRecipientAccountNumber]);
 
   // Validation spécifique aux retraits
   const validateWithdrawal = (amount: number): string[] => {
@@ -219,6 +301,27 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     return errors;
   };
 
+  const validateTransfer = (amount: number): string[] => {
+    const errors: string[] = [];
+    if (!selectedAccount) return ['Compte source non trouvé'];
+    if (!selectedRecipientAccount) return ['Compte destinataire non trouvé'];
+    if (selectedAccount.accountNumber === selectedRecipientAccount.accountNumber) return ['Le compte source et le compte destinataire ne peuvent pas être identiques'];
+    if (selectedAccount.currency !== selectedRecipientAccount.currency) return ['Les devises des comptes doivent correspondre'];
+    // reuse withdrawal validations on source account
+    if (selectedAccount.status !== 'ACTIVE') errors.push('Le compte source doit être actif');
+    if (selectedRecipientAccount.status !== 'ACTIVE') errors.push('Le compte destinataire doit être actif');
+    if (amount < selectedAccount.accountLimits.minWithdrawalAmount) {
+      errors.push(`Montant minimum de transfert: ${selectedAccount.accountLimits.minWithdrawalAmount} ${selectedAccount.currency}`);
+    }
+    if (amount > selectedAccount.accountLimits.maxWithdrawalAmount) {
+      errors.push(`Montant maximum de transfert: ${selectedAccount.accountLimits.maxWithdrawalAmount} ${selectedAccount.currency}`);
+    }
+    const balanceAfter = selectedAccount.balance - amount;
+    if (balanceAfter < selectedAccount.minimumBalance) errors.push(`Solde minimum requis: ${selectedAccount.minimumBalance} ${selectedAccount.currency}`);
+    if (amount > selectedAccount.availableBalance) errors.push('Fonds insuffisants sur le compte source');
+    return errors;
+  };
+
   // Calcul du nouveau solde après transaction
   const calculateNewBalance = (amount: number, type: TransactionType): number => {
     if (!selectedAccount) return 0;
@@ -231,6 +334,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   const handleFormSubmit = (data: TransactionFormData) => {
     if (watchedType === TransactionType.WITHDRAWAL) {
       const validationErrors = validateWithdrawal(data.amount);
+      if (validationErrors.length > 0) {
+        alert('Erreurs de validation:\n' + validationErrors.join('\n'));
+        return;
+      }
+    }
+
+    if (watchedType === TransactionType.TRANSFER) {
+      const validationErrors = validateTransfer(data.amount);
       if (validationErrors.length > 0) {
         alert('Erreurs de validation:\n' + validationErrors.join('\n'));
         return;
@@ -285,20 +396,26 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="font-medium text-gray-900 mb-2">Détails de la transaction</h4>
                 <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Type:</span>
+                      <span className={`font-medium ${
+                        transactionPreview.type === TransactionType.DEPOSIT 
+                          ? 'text-green-600' 
+                          : transactionPreview.type === TransactionType.WITHDRAWAL ? 'text-red-600' : 'text-blue-600'
+                      }`}>
+                        {transactionPreview.type === TransactionType.DEPOSIT ? 'Dépôt' : transactionPreview.type === TransactionType.WITHDRAWAL ? 'Retrait' : 'Transfert'}
+                      </span>
+                    </div>
                   <div className="flex justify-between">
-                    <span>Type:</span>
-                    <span className={`font-medium ${
-                      transactionPreview.type === TransactionType.DEPOSIT 
-                        ? 'text-green-600' 
-                        : 'text-red-600'
-                    }`}>
-                      {transactionPreview.type === TransactionType.DEPOSIT ? 'Dépôt' : 'Retrait'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Compte:</span>
+                    <span>Compte source:</span>
                     <span className="font-medium">{selectedAccount.accountNumber}</span>
                   </div>
+                  {transactionPreview.type === TransactionType.TRANSFER && selectedRecipientAccount && (
+                    <div className="flex justify-between">
+                      <span>Compte destinataire:</span>
+                      <span className="font-medium">{selectedRecipientAccount.accountNumber}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span>Client:</span>
                     <span className="font-medium">{selectedAccount.customer?.fullName}</span>
@@ -312,9 +429,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     <span>{formatCurrency(selectedAccount.balance, selectedAccount.currency)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Nouveau solde:</span>
+                    <span>Nouveau solde (source):</span>
                     <span className="font-medium">{formatCurrency(newBalance, selectedAccount.currency)}</span>
                   </div>
+                  {transactionPreview.type === TransactionType.TRANSFER && selectedRecipientAccount && (
+                    <div className="flex justify-between">
+                      <span>Nouveau solde (destinataire):</span>
+                      <span className="font-medium">{formatCurrency(selectedRecipientAccount.balance + transactionPreview.amount, selectedRecipientAccount.currency)}</span>
+                    </div>
+                  )}
                   {transactionPreview.description && (
                     <div className="flex justify-between">
                       <span>Description:</span>
@@ -333,6 +456,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     <>
                       <li>✓ Solde minimum maintenu</li>
                       <li>✓ Fonds disponibles suffisants</li>
+                    </>
+                  )}
+                  {transactionPreview.type === TransactionType.TRANSFER && (
+                    <>
+                      <li>✓ Vérifié que le compte destinataire existe et est actif</li>
+                      <li>✓ Devise des deux comptes correspondante</li>
                     </>
                   )}
                   <li>✓ Client vérifié ({transactionPreview.verificationMethod})</li>
@@ -369,7 +498,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-lg">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          {watchedType === TransactionType.DEPOSIT ? 'Effectuer un Dépôt' : 'Effectuer un Retrait'}
+          {watchedType === TransactionType.DEPOSIT ? 'Effectuer un Dépôt' : watchedType === TransactionType.WITHDRAWAL ? 'Effectuer un Retrait' : 'Effectuer un Transfert'}
         </h2>
         <p className="text-gray-600">
           {watchedType === TransactionType.DEPOSIT 
@@ -409,6 +538,16 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                     className="mr-2"
                   />
                   <span className="text-red-600 font-medium">Retrait</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    value={TransactionType.TRANSFER}
+                    checked={field.value === TransactionType.TRANSFER}
+                    onChange={() => field.onChange(TransactionType.TRANSFER)}
+                    className="mr-2"
+                  />
+                  <span className="text-blue-600 font-medium">Transfert</span>
                 </label>
               </div>
             )}
@@ -476,6 +615,58 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
                 <p className="font-medium">{selectedAccount.branchName}</p>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Destination (pour transfert) */}
+        {watchedType === TransactionType.TRANSFER && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Compte destinataire *
+            </label>
+            <Controller
+              name="recipientAccountNumber"
+              control={control}
+              render={({ field }) => (
+                <input
+                  {...field}
+                  type="text"
+                  maxLength={12}
+                  disabled={!!account}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                    errors.recipientAccountNumber ? 'border-red-500' : 'border-gray-300'
+                  } ${account ? 'bg-gray-100' : ''}`}
+                  placeholder="G01234567891"
+                />
+              )}
+            />
+            {errors.recipientAccountNumber && (
+              <p className="mt-1 text-sm text-red-600">{errors.recipientAccountNumber.message}</p>
+            )}
+
+            {selectedRecipientAccount && (
+              <div className="bg-blue-50 p-4 rounded-lg mt-3">
+                <h4 className="font-medium text-blue-900 mb-2">Informations destinataire</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Titulaire:</span>
+                    <p className="font-medium">{selectedRecipientAccount.customer?.fullName}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Devise:</span>
+                    <p className="font-medium">{selectedRecipientAccount.currency}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Solde actuel:</span>
+                    <p className="font-medium">{formatCurrency(selectedRecipientAccount.balance, selectedRecipientAccount.currency)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Solde disponible:</span>
+                    <p className="font-medium">{formatCurrency(selectedRecipientAccount.availableBalance, selectedRecipientAccount.currency)}</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -677,14 +868,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           
           <button
             type="submit"
-            disabled={!isValid || !selectedAccount || (watchedType === TransactionType.WITHDRAWAL && validateWithdrawal(watchedAmount).length > 0)}
+            disabled={!isValid || !selectedAccount || (watchedType === TransactionType.WITHDRAWAL && validateWithdrawal(watchedAmount).length > 0) || (watchedType === TransactionType.TRANSFER && validateTransfer(watchedAmount).length > 0) || (watchedType === TransactionType.TRANSFER && !selectedRecipientAccount)}
             className={`px-6 py-2 text-white rounded-lg focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
               watchedType === TransactionType.DEPOSIT
                 ? 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
                 : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
             }`}
           >
-            {watchedType === TransactionType.DEPOSIT ? 'Effectuer le Dépôt' : 'Effectuer le Retrait'}
+            {watchedType === TransactionType.DEPOSIT ? 'Effectuer le Dépôt' : watchedType === TransactionType.WITHDRAWAL ? 'Effectuer le Retrait' : 'Effectuer le Transfert'}
           </button>
         </div>
       </form>

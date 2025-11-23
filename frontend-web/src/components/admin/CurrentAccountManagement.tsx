@@ -1772,10 +1772,11 @@ const TransactionsTabCurrent: React.FC = () => {
   const accountInputRef = useRef<HTMLInputElement | null>(null);
   const [showNewTxModal, setShowNewTxModal] = useState(false);
   const newTxAccountRef = useRef<HTMLInputElement | null>(null);
-  type NewTxType = 'DEPOSIT' | 'WITHDRAWAL';
+  type NewTxType = 'DEPOSIT' | 'WITHDRAWAL' | 'TRANSFER';
   type NewTxCurrency = 'HTG' | 'USD';
   const [newTx, setNewTx] = useState<{ 
     accountNumber: string;
+    destinationAccountNumber?: string;
     type: NewTxType;
     currency: NewTxCurrency;
     amount: string;
@@ -1785,6 +1786,7 @@ const TransactionsTabCurrent: React.FC = () => {
     notes?: string;
   }>({
     accountNumber: '',
+    destinationAccountNumber: '',
     type: 'DEPOSIT',
     currency: 'HTG',
     amount: '',
@@ -1797,6 +1799,11 @@ const TransactionsTabCurrent: React.FC = () => {
   const [newTxLookupLoading, setNewTxLookupLoading] = useState<boolean>(false);
   const newTxLookupTimer = useRef<any>(null);
   const [newTxAccountInfo, setNewTxAccountInfo] = useState<{ name?: string; currency?: NewTxCurrency; balance?: number; status?: string } | null>(null);
+  // Destination/destination account lookup state for transfers
+  const [newTxDestinationClientName, setNewTxDestinationClientName] = useState<string>('');
+  const [newTxDestinationLookupLoading, setNewTxDestinationLookupLoading] = useState<boolean>(false);
+  const newTxDestinationLookupTimer = useRef<any>(null);
+  const [newTxDestinationInfo, setNewTxDestinationInfo] = useState<{ name?: string; currency?: NewTxCurrency; balance?: number; status?: string } | null>(null);
   const [newTxSubmitting, setNewTxSubmitting] = useState<boolean>(false);
   const [accountLiveInfo, setAccountLiveInfo] = useState<{ balance: number; availableBalance: number; currency: 'HTG' | 'USD'; status?: string } | null>(null);
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
@@ -1987,6 +1994,42 @@ const TransactionsTabCurrent: React.FC = () => {
     }, 350);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newTx.accountNumber]);
+
+  // Destination lookup for transfers
+  useEffect(() => {
+    const acc = (newTx.destinationAccountNumber || '').trim();
+    if (newTxDestinationLookupTimer.current) {
+      clearTimeout(newTxDestinationLookupTimer.current);
+      newTxDestinationLookupTimer.current = null;
+    }
+    if (!acc || acc.length < 3) {
+      setNewTxDestinationClientName('');
+      setNewTxDestinationLookupLoading(false);
+      setNewTxDestinationInfo(null);
+      return;
+    }
+    newTxDestinationLookupTimer.current = setTimeout(async () => {
+      try {
+        setNewTxDestinationLookupLoading(true);
+        const list = await apiService.getClientAccounts({ accountType: AccountType.CURRENT, accountNumber: acc } as any);
+        const first = (list || [])[0];
+        const name = first?.customerName || '';
+        setNewTxDestinationClientName(name);
+        setNewTxDestinationInfo(first ? {
+          name,
+          currency: (first.currency as NewTxCurrency) || 'HTG',
+          balance: typeof first.balance === 'number' ? first.balance : Number(first.balance || 0),
+          status: first.status || ''
+        } : null);
+      } catch (e) {
+        setNewTxDestinationClientName('');
+        setNewTxDestinationInfo(null);
+      } finally {
+        setNewTxDestinationLookupLoading(false);
+      }
+    }, 350);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newTx.destinationAccountNumber]);
 
   // Auto-load transactions for a set of current accounts when no account is provided
   useEffect(() => {
@@ -2526,17 +2569,46 @@ const TransactionsTabCurrent: React.FC = () => {
     if (!newTx.amount || isNaN(amt) || amt <= 0) { toast.error('Montant invalide'); return; }
     try {
       setNewTxSubmitting(true);
-      // Call backend to process current account transaction
-      await apiService.processCurrentAccountTransaction({
-        accountNumber: newTx.accountNumber.trim(),
-        type: newTx.type,
-        currency: newTx.currency,
-        amount: Number(newTx.amount),
-        description: newTx.description?.trim() || undefined,
-        clientPresent: newTx.clientPresent,
-        verificationMethod: newTx.verificationMethod || undefined,
-        notes: newTx.notes?.trim() || undefined,
-      });
+      // If transfer, call the transfer endpoint
+      if (newTx.type === 'TRANSFER') {
+        if (!newTx.destinationAccountNumber?.trim()) {
+          toast.error('Numéro de compte destinataire requis pour un transfert');
+          return;
+        }
+        if (newTx.accountNumber?.trim() === newTx.destinationAccountNumber?.trim()) {
+          toast.error('Le compte source et le compte destinataire doivent être différents');
+          return;
+        }
+
+        // If both lookups completed we can enforce same currency at UI level
+        if (newTxAccountInfo?.currency && newTxDestinationInfo?.currency && newTxAccountInfo.currency !== newTxDestinationInfo.currency) {
+          toast.error('Les comptes source et destinataire doivent être dans la même devise');
+          return;
+        }
+
+        await apiService.processCurrentAccountTransfer({
+          sourceAccountNumber: newTx.accountNumber.trim(),
+          destinationAccountNumber: newTx.destinationAccountNumber?.trim(),
+          amount: Number(newTx.amount),
+          currency: newTx.currency === 'HTG' ? 0 : 1,
+          description: newTx.description?.trim() || undefined,
+          customerPresent: newTx.clientPresent,
+          verificationMethod: newTx.verificationMethod || undefined,
+          notes: newTx.notes?.trim() || undefined,
+        });
+      } else {
+        // Call backend to process current account transaction
+        await apiService.processCurrentAccountTransaction({
+          accountNumber: newTx.accountNumber.trim(),
+          type: newTx.type,
+          currency: newTx.currency,
+          amount: Number(newTx.amount),
+          description: newTx.description?.trim() || undefined,
+          clientPresent: newTx.clientPresent,
+          verificationMethod: newTx.verificationMethod || undefined,
+          notes: newTx.notes?.trim() || undefined,
+        });
+      }
       toast.success('Transaction traitée avec succès');
       setShowNewTxModal(false);
       setAccountNumber(newTx.accountNumber);
@@ -3031,6 +3103,37 @@ const TransactionsTabCurrent: React.FC = () => {
                     )}
                   </div>
                 </div>
+                {newTx.type === 'TRANSFER' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Compte destinataire</label>
+                    <input
+                      type="text"
+                      value={newTx.destinationAccountNumber}
+                      onChange={(e) => setNewTx({ ...newTx, destinationAccountNumber: e.target.value })}
+                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="CC-002345"
+                    />
+                    <div className="mt-1 text-xs text-gray-600 min-h-[1.25rem]">
+                      {newTxDestinationLookupLoading ? 'Recherche du compte…' : (
+                        newTxDestinationInfo ? (
+                          <span>
+                            Client: <span className="font-medium text-gray-800">{newTxDestinationInfo.name}</span>
+                            {typeof newTxDestinationInfo.balance === 'number' && newTxDestinationInfo.currency ? (
+                              <>
+                                {' '}• Solde: <span className="font-medium text-gray-800">{formatMoney(newTxDestinationInfo.balance, newTxDestinationInfo.currency)}</span>
+                              </>
+                            ) : null}
+                            {newTxDestinationInfo.status ? (
+                              <>
+                                {' '}• Statut: <span className="uppercase">{newTxDestinationInfo.status}</span>
+                              </>
+                            ) : null}
+                          </span>
+                        ) : (newTxDestinationClientName ? `Client: ${newTxDestinationClientName}` : '')
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Type</label>
                   <select
@@ -3040,6 +3143,7 @@ const TransactionsTabCurrent: React.FC = () => {
                   >
                     <option value="DEPOSIT">Dépôt</option>
                     <option value="WITHDRAWAL">Retrait</option>
+                    <option value="TRANSFER">Transfert</option>
                   </select>
                 </div>
                 <div>

@@ -8,6 +8,7 @@ namespace NalaCreditAPI.Services.Savings
     public interface ISavingsTransactionService
     {
         Task<SavingsTransactionResponseDto> ProcessTransactionAsync(SavingsTransactionCreateDto dto, string userId);
+        Task<SavingsTransferResponseDto> ProcessTransferAsync(SavingsTransferCreateDto dto, string userId);
         Task<SavingsTransactionResponseDto?> GetTransactionAsync(string transactionId);
         Task<SavingsTransactionListResponseDto> GetTransactionsAsync(SavingsTransactionFilterDto filter);
         Task<SavingsTransactionListResponseDto> GetAccountTransactionsAsync(string accountId, SavingsTransactionFilterDto filter);
@@ -94,6 +95,155 @@ namespace NalaCreditAPI.Services.Savings
 
                 return await GetTransactionAsync(savingsTransaction.Id)
                     ?? throw new InvalidOperationException("Impossible de récupérer la transaction créée");
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        public async Task<SavingsTransferResponseDto> ProcessTransferAsync(SavingsTransferCreateDto dto, string userId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                // 1. Find both accounts
+                var source = await _context.SavingsAccounts.FirstOrDefaultAsync(a => a.AccountNumber == dto.SourceAccountNumber)
+                    ?? throw new ArgumentException("Numéro de compte source invalide");
+
+                var destination = await _context.SavingsAccounts.FirstOrDefaultAsync(a => a.AccountNumber == dto.DestinationAccountNumber)
+                    ?? throw new ArgumentException("Numéro de compte destinataire invalide");
+
+                if (source.Id == destination.Id)
+                    throw new ArgumentException("Le compte source et le compte destinataire ne peuvent pas être identiques");
+
+                if (source.Status != SavingsAccountStatus.Active)
+                    throw new InvalidOperationException("Le compte source n'est pas actif");
+
+                if (destination.Status != SavingsAccountStatus.Active)
+                    throw new InvalidOperationException("Le compte destinataire n'est pas actif");
+
+                if (source.Currency != destination.Currency)
+                    throw new InvalidOperationException("Les devises des comptes doivent correspondre pour un transfert");
+
+                var today = DateTime.UtcNow.Date;
+
+                // Reuse existing validation helpers
+                var withdrawDto = new SavingsTransactionCreateDto
+                {
+                    AccountNumber = dto.SourceAccountNumber,
+                    Type = SavingsTransactionType.Withdrawal,
+                    Amount = dto.Amount,
+                    CustomerPresent = dto.CustomerPresent,
+                    VerificationMethod = dto.VerificationMethod,
+                    Description = dto.Description,
+                    CustomerSignature = dto.CustomerSignature,
+                    Notes = dto.Notes
+                };
+
+                var depositDto = new SavingsTransactionCreateDto
+                {
+                    AccountNumber = dto.DestinationAccountNumber,
+                    Type = SavingsTransactionType.Deposit,
+                    Amount = dto.Amount,
+                    CustomerPresent = dto.CustomerPresent,
+                    VerificationMethod = dto.VerificationMethod,
+                    Description = dto.Description,
+                    CustomerSignature = dto.CustomerSignature,
+                    Notes = dto.Notes
+                };
+
+                await ValidateWithdrawalAsync(source, withdrawDto, today);
+                await ValidateDepositAsync(destination, depositDto, today);
+
+                // Prepare transaction records (create IDs so we can cross-link)
+                var sourceTxId = Guid.NewGuid().ToString();
+                var destTxId = Guid.NewGuid().ToString();
+
+                var sourceFees = CalculateFees(SavingsTransactionType.Withdrawal, dto.Amount, source.Currency);
+
+                var sourceTransaction = new SavingsTransaction
+                {
+                    Id = sourceTxId,
+                    AccountId = source.Id,
+                    AccountNumber = source.AccountNumber,
+                    Type = SavingsTransactionType.Withdrawal,
+                    Amount = dto.Amount,
+                    Currency = source.Currency,
+                    BalanceBefore = source.Balance,
+                    Description = dto.Description ?? GetDefaultDescription(SavingsTransactionType.Withdrawal),
+                    Reference = await GenerateReferenceAsync(SavingsTransactionType.Withdrawal, source.AccountNumber),
+                    ProcessedBy = userId,
+                    BranchId = source.BranchId,
+                    Status = SavingsTransactionStatus.Processing,
+                    ProcessedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow,
+                    CustomerSignature = dto.CustomerSignature,
+                    ReceiptNumber = await GenerateReceiptNumberAsync(),
+                    VerificationMethod = dto.VerificationMethod,
+                    Notes = dto.Notes,
+                    Fees = sourceFees
+                };
+
+                var destTransaction = new SavingsTransaction
+                {
+                    Id = destTxId,
+                    AccountId = destination.Id,
+                    AccountNumber = destination.AccountNumber,
+                    Type = SavingsTransactionType.Deposit,
+                    Amount = dto.Amount,
+                    Currency = destination.Currency,
+                    BalanceBefore = destination.Balance,
+                    Description = dto.Description ?? GetDefaultDescription(SavingsTransactionType.Deposit),
+                    Reference = await GenerateReferenceAsync(SavingsTransactionType.Deposit, destination.AccountNumber),
+                    ProcessedBy = userId,
+                    BranchId = destination.BranchId,
+                    Status = SavingsTransactionStatus.Processing,
+                    ProcessedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow,
+                    CustomerSignature = dto.CustomerSignature,
+                    ReceiptNumber = await GenerateReceiptNumberAsync(),
+                    VerificationMethod = dto.VerificationMethod,
+                    Notes = dto.Notes,
+                    Fees = 0m
+                };
+
+                // Update balances atomically
+                var sourceBalanceChange = -(dto.Amount + sourceFees);
+                source.Balance += sourceBalanceChange;
+                source.AvailableBalance = source.Balance - source.BlockedBalance;
+                source.LastTransactionDate = DateTime.UtcNow;
+                source.UpdatedAt = DateTime.UtcNow;
+
+                destTransaction.BalanceAfter = destination.Balance + dto.Amount;
+                destination.Balance += dto.Amount;
+                destination.AvailableBalance = destination.Balance - destination.BlockedBalance;
+                destination.LastTransactionDate = DateTime.UtcNow;
+                destination.UpdatedAt = DateTime.UtcNow;
+
+                sourceTransaction.BalanceAfter = source.Balance;
+
+                // assign cross referencing ids
+                sourceTransaction.RelatedTransactionId = destTxId;
+                destTransaction.RelatedTransactionId = sourceTxId;
+
+                sourceTransaction.Status = SavingsTransactionStatus.Completed;
+                destTransaction.Status = SavingsTransactionStatus.Completed;
+
+                // Save both
+                _context.SavingsTransactions.Add(sourceTransaction);
+                _context.SavingsTransactions.Add(destTransaction);
+                await _context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                return new SavingsTransferResponseDto
+                {
+                    SourceTransaction = await GetTransactionAsync(sourceTxId),
+                    DestinationTransaction = await GetTransactionAsync(destTxId)
+                };
             }
             catch
             {

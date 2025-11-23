@@ -63,6 +63,7 @@ const SavingsTransactionManagement: React.FC = () => {
   const [processForm, setProcessForm] = useState({
     accountNumber: '',
     type: 0,
+    destinationAccountNumber: '',
     amount: 0,
     currency: 0,
     description: '',
@@ -75,6 +76,9 @@ const SavingsTransactionManagement: React.FC = () => {
   const [resolvedAccount, setResolvedAccount] = useState<any | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const [resolvedDestAccount, setResolvedDestAccount] = useState<any | null>(null);
+  const [destLookupLoading, setDestLookupLoading] = useState(false);
+  const [destLookupError, setDestLookupError] = useState<string | null>(null);
 
   // Map various currency representations to form code (0=HTG, 1=USD)
   const currencyCodeFrom = (c: any): number => {
@@ -119,6 +123,34 @@ const SavingsTransactionManagement: React.FC = () => {
     const t = setTimeout(doLookup, 250);
     return () => { cancelled = true; clearTimeout(t); };
   }, [processForm.accountNumber]);
+
+  useEffect(() => {
+    const acct = (processForm.destinationAccountNumber || '').trim();
+    if (!acct || acct.length !== 12) {
+      setResolvedDestAccount(null);
+      setDestLookupError(null);
+      setDestLookupLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const doLookup = async () => {
+      try {
+        setDestLookupLoading(true);
+        setDestLookupError(null);
+        const data = await apiService.getSavingsAccountByNumber(acct);
+        if (cancelled) return;
+        setResolvedDestAccount(data);
+      } catch (err: any) {
+        if (cancelled) return;
+        setResolvedDestAccount(null);
+        setDestLookupError('Compte destinataire introuvable');
+      } finally {
+        if (!cancelled) setDestLookupLoading(false);
+      }
+    };
+    const t = setTimeout(doLookup, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [processForm.destinationAccountNumber]);
 
   useEffect(() => {
     loadTransactions();
@@ -266,6 +298,8 @@ const SavingsTransactionManagement: React.FC = () => {
       return;
     }
 
+    // Transfers are now handled by the dedicated transfer endpoint (/SavingsTransaction/transfer)
+
     if (!verificationMethod) {
       toast.error('Veuillez sélectionner une méthode de vérification');
       return;
@@ -333,6 +367,42 @@ const SavingsTransactionManagement: React.FC = () => {
         }
       }
 
+      // Transfer checks
+      if (type === 4) {
+        const destNum = (processForm.destinationAccountNumber || '').trim();
+        if (!destNum || destNum.length !== 12) {
+          toast.error('Numéro du compte destinataire invalide');
+          return;
+        }
+
+        // fetch destination account
+        let destAcct: any = resolvedDestAccount;
+        try {
+          if (!destAcct) destAcct = await apiService.getSavingsAccountByNumber(destNum);
+        } catch (err) {
+          destAcct = null;
+        }
+
+        if (!destAcct) {
+          toast.error('Compte destinataire introuvable');
+          return;
+        }
+
+        if ((destAcct?.currency || destAcct?.Currency) !== (acct?.currency || acct?.Currency)) {
+          toast.error('Les devises des comptes source et destinataire doivent correspondre');
+          return;
+        }
+
+        if ((acct?.availableBalance ?? acct?.balance ?? 0) - amount < (acct?.minimumBalance ?? 0)) {
+          toast.error('Fonds insuffisants sur le compte source pour effectuer le transfert');
+          return;
+        }
+
+        // add destination and source keys (backend will accept case-insensitive JSON)
+        payload.sourceAccountNumber = accountNumber;
+        payload.destinationAccountNumber = destNum;
+      }
+
       // Withdrawal checks
       if (type === 1) {
         // available balance and minimum balance enforcement
@@ -389,12 +459,28 @@ const SavingsTransactionManagement: React.FC = () => {
 
     try {
       setSubmitting(true);
-      await apiService.processSavingsTransaction(payload);
-      toast.success('Transaction traitée avec succès');
+      if (type === 4) {
+        // Transfer flow - call new backend endpoint that processes both withdrawal + deposit atomically
+        await apiService.processSavingsTransfer({
+          sourceAccountNumber: payload.sourceAccountNumber || accountNumber,
+          destinationAccountNumber: payload.destinationAccountNumber,
+          amount: payload.amount,
+          description: payload.description,
+          customerPresent: payload.customerPresent,
+          customerSignature: payload.customerSignature,
+          verificationMethod: payload.verificationMethod,
+          notes: payload.notes
+        });
+        toast.success('Transfert traité avec succès');
+      } else {
+        await apiService.processSavingsTransaction(payload);
+        toast.success('Transaction traitée avec succès');
+      }
       setShowProcessModal(false);
       setProcessForm({ 
         accountNumber: '', 
         type: 0, 
+        destinationAccountNumber: '',
         amount: 0, 
         currency: 0, 
         description: '',
@@ -481,6 +567,7 @@ const SavingsTransactionManagement: React.FC = () => {
     if (s === '0') return 'Deposit';
     if (s === '1') return 'Withdrawal';
     if (s === '2') return 'Interest';
+    if (s === '4') return 'Transfer';
     if (s === '3') return 'OpeningDeposit';
     const norm = s.replace(/\s+/g, '').toLowerCase();
     if (norm === 'deposit') return 'Deposit';
@@ -552,6 +639,7 @@ const SavingsTransactionManagement: React.FC = () => {
     if (type === 'Deposit' || type === 'OpeningDeposit') return 'bg-green-100 text-green-800';
     if (type === 'Withdrawal') return 'bg-red-100 text-red-800';
     if (type === 'Interest') return 'bg-purple-100 text-purple-800';
+    if (type === 'Transfer') return 'bg-blue-100 text-blue-800';
     return 'bg-gray-100 text-gray-800';
   };
 
@@ -559,6 +647,7 @@ const SavingsTransactionManagement: React.FC = () => {
     if (type === 'Deposit' || type === 'OpeningDeposit') return <ArrowUpRight className="h-4 w-4" />;
     if (type === 'Withdrawal') return <ArrowDownLeft className="h-4 w-4" />;
     if (type === 'Interest') return <TrendingUp className="h-4 w-4" />;
+    if (type === 'Transfer') return <TrendingUp className="h-4 w-4" />;
     return <DollarSign className="h-4 w-4" />;
   };
 
@@ -801,6 +890,7 @@ const SavingsTransactionManagement: React.FC = () => {
               <option value="0">Dépôt</option>
               <option value="1">Retrait</option>
               <option value="2">Intérêt</option>
+              <option value="4">Transfert</option>
             </select>
 
             <input type="date" value={filters.dateFrom || ''} onChange={(e) => setFilters({...filters, dateFrom: e.target.value})} className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
@@ -1053,6 +1143,7 @@ const SavingsTransactionManagement: React.FC = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:opacity-50" required>
                   <option value={0}>Dépôt</option>
                   <option value={1}>Retrait</option>
+                  <option value={4}>Transfert</option>
                 </select>
               </div>
 
@@ -1073,6 +1164,34 @@ const SavingsTransactionManagement: React.FC = () => {
                   inputMode="decimal"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:opacity-50" placeholder="0.00" required />
               </div>
+
+                {/* Destination account for transfers */}
+                {processForm.type === 4 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Compte destinataire</label>
+                    <input type="text" value={processForm.destinationAccountNumber} onChange={(e) => setProcessForm({...processForm, destinationAccountNumber: e.target.value})}
+                      disabled={submitting}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:opacity-50" placeholder="Ex: G01234567891" required />
+                    <div className="mt-1 min-h-[20px]">
+                      {destLookupLoading && (
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          Recherche du compte destinataire...
+                        </div>
+                      )}
+                      {!destLookupLoading && resolvedDestAccount && (
+                        <div className="flex items-center gap-2 text-xs text-blue-700">
+                          <User className="h-3.5 w-3.5" />
+                          <span className="font-medium">Titulaire destinataire:</span>
+                          <span>{String(resolvedDestAccount.customerName || resolvedDestAccount.accountHolder || resolvedDestAccount.ownerName || '—')}</span>
+                        </div>
+                      )}
+                      {!destLookupLoading && !resolvedDestAccount && destLookupError && (
+                        <div className="text-xs text-red-600">{destLookupError}</div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description (optionnel)</label>

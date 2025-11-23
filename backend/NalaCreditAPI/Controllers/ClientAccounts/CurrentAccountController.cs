@@ -192,6 +192,31 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         }
 
         /// <summary>
+        /// Traiter un transfert entre deux comptes courants (source -> destination)
+        /// </summary>
+        [HttpPost("{accountNumber}/transfer")]
+        public async Task<ActionResult<CurrentAccountTransferResponseDto>> ProcessTransfer(string accountNumber, [FromBody] CurrentAccountTransferRequestDto dto)
+        {
+            try
+            {
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                    ?? throw new UnauthorizedAccessException("Utilisateur non identifié");
+
+                dto.SourceAccountNumber = string.IsNullOrWhiteSpace(dto.SourceAccountNumber) ? accountNumber : dto.SourceAccountNumber;
+                var result = await _accountService.ProcessTransferAsync(dto, userId);
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Annuler une transaction sur un compte courant
         /// </summary>
         [HttpPost("transactions/{transactionId}/cancel")]
