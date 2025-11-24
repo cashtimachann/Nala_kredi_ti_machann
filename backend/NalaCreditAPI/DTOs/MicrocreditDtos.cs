@@ -746,11 +746,14 @@ namespace NalaCreditAPI.DTOs
         public int TotalClients { get; set; }
         public int ActiveLoans { get; set; }
         public CurrencyAmountDto TotalOutstanding { get; set; } = new();
+        // Total amount disbursed to date by currency (sum of PrincipalAmount)
+        public CurrencyAmountDto TotalDisbursed { get; set; } = new();
         public decimal RepaymentRate { get; set; }
         public OverdueStatsDto OverdueLoans { get; set; } = new();
         public CurrencyAmountDto InterestRevenue { get; set; } = new();
         public int LoansCompletedThisMonth { get; set; }
         public int NewLoansThisMonth { get; set; }
+        public List<BranchPerformanceSummaryDto> BranchPerformance { get; set; } = new();
         public DateTime GeneratedAt { get; set; }
     }
 
@@ -766,6 +769,17 @@ namespace NalaCreditAPI.DTOs
         public CurrencyAmountDto Amount { get; set; } = new();
     }
 
+    public class BranchPerformanceSummaryDto
+    {
+        public int BranchId { get; set; }
+        public string BranchName { get; set; } = string.Empty;
+        public int TotalLoans { get; set; }
+        public CurrencyAmountDto TotalDisbursed { get; set; } = new();
+        public CurrencyAmountDto TotalOutstanding { get; set; } = new();
+        public decimal RepaymentRate { get; set; }
+        public decimal Par30 { get; set; }
+    }
+
     // DTOs pour les performances des agents
     public class AgentPerformanceDto
     {
@@ -773,8 +787,8 @@ namespace NalaCreditAPI.DTOs
         public string AgentName { get; set; } = string.Empty;
         public int TotalLoansManaged { get; set; }
         public int ActiveLoans { get; set; }
-        public decimal TotalDisbursed { get; set; }
-        public decimal TotalCollected { get; set; }
+    public CurrencyAmountDto TotalDisbursed { get; set; } = new();
+    public CurrencyAmountDto TotalCollected { get; set; } = new();
         public decimal OutstandingBalance { get; set; }
         public int OverdueLoans { get; set; }
         public decimal CollectionRate { get; set; }

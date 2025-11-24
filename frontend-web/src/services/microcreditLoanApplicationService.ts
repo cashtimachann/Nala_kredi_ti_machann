@@ -658,7 +658,7 @@ class MicrocreditLoanApplicationService {
   }
 
   // Nouvelles méthodes pour le dashboard
-  async getDashboardStats(filters?: { branch?: string; dateRange?: string }): Promise<any> {
+  async getDashboardStats(filters?: { branchId?: number; dateRange?: string }): Promise<any> {
     try {
       const response = await axios.get(
         `${API_BASE_URL}/MicrocreditLoan/dashboard/stats`,
@@ -677,11 +677,11 @@ class MicrocreditLoanApplicationService {
     }
   }
 
-  async getAgentPerformance(): Promise<any[]> {
+  async getAgentPerformance(branchId?: number, months: number = 6): Promise<any[]> {
     try {
       const response = await axios.get(
         `${API_BASE_URL}/MicrocreditLoanApplication/dashboard/agent-performance`,
-        { headers: this.getAuthHeaders() }
+        { headers: this.getAuthHeaders(), params: { branchId, months } }
       );
       return response.data;
     } catch (error: any) {
@@ -693,13 +693,13 @@ class MicrocreditLoanApplicationService {
     }
   }
 
-  async getPortfolioTrend(range: string): Promise<any[]> {
+  async getPortfolioTrend(range: string, branchId?: number): Promise<any[]> {
     try {
       const response = await axios.get(
         `${API_BASE_URL}/MicrocreditLoanApplication/dashboard/portfolio-trend`,
         {
           headers: this.getAuthHeaders(),
-          params: { range }
+          params: { range, branchId }
         }
       );
       return response.data;
@@ -854,13 +854,14 @@ class MicrocreditLoanApplicationService {
   }
 
   // Get overdue loans for reports
-  async getOverdueLoans(daysOverdue?: number): Promise<any[]> {
+  async getOverdueLoans(daysOverdue?: number, branchId?: number): Promise<any[]> {
     try {
-      const params: any = {};
+  const params: any = {};
       if (daysOverdue !== undefined) {
         params.daysOverdue = daysOverdue;
       }
 
+      if (branchId) params.branchId = branchId;
       const response = await axios.get(
         `${API_BASE_URL}/MicrocreditLoan/overdue`,
         {
@@ -892,13 +893,16 @@ class MicrocreditLoanApplicationService {
   }
 
   // Get all loans grouped by type for reports
-  async getLoansByType(): Promise<any> {
+  async getLoansByType(branchId?: number, status?: string): Promise<any> {
     try {
+  const params: any = { pageSize: 10000 };
+      if (branchId) params.branchId = branchId;
+  if (status) params.status = status;
       const response = await axios.get(
         `${API_BASE_URL}/MicrocreditLoan`,
         {
           headers: this.getAuthHeaders(),
-          params: { pageSize: 10000 } // Get all loans
+          params
         }
       );
 

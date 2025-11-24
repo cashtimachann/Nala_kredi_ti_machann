@@ -681,7 +681,7 @@ const CompleteSavingsAccountManagement: React.FC = () => {
                       </div>
                       {account.blockedBalance > 0 && (
                         <div className="text-xs text-red-600 font-medium">
-                          Blokè: {formatCurrency(account.blockedBalance, account.currency)}
+                          Bloquée: {formatCurrency(account.blockedBalance, account.currency)}
                         </div>
                       )}
                     </td>

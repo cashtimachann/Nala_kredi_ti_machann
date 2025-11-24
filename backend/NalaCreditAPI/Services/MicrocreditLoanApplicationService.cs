@@ -136,9 +136,14 @@ namespace NalaCreditAPI.Services
                 .Distinct()
                 .ToList();
             
-            var savingsAccountsLookup = await _context.SavingsAccounts
+            var savingsAccountsList = await _context.SavingsAccounts
                 .Where(sa => borrowerIds.Contains(sa.CustomerId))
-                .ToDictionaryAsync(sa => sa.CustomerId, sa => sa.AccountNumber);
+                .Select(sa => new { sa.CustomerId, sa.AccountNumber })
+                .ToListAsync();
+
+            var savingsAccountsLookup = savingsAccountsList
+                .GroupBy(sa => sa.CustomerId)
+                .ToDictionary(g => g.Key, g => g.First().AccountNumber);
 
             // Map applications to DTOs synchronously now that we have all data
             var applicationDtos = new List<MicrocreditLoanApplicationDto>();
@@ -995,9 +1000,14 @@ namespace NalaCreditAPI.Services
                 .Distinct()
                 .ToList();
             
-            var savingsAccountsLookup = await _context.SavingsAccounts
+            var savingsAccountsList = await _context.SavingsAccounts
                 .Where(sa => borrowerIds.Contains(sa.CustomerId))
-                .ToDictionaryAsync(sa => sa.CustomerId, sa => sa.AccountNumber);
+                .Select(sa => new { sa.CustomerId, sa.AccountNumber })
+                .ToListAsync();
+
+            var savingsAccountsLookup = savingsAccountsList
+                .GroupBy(sa => sa.CustomerId)
+                .ToDictionary(g => g.Key, g => g.First().AccountNumber);
 
             // Map loans to DTOs synchronously now that we have all data
             var loanDtos = new List<MicrocreditLoanDto>();
@@ -1901,11 +1911,67 @@ namespace NalaCreditAPI.Services
             var totalPaid = await query.SumAsync(l => l.AmountPaid);
             var repaymentRate = totalDue > 0 ? (totalPaid / totalDue) * 100 : 0;
 
+            // Total disbursed/decaisse by currency (sum of principal amounts)
+            var totalDisbursedHTG = await query
+                .Where(l => l.Currency == MicrocreditCurrency.HTG)
+                .SumAsync(l => l.PrincipalAmount);
+            var totalDisbursedUSD = await query
+                .Where(l => l.Currency == MicrocreditCurrency.USD)
+                .SumAsync(l => l.PrincipalAmount);
+
+            var branchGroups = await query
+                .GroupBy(l => new { l.BranchId, l.BranchName })
+                .Select(g => new
+                {
+                    BranchId = g.Key.BranchId,
+                    BranchName = g.Key.BranchName,
+                    TotalLoans = g.Count(l => l.Status == MicrocreditLoanStatus.Active || l.Status == MicrocreditLoanStatus.Overdue),
+                    TotalDisbursedHTG = g.Where(l => l.Currency == MicrocreditCurrency.HTG).Sum(l => l.PrincipalAmount),
+                    TotalDisbursedUSD = g.Where(l => l.Currency == MicrocreditCurrency.USD).Sum(l => l.PrincipalAmount),
+                    OutstandingHTG = g.Where(l => (l.Status == MicrocreditLoanStatus.Active || l.Status == MicrocreditLoanStatus.Overdue) && l.Currency == MicrocreditCurrency.HTG).Sum(l => l.OutstandingBalance),
+                    OutstandingUSD = g.Where(l => (l.Status == MicrocreditLoanStatus.Active || l.Status == MicrocreditLoanStatus.Overdue) && l.Currency == MicrocreditCurrency.USD).Sum(l => l.OutstandingBalance),
+                    TotalPaid = g.Sum(l => l.AmountPaid),
+                    TotalDue = g.Sum(l => l.TotalAmountDue),
+                    OutstandingPortfolio = g.Where(l => l.Status == MicrocreditLoanStatus.Active || l.Status == MicrocreditLoanStatus.Overdue).Sum(l => l.OutstandingBalance),
+                    OutstandingPar30 = g.Where(l => l.DaysOverdue >= 30 && (l.Status == MicrocreditLoanStatus.Active || l.Status == MicrocreditLoanStatus.Overdue)).Sum(l => l.OutstandingBalance)
+                })
+                .ToListAsync();
+
+            var branchPerformance = branchGroups
+                .Select(g =>
+                {
+                    decimal repaymentRate = 0;
+                    if (g.TotalDue > 0)
+                    {
+                        repaymentRate = Math.Round((g.TotalPaid / g.TotalDue) * 100, 2);
+                    }
+
+                    decimal par30Rate = 0;
+                    if (g.OutstandingPortfolio > 0)
+                    {
+                        par30Rate = Math.Round((g.OutstandingPar30 / g.OutstandingPortfolio) * 100, 2);
+                    }
+
+                    return new BranchPerformanceSummaryDto
+                    {
+                        BranchId = g.BranchId,
+                        BranchName = string.IsNullOrWhiteSpace(g.BranchName) ? $"Succursale #{g.BranchId}" : g.BranchName,
+                        TotalLoans = g.TotalLoans,
+                        TotalDisbursed = new CurrencyAmountDto { HTG = g.TotalDisbursedHTG, USD = g.TotalDisbursedUSD },
+                        TotalOutstanding = new CurrencyAmountDto { HTG = g.OutstandingHTG, USD = g.OutstandingUSD },
+                        RepaymentRate = repaymentRate,
+                        Par30 = par30Rate
+                    };
+                })
+                .OrderByDescending(b => b.TotalLoans)
+                .ToList();
+
             return new MicrocreditDashboardStatsDto
             {
                 TotalClients = activeClients,
                 ActiveLoans = activeLoans,
                 TotalOutstanding = new CurrencyAmountDto { HTG = outstandingHTG, USD = outstandingUSD },
+                TotalDisbursed = new CurrencyAmountDto { HTG = totalDisbursedHTG, USD = totalDisbursedUSD },
                 RepaymentRate = repaymentRate,
                 OverdueLoans = new OverdueStatsDto 
                 { 
@@ -1915,6 +1981,7 @@ namespace NalaCreditAPI.Services
                 InterestRevenue = new CurrencyAmountDto { HTG = interestHTG, USD = interestUSD },
                 LoansCompletedThisMonth = completedLoans,
                 NewLoansThisMonth = newLoans,
+                BranchPerformance = branchPerformance,
                 GeneratedAt = DateTime.Now
             };
         }
@@ -1936,10 +2003,12 @@ namespace NalaCreditAPI.Services
                     Name = g.Key.LoanOfficerName,
                     TotalLoans = g.Count(),
                     ActiveLoans = g.Count(l => l.Status == MicrocreditLoanStatus.Active),
-                    TotalDisbursed = g.Sum(l => l.PrincipalAmount),
+                    TotalDisbursedHTG = g.Where(l => l.Currency == MicrocreditCurrency.HTG).Sum(l => l.PrincipalAmount),
+                    TotalDisbursedUSD = g.Where(l => l.Currency == MicrocreditCurrency.USD).Sum(l => l.PrincipalAmount),
                     OutstandingBalance = g.Sum(l => l.OutstandingBalance),
                     OverdueLoans = g.Count(l => l.Status == MicrocreditLoanStatus.Active && l.DaysOverdue > 0),
-                    TotalPaid = g.Sum(l => l.AmountPaid),
+                    TotalPaidHTG = g.Where(l => l.Currency == MicrocreditCurrency.HTG).Sum(l => l.AmountPaid),
+                    TotalPaidUSD = g.Where(l => l.Currency == MicrocreditCurrency.USD).Sum(l => l.AmountPaid),
                     TotalDue = g.Sum(l => l.TotalAmountDue),
                     NewLoans = g.Count(l => l.CreatedAt >= startOfMonth)
                 })
@@ -1948,8 +2017,10 @@ namespace NalaCreditAPI.Services
             var result = new List<AgentPerformanceDto>();
             foreach (var agent in agents)
             {
-                var collectionRate = agent.TotalDue > 0 ? (agent.TotalPaid / agent.TotalDue) * 100 : 0;
-                var avgLoanSize = agent.TotalLoans > 0 ? agent.TotalDisbursed / agent.TotalLoans : 0;
+                var totalPaid = agent.TotalPaidHTG + agent.TotalPaidUSD;
+                var collectionRate = agent.TotalDue > 0 ? (totalPaid / agent.TotalDue) * 100 : 0;
+                var totalDisbursed = agent.TotalDisbursedHTG + agent.TotalDisbursedUSD;
+                var avgLoanSize = agent.TotalLoans > 0 ? totalDisbursed / agent.TotalLoans : 0;
                 
                 // Simple rating logic
                 string rating = "B";
@@ -1962,8 +2033,8 @@ namespace NalaCreditAPI.Services
                     AgentName = agent.Name,
                     TotalLoansManaged = agent.TotalLoans,
                     ActiveLoans = agent.ActiveLoans,
-                    TotalDisbursed = agent.TotalDisbursed,
-                    TotalCollected = agent.TotalPaid,
+                    TotalDisbursed = new CurrencyAmountDto { HTG = agent.TotalDisbursedHTG, USD = agent.TotalDisbursedUSD },
+                    TotalCollected = new CurrencyAmountDto { HTG = agent.TotalPaidHTG, USD = agent.TotalPaidUSD },
                     OutstandingBalance = agent.OutstandingBalance,
                     OverdueLoans = agent.OverdueLoans,
                     CollectionRate = collectionRate,
@@ -2466,6 +2537,16 @@ namespace NalaCreditAPI.Services
 
         private MicrocreditPaymentDto MapPaymentToDto(MicrocreditPayment payment)
         {
+            // Ensure we have branch info - prioritize payment's branch, fallback to loan's branch
+            var branchId = payment.BranchId;
+            var branchName = payment.BranchName;
+            
+            if (branchId == 0 || string.IsNullOrEmpty(branchName))
+            {
+                branchId = payment.Loan?.BranchId ?? 0;
+                branchName = payment.Loan?.BranchName ?? string.Empty;
+            }
+
             return new MicrocreditPaymentDto
             {
                 Id = payment.Id,
@@ -2483,8 +2564,8 @@ namespace NalaCreditAPI.Services
                 Notes = payment.Notes,
                 ProcessedBy = payment.ProcessedBy,
                 ProcessedByName = payment.ProcessedByName,
-                BranchId = payment.BranchId,
-                BranchName = payment.BranchName,
+                BranchId = branchId,
+                BranchName = branchName,
                 ReceiptNumber = payment.ReceiptNumber,
                 ReceiptPath = payment.ReceiptPath,
                 CreatedAt = payment.CreatedAt,

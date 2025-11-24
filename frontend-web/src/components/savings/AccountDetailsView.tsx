@@ -488,7 +488,7 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
                 </div>
                 {(account.blockedBalance ?? 0) > 0 && (
                   <div className="text-xs text-red-600 font-medium mt-0.5">
-                    Blokè: {formatCurrency(account.blockedBalance, displayCurrency(account.currency))}
+                    Bloquée: {formatCurrency(account.blockedBalance, displayCurrency(account.currency))}
                   </div>
                 )}
               </div>

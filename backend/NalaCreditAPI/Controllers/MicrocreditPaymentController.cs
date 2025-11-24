@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using NalaCreditAPI.Data;
 using NalaCreditAPI.DTOs;
+using NalaCreditAPI.Migrations;
 using NalaCreditAPI.Models;
 using NalaCreditAPI.Services;
 using System.ComponentModel.DataAnnotations;
@@ -15,15 +17,18 @@ namespace NalaCreditAPI.Controllers
     {
         private readonly IMicrocreditLoanApplicationService _loanApplicationService;
         private readonly IMicrocreditFinancialCalculatorService _calculatorService;
+        private readonly ApplicationDbContext _context;
         private readonly ILogger<MicrocreditPaymentController> _logger;
 
         public MicrocreditPaymentController(
             IMicrocreditLoanApplicationService loanApplicationService,
             IMicrocreditFinancialCalculatorService calculatorService,
+            ApplicationDbContext context,
             ILogger<MicrocreditPaymentController> logger)
         {
             _loanApplicationService = loanApplicationService;
             _calculatorService = calculatorService;
+            _context = context;
             _logger = logger;
         }
 
@@ -358,6 +363,36 @@ namespace NalaCreditAPI.Controllers
             {
                 _logger.LogError(ex, "Error processing early payoff for loan {LoanId}", dto.LoanId);
                 return StatusCode(500, "An error occurred while processing early payoff");
+            }
+        }
+
+        /// <summary>
+        /// Corriger les noms de succursale manquants dans les paiements (Admin uniquement)
+        /// </summary>
+        [HttpPost("fix-branch-names")]
+        [Authorize(Roles = "SuperAdmin,Admin")]
+        public async Task<ActionResult<object>> FixPaymentBranchNames()
+        {
+            try
+            {
+                _logger.LogInformation("Starting payment branch names fix...");
+                await PaymentBranchNameFixer.ExecuteAsync(_context);
+                
+                return Ok(new 
+                { 
+                    success = true, 
+                    message = "Les noms de succursale ont été corrigés avec succès"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fixing payment branch names");
+                return StatusCode(500, new 
+                { 
+                    success = false, 
+                    message = "Une erreur s'est produite lors de la correction des succursales",
+                    error = ex.Message 
+                });
             }
         }
     }

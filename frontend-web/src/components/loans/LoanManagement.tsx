@@ -1216,7 +1216,7 @@ const LoanManagement: React.FC = () => {
 
       const csvContent = [
         ['Date', 'Numéro Reçu', 'Référence', 'Méthode', 'Montant', 'Principal', 'Intérêt', 'Pénalités', 'Devise', 'Traité Par', 'Succursale', 'Statut'].join(','),
-        ...filteredPayments.map(payment => [
+  ...filteredPayments.map(payment => [
           new Date(payment.paymentDate).toLocaleDateString('fr-FR'),
           payment.receiptNumber,
           payment.reference || '',
@@ -1227,7 +1227,7 @@ const LoanManagement: React.FC = () => {
           payment.penaltyAmount.toFixed(2),
           payment.currency,
           `"${payment.processedByName}"`,
-          payment.branchName,
+          payment.branchName || branchesList.find((b: any) => b.id === payment.branchId)?.name || (payment.branchId ? String(payment.branchId) : 'Principal'),
           payment.status
         ].join(','))
       ].join('\n');
@@ -1248,6 +1248,16 @@ const LoanManagement: React.FC = () => {
   const loadPayments = async () => {
     try {
       setPaymentsLoading(true);
+      // Ensure branches are loaded for fallback mapping
+      if (!branchesList || branchesList.length === 0) {
+        try {
+          const fetchedBranches = await microcreditLoanApplicationService.getBranches();
+          setBranchesList(fetchedBranches || []);
+        } catch (err) {
+          console.error('Error preloading branches for payments fallback:', err);
+        }
+      }
+
       const response = await microcreditPaymentService.getPaymentHistory(
         paymentsPage,
         paymentsPageSize,
@@ -1257,7 +1267,15 @@ const LoanManagement: React.FC = () => {
         branchFilter !== 'ALL' ? parseInt(branchFilter) : undefined
       );
       
-      setPayments(response.payments);
+      // Ensure branchName is populated for each payment by falling back to the branch list
+      const normalizedPayments = (response.payments || []).map((p: any) => {
+        const fallbackBranch = branchesList.find((b: any) => b.id === p.branchId)?.name;
+        return {
+          ...p,
+          branchName: p.branchName || fallbackBranch || (p.branchId ? String(p.branchId) : 'Principal')
+        };
+      });
+      setPayments(normalizedPayments);
       setPaymentsTotalCount(response.totalCount);
       setPaymentsTotalPages(response.totalPages);
     } catch (error: any) {
@@ -1283,7 +1301,7 @@ const LoanManagement: React.FC = () => {
       // Load dashboard stats from the backend API and count of pending applications
       const [stats, pendingAppsPage, approvedAppsPage, activeLoansData] = await Promise.all([
         microcreditLoanApplicationService.getDashboardStats({
-          branch: selectedBranch !== 'all' ? selectedBranch : undefined,
+          branchId: selectedBranch !== 'all' ? parseInt(selectedBranch) : undefined,
           dateRange: timeRange
         }),
         microcreditLoanApplicationService.getApplicationsPage({
@@ -2916,7 +2934,7 @@ const LoanManagement: React.FC = () => {
                         Montant
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Principal
+                        Capital
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Intérêt
@@ -2974,10 +2992,9 @@ const LoanManagement: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">{payment.processedByName}</div>
-                          <div className="text-xs text-gray-500">{payment.processedBy}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {payment.branchName}
+                          {payment.branchName || branchesList.find((b: any) => b.id === payment.branchId)?.name || 'Principal'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${

@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Copy package files and install dependencies (cached layer)
 COPY package*.json ./
-RUN npm ci --omit=dev --silent
+RUN npm ci
 
 # Copy source code
 COPY . ./
