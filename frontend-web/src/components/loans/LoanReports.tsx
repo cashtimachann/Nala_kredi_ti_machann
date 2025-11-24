@@ -18,11 +18,18 @@ import {
   XCircle,
   Clock,
   Award,
-  Target
+  Target,
+  RefreshCw,
+  Info
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import microcreditLoanApplicationService from '../../services/microcreditLoanApplicationService';
+import microcreditPaymentService from '../../services/microcreditPaymentService';
 import apiService from '../../services/apiService';
+
+const EXCHANGE_RATE = 130; // Taux de change HTG/USD pour les calculs approximatifs
 
 interface LoanReportsProps {
   onClose?: () => void;
@@ -155,11 +162,8 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
 
       // Build filters object
       const filters: any = {};
-      
-      // Add branch filter
-      if (selectedBranch && selectedBranch !== 'ALL') {
-        filters.branch = selectedBranch;
-      }
+      const branchId = selectedBranch && selectedBranch !== 'ALL' ? parseInt(selectedBranch) : undefined;
+      if (branchId) filters.branchId = branchId;
       
       // Add date range filter
       if (dateRange === 'custom' && startDate && endDate) {
@@ -174,8 +178,51 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
         filters.currency = currency;
       }
 
-      // Load dashboard stats with filters
-      const stats = await microcreditLoanApplicationService.getDashboardStats(filters);
+      // Determine fromDate/toDate (YYYY-MM-DD) based on dateRange for payment stats
+      const toDate = new Date();
+      let fromDate = new Date();
+      switch (dateRange) {
+        case 'today':
+          fromDate = new Date();
+          break;
+        case 'week':
+          fromDate.setDate(toDate.getDate() - 7);
+          break;
+        case 'month':
+          fromDate.setMonth(toDate.getMonth() - 1);
+          break;
+        case 'quarter':
+          fromDate.setMonth(toDate.getMonth() - 3);
+          break;
+        case 'year':
+          fromDate.setFullYear(toDate.getFullYear() - 1);
+          break;
+        case 'custom':
+          if (startDate && endDate) {
+            fromDate = new Date(startDate);
+            // toDate = new Date(endDate);
+          } else {
+            fromDate.setMonth(toDate.getMonth() - 1);
+          }
+          break;
+        default:
+          fromDate.setMonth(toDate.getMonth() - 1);
+      }
+
+      const fromDateString = fromDate.toISOString().split('T')[0];
+      const toDateString = new Date().toISOString().split('T')[0];
+
+      // Load all data in parallel
+      const [stats, loansByType, agentPerformance, overdue, collectedStats] = await Promise.all([
+        microcreditLoanApplicationService.getDashboardStats(filters),
+        microcreditLoanApplicationService.getLoansByType(branchId, 'Active'),
+        microcreditLoanApplicationService.getAgentPerformance(branchId),
+        microcreditLoanApplicationService.getOverdueLoans(undefined, branchId),
+        microcreditPaymentService.getPaymentStatistics(fromDateString, toDateString, branchId).catch(err => {
+          console.warn('Unable to load payment statistics:', err);
+          return null;
+        })
+      ]);
       
       // Calculate portfolio metrics from stats
       const totalDisbursed = {
@@ -189,8 +236,8 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
       };
       
       const interestCollected = {
-        HTG: (stats.interestCollected?.HTG || stats.interestCollected?.htg || 0),
-        USD: (stats.interestCollected?.USD || stats.interestCollected?.usd || 0)
+        HTG: (stats.interestRevenue?.HTG || stats.interestRevenue?.htg || 0),
+        USD: (stats.interestRevenue?.USD || stats.interestRevenue?.usd || 0)
       };
       
       const overdueAmount = {
@@ -199,15 +246,18 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
       };
       
       // Calculate PAR (Portfolio at Risk)
-      const totalOutstandingSum = totalOutstanding.HTG + (totalOutstanding.USD * 130); // Rough conversion
-      const overdueSum = overdueAmount.HTG + (overdueAmount.USD * 130);
+      const totalOutstandingSum = totalOutstanding.HTG + (totalOutstanding.USD * EXCHANGE_RATE);
+      const overdueSum = overdueAmount.HTG + (overdueAmount.USD * EXCHANGE_RATE);
       const portfolioAtRisk = totalOutstandingSum > 0 ? (overdueSum / totalOutstandingSum) * 100 : 0;
       
       setPortfolioMetrics({
         totalLoans: stats.activeLoans || 0,
         totalDisbursed: totalDisbursed,
         totalOutstanding: totalOutstanding,
-        totalCollected: interestCollected,
+        totalCollected: collectedStats ? {
+          HTG: (collectedStats.totalPrincipalCollected || 0) + (collectedStats.totalInterestCollected || 0) + (collectedStats.totalPenaltiesCollected || 0),
+          USD: 0 // For now we only support HTG aggregation; collection by USD can be added later
+        } : interestCollected,
         averageInterestRate: 0, // Would need to calculate from individual loans
         averageLoanSize: {
           HTG: stats.activeLoans > 0 ? totalOutstanding.HTG / stats.activeLoans : 0,
@@ -221,8 +271,7 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
         defaultRate: stats.defaultRate || 0
       });
 
-      // Load loans grouped by type
-      const loansByType = await microcreditLoanApplicationService.getLoansByType();
+      // Process loans by type
       const typePerformance: LoanTypePerformance[] = Object.entries(loansByType).map(([type, loans]: [string, any]) => {
         const totalHTG = loans.filter((l: any) => l.currency === 'HTG').reduce((sum: number, l: any) => sum + (l.principalAmount || 0), 0);
         const totalUSD = loans.filter((l: any) => l.currency === 'USD').reduce((sum: number, l: any) => sum + (l.principalAmount || 0), 0);
@@ -239,52 +288,82 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
           averageInterestRate: loans.length > 0 ? loans.reduce((sum: number, l: any) => sum + (l.interestRate || 0), 0) / loans.length : 0
         };
       });
-      setLoanTypePerformance(typePerformance);
+  // Update frontend portfolio totalLoans to match the number of loans used to compute distributions
+  const totalLoansFromTypes = typePerformance.reduce((acc, t) => acc + (t.count || 0), 0);
+  setPortfolioMetrics(prev => ({ ...prev, totalLoans: totalLoansFromTypes || prev.totalLoans }));
+  // Sort types by descending count for better UX
+  typePerformance.sort((a, b) => (b.count || 0) - (a.count || 0));
+  setLoanTypePerformance(typePerformance);
 
-      // Load agent/loan officer performance
-      const agentPerformance = await microcreditLoanApplicationService.getAgentPerformance();
-      const officerPerformance: LoanOfficerPerformance[] = agentPerformance.map((agent: any) => ({
-        officer: agent.agentName || agent.name || 'N/A',
-        totalLoans: agent.totalLoans || 0,
-        activeLoans: agent.activeLoans || 0,
-        disbursed: {
-          HTG: agent.totalDisbursed?.HTG || 0,
-          USD: agent.totalDisbursed?.USD || 0
-        },
-        collected: {
-          HTG: agent.totalCollected?.HTG || 0,
-          USD: agent.totalCollected?.USD || 0
-        },
-        repaymentRate: agent.repaymentRate || 0,
-        overdueLoans: agent.overdueLoans || 0
-      }));
+      // Process agent performance
+      const officerPerformance: LoanOfficerPerformance[] = agentPerformance.map((agent: any) => {
+        const totalLoansVal = agent.totalLoans || agent.totalLoansManaged || agent.totalLoansManaged || 0;
+        const activeLoansVal = agent.activeLoans || 0;
+
+        // Disbursed may come as an object { HTG, USD } or a number (sum) depending on backend version
+        const disbursedHTG = (agent.totalDisbursed && typeof agent.totalDisbursed === 'object')
+          ? (agent.totalDisbursed.HTG || agent.totalDisbursed.htg || 0)
+          : (agent.totalDisbursedHTG || agent.totalDisbursed || 0);
+        const disbursedUSD = (agent.totalDisbursed && typeof agent.totalDisbursed === 'object')
+          ? (agent.totalDisbursed.USD || agent.totalDisbursed.usd || 0)
+          : (agent.totalDisbursedUSD || 0);
+
+        // Collected may also be an object or a number
+        const collectedHTG = (agent.totalCollected && typeof agent.totalCollected === 'object')
+          ? (agent.totalCollected.HTG || agent.totalCollected.htg || 0)
+          : (agent.totalCollectedHTG || agent.totalCollected || 0);
+        const collectedUSD = (agent.totalCollected && typeof agent.totalCollected === 'object')
+          ? (agent.totalCollected.USD || agent.totalCollected.usd || 0)
+          : (agent.totalCollectedUSD || 0);
+
+        const repaymentRateVal = agent.repaymentRate || agent.collectionRate || 0;
+
+        return {
+          officer: agent.agentName || agent.name || 'N/A',
+          totalLoans: totalLoansVal,
+          activeLoans: activeLoansVal,
+          disbursed: { HTG: disbursedHTG, USD: disbursedUSD },
+          collected: { HTG: collectedHTG, USD: collectedUSD },
+          repaymentRate: repaymentRateVal,
+          overdueLoans: agent.overdueLoans || 0
+        };
+      });
       setLoanOfficerPerformance(officerPerformance);
 
-      // Calculate branch performance from stats or loans
-      // Group loans by branch if available in the data
+      // Process branch performance (backend sometimes returns PascalCase properties)
       const branchPerf: BranchPerformance[] = [];
-      if (stats.branchPerformance && Array.isArray(stats.branchPerformance)) {
-        stats.branchPerformance.forEach((branch: any) => {
+      const branchStatsSource = stats.branchPerformance || stats.BranchPerformance || stats.BranchPerformanceSummary || stats.branchPerformanceSummary;
+      if (branchStatsSource && Array.isArray(branchStatsSource)) {
+        branchStatsSource.forEach((branch: any) => {
+          // Accept both camelCase and PascalCase keys, or aggregated fields
+          const disbursed = branch.totalDisbursed || branch.TotalDisbursed || branch.totalDisbursedAmount || branch.TotalDisbursedAmount;
+          const outstanding = branch.totalOutstanding || branch.TotalOutstanding || branch.totalOutstandingAmount || branch.TotalOutstandingAmount;
+          const repaymentRate = typeof branch.repaymentRate === 'number'
+            ? branch.repaymentRate
+            : parseFloat(branch.repaymentRate || branch.RepaymentRate || '0') || 0;
+          const par30 = typeof branch.par30 === 'number'
+            ? branch.par30
+            : parseFloat(branch.par30 || branch.Par30 || '0') || 0;
+
           branchPerf.push({
-            branch: branch.branchName || branch.name || 'N/A',
-            totalLoans: branch.totalLoans || 0,
+            branch: branch.branchName || branch.BranchName || branch.name || branch.name || 'N/A',
+            totalLoans: branch.totalLoans || branch.TotalLoans || 0,
             disbursed: {
-              HTG: branch.totalDisbursed?.HTG || 0,
-              USD: branch.totalDisbursed?.USD || 0
+              HTG: disbursed?.HTG || disbursed?.htg || branch.totalDisbursedHTG || branch.TotalDisbursedHTG || 0,
+              USD: disbursed?.USD || disbursed?.usd || branch.totalDisbursedUSD || branch.TotalDisbursedUSD || 0
             },
             outstanding: {
-              HTG: branch.totalOutstanding?.HTG || 0,
-              USD: branch.totalOutstanding?.USD || 0
+              HTG: outstanding?.HTG || outstanding?.htg || branch.totalOutstandingHTG || branch.TotalOutstandingHTG || 0,
+              USD: outstanding?.USD || outstanding?.usd || branch.totalOutstandingUSD || branch.TotalOutstandingUSD || 0
             },
-            repaymentRate: branch.repaymentRate || 0,
-            par30: branch.par30 || 0
+            repaymentRate,
+            par30
           });
         });
       }
       setBranchPerformance(branchPerf);
 
-      // Load overdue loans
-      const overdue = await microcreditLoanApplicationService.getOverdueLoans();
+      // Process overdue loans
       const overdueDetails: OverdueDetail[] = overdue.map((loan: any) => ({
         loanNumber: loan.loanNumber || loan.id || 'N/A',
         customerName: loan.borrower?.firstName && loan.borrower?.lastName 
@@ -302,7 +381,7 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
 
     } catch (error: any) {
       console.error('Error loading reports data:', error);
-      toast.error('Erreur lors du chargement des données de rapport');
+      toast.error('Erreur lors du chargement des données de rapport. Veuillez réessayer.');
     } finally {
       setLoading(false);
     }
@@ -322,13 +401,24 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
   };
 
   const getLoanTypeLabel = (type: string) => {
+    const normalize = (s: string) => (s || '').replace(/([a-z])([A-Z])/g, '$1_$2').replace(/[^A-Z0-9_]/gi, '_').toUpperCase();
+    const key = normalize(type);
     const labels: Record<string, { label: string; emoji: string; color: string }> = {
       COMMERCIAL: { label: 'Commercial', emoji: '🏪', color: 'blue' },
       AGRICULTURAL: { label: 'Agricole', emoji: '🌾', color: 'green' },
       PERSONAL: { label: 'Personnel', emoji: '👤', color: 'purple' },
-      EMERGENCY: { label: 'Urgence', emoji: '🚨', color: 'red' }
+      EMERGENCY: { label: 'Urgence', emoji: '🚨', color: 'red' },
+      CREDIT_LOYER: { label: 'Loyer', emoji: '🏠', color: 'cyan' },
+      CREDIT_AUTO: { label: 'Auto', emoji: '🚗', color: 'orange' },
+      CREDIT_MOTO: { label: 'Moto', emoji: '🏍', color: 'teal' },
+      CREDIT_PERSONNEL: { label: 'Personnel (Spéc.)', emoji: '👥', color: 'purple' },
+      CREDIT_SCOLAIRE: { label: 'Scolaire', emoji: '🎒', color: 'yellow' },
+      CREDIT_AGRICOLE: { label: 'Agricole (Spéc.)', emoji: '🌾', color: 'green' },
+      CREDIT_PROFESSIONNEL: { label: 'Professionnel', emoji: '💼', color: 'indigo' },
+      CREDIT_APPUI: { label: 'Appui', emoji: '🤝', color: 'lime' },
+      CREDIT_HYPOTHECAIRE: { label: 'Hypothécaire', emoji: '🏦', color: 'gray' }
     };
-    return labels[type] || labels.PERSONAL;
+    return labels[key] || { label: type || 'Autre', emoji: '📦', color: 'gray' };
   };
 
   const getPerformanceColor = (rate: number) => {
@@ -346,23 +436,219 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
   };
 
   const getProgressBarColor = (type: string) => {
+    const normalize = (s: string) => (s || '').replace(/([a-z])([A-Z])/g, '$1_$2').replace(/[^A-Z0-9_]/gi, '_').toUpperCase();
+    const key = normalize(type);
     const colors: Record<string, string> = {
       COMMERCIAL: 'bg-blue-500',
       AGRICULTURAL: 'bg-green-500',
       PERSONAL: 'bg-purple-500',
-      EMERGENCY: 'bg-red-500'
+      EMERGENCY: 'bg-red-500',
+      CREDIT_LOYER: 'bg-cyan-500',
+      CREDIT_AUTO: 'bg-orange-500',
+      CREDIT_MOTO: 'bg-teal-500',
+      CREDIT_PERSONNEL: 'bg-purple-400',
+      CREDIT_SCOLAIRE: 'bg-yellow-400',
+      CREDIT_AGRICOLE: 'bg-green-600',
+      CREDIT_PROFESSIONNEL: 'bg-indigo-500',
+      CREDIT_APPUI: 'bg-lime-500',
+      CREDIT_HYPOTHECAIRE: 'bg-gray-500'
     };
-    return colors[type] || 'bg-gray-500';
+    return colors[key] || 'bg-gray-500';
   };
 
   const handleExport = (format: 'PDF' | 'EXCEL') => {
-    toast.success(`Export ${format} en cours...`);
-    // TODO: Implement export functionality
+    if (format === 'EXCEL') {
+      handleExportCSV(activeTab);
+      return;
+    }
+
+    try {
+      toast.loading('Génération du PDF en cours...');
+      const doc = new jsPDF();
+      const today = new Date().toLocaleDateString('fr-FR');
+      
+      // Header
+      doc.setFontSize(20);
+      doc.setTextColor(40, 40, 40);
+      doc.text('Rapport de Microcrédits', 14, 22);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Généré le: ${today}`, 14, 30);
+      doc.text(`Succursale: ${branches.find(b => b.id === selectedBranch)?.name || 'Toutes'}`, 14, 35);
+
+      if (activeTab === 'portfolio') {
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.text('Vue d\'ensemble du Portefeuille', 14, 45);
+        
+        // Metrics Table
+        const metricsData = [
+          ['Total Prêts', portfolioMetrics.totalLoans.toString()],
+          ['Capital Décaissé (HTG)', formatCurrency(portfolioMetrics.totalDisbursed.HTG, 'HTG')],
+          ['Capital Restant (HTG)', formatCurrency(portfolioMetrics.totalOutstanding.HTG, 'HTG')],
+          ['Taux de Remboursement', `${portfolioMetrics.repaymentRate}%`],
+          ['Portefeuille à Risque (PAR)', `${portfolioMetrics.portfolioAtRisk.toFixed(2)}%`],
+          ['PAR 30 jours', `${portfolioMetrics.par30}%`],
+        ];
+
+        (doc as any).autoTable({
+          startY: 50,
+          head: [['Métrique', 'Valeur']],
+          body: metricsData,
+          theme: 'grid',
+          headStyles: { fillColor: [79, 70, 229] }
+        });
+
+        // Loan Types Table
+        const typeData = loanTypePerformance.map(t => [
+          t.type,
+          t.count,
+          formatCurrency(t.totalAmount.HTG, 'HTG'),
+          formatCurrency(t.outstanding.HTG, 'HTG'),
+          `${t.averageInterestRate}%`
+        ]);
+
+        (doc as any).autoTable({
+          startY: (doc as any).lastAutoTable.finalY + 15,
+          head: [['Type de Prêt', 'Nombre', 'Total Décaissé', 'Encours', 'Taux Intérêt']],
+          body: typeData,
+          theme: 'striped',
+          headStyles: { fillColor: [79, 70, 229] }
+        });
+
+      } else if (activeTab === 'performance') {
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.text('Performance par Succursale', 14, 45);
+
+        const branchData = branchPerformance.map(b => [
+          b.branch,
+          b.totalLoans,
+          formatCurrency(b.disbursed.HTG, 'HTG'),
+          formatCurrency(b.disbursed.USD, 'USD'),
+          formatCurrency(b.outstanding.HTG, 'HTG'),
+          formatCurrency(b.outstanding.USD, 'USD'),
+          `${b.repaymentRate.toFixed(2)}%`,
+          `${b.par30.toFixed(2)}%`
+        ]);
+
+        (doc as any).autoTable({
+          startY: 50,
+          head: [['Succursale', 'Prêts', 'Décaissé HTG', 'Décaissé USD', 'Encours HTG', 'Encours USD', 'Remboursement', 'PAR 30']],
+          body: branchData,
+          theme: 'striped',
+          headStyles: { fillColor: [79, 70, 229] }
+        });
+
+        doc.text('Performance des Agents', 14, (doc as any).lastAutoTable.finalY + 15);
+
+        const officerData = loanOfficerPerformance.map(o => [
+          o.officer,
+          o.totalLoans,
+          o.activeLoans,
+          formatCurrency(o.disbursed.HTG, 'HTG'),
+          formatCurrency(o.collected.HTG, 'HTG'),
+          `${o.repaymentRate}%`
+        ]);
+
+        (doc as any).autoTable({
+          startY: (doc as any).lastAutoTable.finalY + 20,
+          head: [['Agent', 'Total', 'Actifs', 'Décaissé', 'Collecté', 'Remboursement']],
+          body: officerData,
+          theme: 'striped',
+          headStyles: { fillColor: [79, 70, 229] }
+        });
+
+      } else if (activeTab === 'overdue') {
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.text('Prêts en Retard', 14, 45);
+
+        const overdueData = overdueLoans.map(l => [
+          l.loanNumber,
+          l.customerName,
+          formatCurrency(l.dueAmount, l.currency),
+          l.daysOverdue,
+          l.phone,
+          l.officer
+        ]);
+
+        (doc as any).autoTable({
+          startY: 50,
+          head: [['Numéro', 'Client', 'Montant Dû', 'Jours', 'Téléphone', 'Agent']],
+          body: overdueData,
+          theme: 'grid',
+          headStyles: { fillColor: [220, 38, 38] } // Red for overdue
+        });
+      } else if (activeTab === 'collection') {
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.text('Rapport de Recouvrement', 14, 45);
+
+        const collectionData = loanOfficerPerformance.map(o => [
+          o.officer,
+          formatCurrency(o.collected.HTG, 'HTG'),
+          `${o.repaymentRate}%`,
+          o.overdueLoans
+        ]);
+
+        (doc as any).autoTable({
+          startY: 50,
+          head: [['Agent', 'Montant Collecté', 'Taux Remb.', 'Prêts en Retard']],
+          body: collectionData,
+          theme: 'striped',
+          headStyles: { fillColor: [22, 163, 74] } // Green for collection
+        });
+      }
+
+      doc.save(`rapport-microcredit-${activeTab}-${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.dismiss();
+      toast.success('PDF téléchargé avec succès');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.dismiss();
+      toast.error('Erreur lors de la génération du PDF');
+    }
+  };
+  
+  const downloadCSV = (filename: string, headers: string[], rows: string[][]) => {
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+  };
+
+  const handleExportCSV = (tab: string) => {
+    try {
+      if (tab === 'portfolio') {
+        const headers = ['Type', 'Count', 'Total HTG', 'Total USD', 'Outstanding HTG', 'Outstanding USD', 'Avg Interest %'];
+        const rows = loanTypePerformance.map(t => [t.type, String(t.count), String(t.totalAmount.HTG || 0), String(t.totalAmount.USD || 0), String(t.outstanding.HTG || 0), String(t.outstanding.USD || 0), String(t.averageInterestRate || 0)]);
+        downloadCSV(`rapport-portfolio-${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
+      } else if (tab === 'performance') {
+        const headers = ['Branch', 'Total Loans', 'Disbursed HTG', 'Disbursed USD', 'Outstanding HTG', 'Outstanding USD', 'Repayment Rate', 'PAR30'];
+        const rows = branchPerformance.map(b => [b.branch, String(b.totalLoans), String(b.disbursed.HTG || 0), String(b.disbursed.USD || 0), String(b.outstanding.HTG || 0), String(b.outstanding.USD || 0), String(b.repaymentRate || 0), String(b.par30 || 0)]);
+        downloadCSV(`rapport-performance-${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
+      } else if (tab === 'overdue') {
+        const headers = ['LoanNumber', 'CustomerName', 'Amount', 'Currency', 'DaysOverdue', 'DueAmount', 'Phone', 'Officer', 'Branch'];
+        const rows = overdueLoans.map(l => [l.loanNumber, `"${l.customerName}"`, String(l.amount), l.currency, String(l.daysOverdue), String(l.dueAmount), String(l.phone), String(l.officer), String(l.branch)]);
+        downloadCSV(`rapport-retards-${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
+      } else if (tab === 'collection') {
+        const headers = ['Agent', 'Total Loans', 'Active Loans', 'Disbursed HTG', 'Collected HTG', 'Repayment Rate', 'Overdue Loans'];
+        const rows = loanOfficerPerformance.map(o => [o.officer, String(o.totalLoans), String(o.activeLoans), String(o.disbursed.HTG || 0), String(o.collected.HTG || 0), String(o.repaymentRate || 0), String(o.overdueLoans || 0)]);
+        downloadCSV(`rapport-recouvrement-${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
+      }
+      toast.success('Export terminé');
+    } catch (err) {
+      console.error('Export error', err);
+      toast.error('Erreur lors de l\'export');
+    }
   };
 
   const handlePrint = () => {
-    toast.success('Impression en cours...');
-    // TODO: Implement print functionality
+    window.print();
   };
 
   const content = (
@@ -373,30 +659,39 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
           <h2 className="text-2xl font-bold mb-2">Rapports de Microcrédits</h2>
           <p className="text-indigo-100">Analyse du portefeuille et performance</p>
         </div>
-        {onClose && (
-          <div className="flex gap-2">
-            <button
-              onClick={handlePrint}
-              className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-colors"
-              title="Imprimer"
-            >
-              <Printer className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => handleExport('PDF')}
-              className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-colors"
-              title="Exporter PDF"
-            >
-              <Download className="w-5 h-5" />
-            </button>
-            <button
-              onClick={onClose}
-              className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-colors"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-        )}
+        <div className="flex gap-2">
+          <button
+            onClick={() => loadReportsData()}
+            className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-colors"
+            title="Actualiser les données"
+          >
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          {onClose && (
+            <>
+              <button
+                onClick={handlePrint}
+                className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-colors"
+                title="Imprimer"
+              >
+                <Printer className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => handleExport('PDF')}
+                className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-colors"
+                title="Exporter PDF"
+              >
+                <Download className="w-5 h-5" />
+              </button>
+              <button
+                onClick={onClose}
+                className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -458,7 +753,7 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
             </div>
 
             <button
-              onClick={() => handleExport('EXCEL')}
+              onClick={() => handleExportCSV(activeTab)}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -648,6 +943,12 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-orange-600" />
                 Portefeuille à Risque (PAR)
+                <div className="group relative">
+                  <Info className="w-4 h-4 text-gray-400 cursor-help" />
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-64 text-center pointer-events-none z-10">
+                    Pourcentage du portefeuille total qui est en retard de paiement (Capital restant dû des prêts en retard / Capital total restant dû)
+                  </div>
+                </div>
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-gray-50 rounded-lg p-4">
@@ -689,9 +990,17 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
                 <PieChart className="w-5 h-5 text-indigo-600" />
                 Distribution par Type de Prêt
               </h3>
+              <p className="text-xs text-gray-500 mb-3">Distribution calculée sur les prêts actifs (filtrés par succursale si sélectionnée).</p>
               <div className="space-y-3">
-                {loanTypePerformance.map((type) => {
-                  const percentage = (type.count / portfolioMetrics.totalLoans) * 100;
+                {loanTypePerformance.length === 0 && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <p className="text-sm text-yellow-800">Aucun prêt trouvé pour les filtres sélectionnés.</p>
+                  </div>
+                )}
+                {(() => {
+                  const totalTypesCount = loanTypePerformance.reduce((acc, t) => acc + (t.count || 0), 0);
+                  return loanTypePerformance.map((type) => {
+                    const percentage = totalTypesCount > 0 ? (type.count / totalTypesCount) * 100 : 0;
                   const typeInfo = getLoanTypeLabel(type.type);
                   return (
                     <div key={type.type} className="bg-gray-50 rounded-lg p-4">
@@ -701,9 +1010,9 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
                           <span className="font-semibold text-gray-900">{typeInfo.label}</span>
                           <span className="text-sm text-gray-600">({type.count} prêts)</span>
                         </div>
-                        <span className="text-lg font-bold text-gray-900">{percentage.toFixed(1)}%</span>
+                          <span className="text-lg font-bold text-gray-900">{percentage.toFixed(1)}%</span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
+                        <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
                         <div
                           className={`h-3 rounded-full ${getProgressBarColor(type.type)}`}
                           style={{ width: `${percentage}%` }}
@@ -726,8 +1035,9 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
                         </div>
                       </div>
                     </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </div>
             </div>
           </div>
@@ -749,7 +1059,9 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Succursale</th>
                       <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Prêts</th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Décaissé HTG</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Décaissé USD</th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Restant HTG</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Restant USD</th>
                       <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Taux Remb.</th>
                       <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">PAR 30</th>
                     </tr>
@@ -767,16 +1079,22 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
                           {formatCurrency(branch.disbursed.HTG, 'HTG')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-gray-900">
+                          {formatCurrency(branch.disbursed.USD, 'USD')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-gray-900">
                           {formatCurrency(branch.outstanding.HTG, 'HTG')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-gray-900">
+                          {formatCurrency(branch.outstanding.USD, 'USD')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           <span className={`font-semibold ${getPerformanceColor(branch.repaymentRate)}`}>
-                            {branch.repaymentRate}%
+                            {branch.repaymentRate.toFixed(2)}%
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           <span className={`font-semibold ${getPARColor(branch.par30)}`}>
-                            {branch.par30}%
+                            {branch.par30.toFixed(2)}%
                           </span>
                         </td>
                       </tr>

@@ -447,101 +447,12 @@ namespace NalaCreditAPI.Controllers
         /// </summary>
         [HttpGet("dashboard/stats")]
         [Authorize]
-        public async Task<ActionResult<MicrocreditDashboardStatsDto>> GetDashboardStats()
+        public async Task<ActionResult<MicrocreditDashboardStatsDto>> GetDashboardStats([FromQuery] int? branchId = null)
         {
             try
             {
-                var now = DateTime.UtcNow;
-                var startOfMonth = new DateTime(now.Year, now.Month, 1);
-                var startOfYear = new DateTime(now.Year, 1, 1);
-
-                // Nombre total de clients (borrowers)
-                var totalClients = await _context.MicrocreditBorrowers.CountAsync();
-
-                // Nombre de crédits actifs
-                var activeLoans = await _context.MicrocreditLoans
-                    .Where(l => l.Status == MicrocreditLoanStatus.Active)
-                    .CountAsync();
-
-                // Montant total des crédits en cours (outstanding balance)
-                var totalOutstandingHTG = await _context.MicrocreditLoans
-                    .Where(l => l.Status == MicrocreditLoanStatus.Active && l.Currency == MicrocreditCurrency.HTG)
-                    .SumAsync(l => l.OutstandingBalance);
-
-                var totalOutstandingUSD = await _context.MicrocreditLoans
-                    .Where(l => l.Status == MicrocreditLoanStatus.Active && l.Currency == MicrocreditCurrency.USD)
-                    .SumAsync(l => l.OutstandingBalance);
-
-                // Taux de remboursement global (%)
-                var totalLoans = await _context.MicrocreditLoans.CountAsync();
-                var completedLoans = await _context.MicrocreditLoans
-                    .Where(l => l.Status == MicrocreditLoanStatus.Completed)
-                    .CountAsync();
-
-                var repaymentRate = totalLoans > 0 ? (decimal)completedLoans / totalLoans * 100 : 0;
-
-                // Crédits en retard (nombre + montant)
-                var overdueLoans = await _context.MicrocreditLoans
-                    .Where(l => l.Status == MicrocreditLoanStatus.Active && l.DaysOverdue > 0)
-                    .ToListAsync();
-
-                var overdueCount = overdueLoans.Count;
-                var overdueAmountHTG = overdueLoans
-                    .Where(l => l.Currency == MicrocreditCurrency.HTG)
-                    .Sum(l => l.OutstandingBalance);
-                var overdueAmountUSD = overdueLoans
-                    .Where(l => l.Currency == MicrocreditCurrency.USD)
-                    .Sum(l => l.OutstandingBalance);
-
-                // Revenus générés (intérêts perçus)
-                var totalInterestCollectedHTG = await _context.MicrocreditPayments
-                    .Where(p => p.Status == MicrocreditPaymentStatus.Completed && p.Currency == MicrocreditCurrency.HTG)
-                    .SumAsync(p => p.InterestAmount);
-
-                var totalInterestCollectedUSD = await _context.MicrocreditPayments
-                    .Where(p => p.Status == MicrocreditPaymentStatus.Completed && p.Currency == MicrocreditCurrency.USD)
-                    .SumAsync(p => p.InterestAmount);
-
-                // Crédits remboursés ce mois
-                var loansCompletedThisMonth = await _context.MicrocreditLoans
-                    .Where(l => l.Status == MicrocreditLoanStatus.Completed &&
-                               l.UpdatedAt >= startOfMonth && l.UpdatedAt < now)
-                    .CountAsync();
-
-                // Nouveaux crédits ce mois
-                var newLoansThisMonth = await _context.MicrocreditLoans
-                    .Where(l => l.CreatedAt >= startOfMonth && l.CreatedAt < now)
-                    .CountAsync();
-
-                var stats = new MicrocreditDashboardStatsDto
-                {
-                    TotalClients = totalClients,
-                    ActiveLoans = activeLoans,
-                    TotalOutstanding = new CurrencyAmountDto
-                    {
-                        HTG = totalOutstandingHTG,
-                        USD = totalOutstandingUSD
-                    },
-                    RepaymentRate = Math.Round(repaymentRate, 2),
-                    OverdueLoans = new OverdueStatsDto
-                    {
-                        Count = overdueCount,
-                        Amount = new CurrencyAmountDto
-                        {
-                            HTG = overdueAmountHTG,
-                            USD = overdueAmountUSD
-                        }
-                    },
-                    InterestRevenue = new CurrencyAmountDto
-                    {
-                        HTG = totalInterestCollectedHTG,
-                        USD = totalInterestCollectedUSD
-                    },
-                    LoansCompletedThisMonth = loansCompletedThisMonth,
-                    NewLoansThisMonth = newLoansThisMonth,
-                    GeneratedAt = now
-                };
-
+                // Use the service method which includes BranchPerformance
+                var stats = await _loanApplicationService.GetDashboardStatsAsync(branchId);
                 return Ok(stats);
             }
             catch (Exception ex)
