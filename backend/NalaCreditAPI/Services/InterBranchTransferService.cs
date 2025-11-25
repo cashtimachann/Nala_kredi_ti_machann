@@ -403,9 +403,9 @@ public class InterBranchTransferService : IInterBranchTransferService
         await _context.SaveChangesAsync();
     }
 
-    private async Task<InterBranchTransferDto> MapToDtoAsync(InterBranchTransfer transfer)
+    private Task<InterBranchTransferDto> MapToDtoAsync(InterBranchTransfer transfer)
     {
-        return new InterBranchTransferDto
+        var dto = new InterBranchTransferDto
         {
             Id = transfer.Id,
             TransferNumber = transfer.TransferNumber,
@@ -423,7 +423,7 @@ public class InterBranchTransferService : IInterBranchTransferService
             Status = (int)transfer.Status,
             StatusName = transfer.Status.ToString(),
             RequestedBy = transfer.RequestedBy,
-            RequestedByName = transfer.RequestedBy, // Would need to join with Users table
+            RequestedByName = transfer.RequestedBy,
             RequestedAt = transfer.RequestedAt?.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             ApprovedBy = transfer.ApprovedBy,
             ApprovedByName = transfer.ApprovedBy,
@@ -440,5 +440,6 @@ public class InterBranchTransferService : IInterBranchTransferService
             CreatedAt = transfer.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             UpdatedAt = transfer.UpdatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ")
         };
+        return Task.FromResult(dto);
     }
 }

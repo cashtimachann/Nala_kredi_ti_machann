@@ -325,7 +325,12 @@ namespace NalaCreditAPI.Services
 
             await _context.SaveChangesAsync();
 
-            transaction.CurrencyRate = await _context.CurrencyExchangeRates.FindAsync(currentRate.Id);
+            var persistedRate = await _context.CurrencyExchangeRates.FindAsync(currentRate.Id);
+            if (persistedRate == null)
+            {
+                throw new InvalidOperationException("Currency rate record not found after transaction save.");
+            }
+            transaction.CurrencyRate = persistedRate;
             return MapExchangeTransactionToDto(transaction);
         }
 

@@ -2,6 +2,7 @@ using NalaCreditAPI.Data;
 using NalaCreditAPI.DTOs;
 using NalaCreditAPI.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 
 namespace NalaCreditAPI.Services;
 
@@ -45,6 +46,7 @@ public class BranchService : IBranchService
     {
         var branch = await _context.Branches
             .Include(b => b.Users)
+            .Include(b => b.Manager)
             .FirstOrDefaultAsync(b => b.Id == branchId);
 
         if (branch == null)
@@ -63,6 +65,35 @@ public class BranchService : IBranchService
             throw new ArgumentException("Branch code must be unique");
         }
 
+        // Validate manager if provided
+        string? managerName = null;
+        if (!string.IsNullOrEmpty(dto.ManagerId))
+        {
+            var manager = await _context.Users.FindAsync(dto.ManagerId);
+            if (manager == null)
+            {
+                throw new ArgumentException("Manager not found");
+            }
+            managerName = $"{manager.FirstName ?? ""} {manager.LastName ?? ""}".Trim();
+        }
+
+        // Robust OpeningDate parsing with fallback
+        DateTime openingDateValue;
+        if (!string.IsNullOrWhiteSpace(dto.OpeningDate) &&
+            DateTime.TryParseExact(dto.OpeningDate.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var exactOpening))
+        {
+            openingDateValue = exactOpening;
+        }
+        else if (DateTime.TryParse(dto.OpeningDate, out var fallbackParsed))
+        {
+            openingDateValue = fallbackParsed;
+        }
+        else
+        {
+            _logger.LogWarning("CreateBranchAsync: Invalid OpeningDate '{OpeningDate}', using UTC now", dto.OpeningDate);
+            openingDateValue = DateTime.UtcNow;
+        }
+
         var branch = new Branch
         {
             Code = dto.Code ?? GenerateBranchCode(dto.Name),
@@ -73,17 +104,18 @@ public class BranchService : IBranchService
             Region = dto.Department ?? "Haiti", // Default region
             Phones = dto.Phones ?? new List<string>(),
             Email = dto.Email,
-            OpeningDate = DateTime.Parse(dto.OpeningDate),
+            OpeningDate = openingDateValue,
             ManagerId = dto.ManagerId,
+            ManagerName = managerName,
             MaxEmployees = dto.MaxEmployees,
             PrimaryCurrency = Currency.HTG, // Default
             AcceptsUSD = true,
             AcceptsHTG = true,
             DailyTransactionLimit = dto.Limits.DailyDepositLimit,
             CashLimit = dto.Limits.MinCashReserveHTG,
-            OpenTime = TimeSpan.Parse(dto.OperatingHours.OpenTime),
-            CloseTime = TimeSpan.Parse(dto.OperatingHours.CloseTime),
-            ClosedDays = dto.OperatingHours.ClosedDays ?? new List<int>(),
+            OpenTime = (dto.OperatingHours != null && TimeSpan.TryParse(dto.OperatingHours.OpenTime, out var ct)) ? ct : new TimeSpan(8, 0, 0),
+            CloseTime = (dto.OperatingHours != null && TimeSpan.TryParse(dto.OperatingHours.CloseTime, out var ct2)) ? ct2 : new TimeSpan(17, 0, 0),
+            ClosedDays = dto.OperatingHours?.ClosedDays ?? new List<int>(),
             DailyWithdrawalLimit = dto.Limits.DailyWithdrawalLimit,
             DailyDepositLimit = dto.Limits.DailyDepositLimit,
             MaxLocalCreditApproval = dto.Limits.MaxLocalCreditApproval,
@@ -128,7 +160,10 @@ public class BranchService : IBranchService
             branch.Commune = dto.Commune;
 
         if (!string.IsNullOrEmpty(dto.Department))
+        {
             branch.Department = dto.Department;
+            branch.Region = dto.Department; // Update region to match department
+        }
 
         if (dto.Phones != null)
             branch.Phones = dto.Phones;
@@ -137,22 +172,96 @@ public class BranchService : IBranchService
             branch.Email = dto.Email;
 
         if (!string.IsNullOrEmpty(dto.ManagerId))
+        {
+            // Validate that the manager exists and get their name
+            var manager = await _context.Users.FindAsync(dto.ManagerId);
+            if (manager == null)
+            {
+                throw new ArgumentException("Manager not found");
+            }
             branch.ManagerId = dto.ManagerId;
+            branch.ManagerName = $"{manager.FirstName ?? ""} {manager.LastName ?? ""}".Trim();
+        }
 
         if (!string.IsNullOrEmpty(dto.Status))
             branch.IsActive = dto.Status == "Active";
 
-        if (!string.IsNullOrEmpty(dto.OperatingHours.OpenTime))
-            branch.OpenTime = TimeSpan.Parse(dto.OperatingHours.OpenTime);
+        // Safely update operating hours if provided
+        if (dto.OperatingHours != null)
+        {
+            _logger.LogInformation("UpdateBranchAsync: incoming operating hours open='{OpenTime}' close='{CloseTime}'", dto.OperatingHours.OpenTime, dto.OperatingHours.CloseTime);
+            // Always try to parse and update OpenTime if provided (even if empty, we want to update it)
+            if (dto.OperatingHours.OpenTime != null)
+            {
+                if (TimeSpan.TryParse(dto.OperatingHours.OpenTime, out var parsedOpen))
+                {
+                    branch.OpenTime = parsedOpen;
+                    _logger.LogInformation("UpdateBranchAsync: parsed open time '{ParsedOpen}'", parsedOpen);
+                }
+                else if (!string.IsNullOrWhiteSpace(dto.OperatingHours.OpenTime))
+                {
+                    _logger.LogWarning($"Failed to parse OpenTime: {dto.OperatingHours.OpenTime}");
+                }
+            }
 
-        if (!string.IsNullOrEmpty(dto.OperatingHours.CloseTime))
-            branch.CloseTime = TimeSpan.Parse(dto.OperatingHours.CloseTime);
+            // Always try to parse and update CloseTime if provided (even if empty, we want to update it)
+            if (dto.OperatingHours.CloseTime != null)
+            {
+                if (TimeSpan.TryParse(dto.OperatingHours.CloseTime, out var parsedClose))
+                {
+                    branch.CloseTime = parsedClose;
+                    _logger.LogInformation("UpdateBranchAsync: parsed close time '{ParsedClose}'", parsedClose);
+                }
+                else if (!string.IsNullOrWhiteSpace(dto.OperatingHours.CloseTime))
+                {
+                    _logger.LogWarning($"Failed to parse CloseTime: {dto.OperatingHours.CloseTime}");
+                }
+            }
 
-        if (dto.Limits.MaxLocalCreditApproval > 0)
-            branch.MaxLocalCreditApproval = dto.Limits.MaxLocalCreditApproval;
+            if (dto.OperatingHours.ClosedDays != null)
+            {
+                branch.ClosedDays = dto.OperatingHours.ClosedDays;
+            }
+        }
+
+        // Safely update limits and counts
+        if (dto.Limits != null)
+        {
+            if (dto.Limits.DailyWithdrawalLimit >= 0)
+                branch.DailyWithdrawalLimit = dto.Limits.DailyWithdrawalLimit;
+            
+            if (dto.Limits.DailyDepositLimit >= 0)
+                branch.DailyDepositLimit = dto.Limits.DailyDepositLimit;
+            
+            if (dto.Limits.MaxLocalCreditApproval >= 0)
+                branch.MaxLocalCreditApproval = dto.Limits.MaxLocalCreditApproval;
+            
+            if (dto.Limits.MinCashReserveHTG >= 0)
+                branch.MinCashReserveHTG = dto.Limits.MinCashReserveHTG;
+            
+            if (dto.Limits.MinCashReserveUSD >= 0)
+                branch.MinCashReserveUSD = dto.Limits.MinCashReserveUSD;
+        }
 
         if (dto.MaxEmployees > 0)
             branch.MaxEmployees = dto.MaxEmployees;
+
+        if (!string.IsNullOrWhiteSpace(dto.OpeningDate))
+        {
+            // Prefer exact yyyy-MM-dd format; fallback to any parseable format
+            if (DateTime.TryParseExact(dto.OpeningDate.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var updatedExact))
+            {
+                branch.OpeningDate = updatedExact;
+            }
+            else if (DateTime.TryParse(dto.OpeningDate, out var updatedFallback))
+            {
+                branch.OpeningDate = updatedFallback;
+            }
+            else
+            {
+                _logger.LogWarning("UpdateBranchAsync: Invalid OpeningDate '{OpeningDate}' ignored", dto.OpeningDate);
+            }
+        }
 
         branch.UpdatedAt = DateTime.UtcNow;
 
@@ -296,11 +405,11 @@ public class BranchService : IBranchService
             Address = branch.Address,
             Commune = branch.Commune ?? string.Empty,
             Department = branch.Department ?? string.Empty,
-            Phones = branch.Phones,
+            Phones = branch.Phones ?? new List<string>(),
             Email = branch.Email ?? string.Empty,
             OpeningDate = branch.OpeningDate.ToString("yyyy-MM-dd"),
             ManagerId = branch.ManagerId,
-            ManagerName = branch.ManagerName,
+            ManagerName = branch.Manager != null ? $"{branch.Manager.FirstName ?? ""} {branch.Manager.LastName ?? ""}".Trim() : branch.ManagerName,
             MaxEmployees = branch.MaxEmployees,
             Status = branch.IsActive ? "Active" : "Inactive",
             Limits = new BranchLimitsDto
@@ -313,12 +422,26 @@ public class BranchService : IBranchService
             },
             OperatingHours = new OperatingHoursDto
             {
-                OpenTime = branch.OpenTime.ToString(@"hh\:mm"),
-                CloseTime = branch.CloseTime.ToString(@"hh\:mm"),
-                ClosedDays = branch.ClosedDays
+                // Use proper TimeSpan format tokens (hh, mm) and safe fallback
+                OpenTime = SafeFormatTime(branch.OpenTime),
+                CloseTime = SafeFormatTime(branch.CloseTime),
+                ClosedDays = branch.ClosedDays ?? new List<int>()
             },
             CreatedAt = branch.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             UpdatedAt = branch.UpdatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ")
         };
+    }
+
+    private static string SafeFormatTime(TimeSpan time)
+    {
+        try
+        {
+            // Correct custom TimeSpan format pattern
+            return time.ToString("hh\\:mm");
+        }
+        catch
+        {
+            return "08:00"; // fallback
+        }
     }
 }

@@ -98,7 +98,7 @@ namespace NalaCreditAPI.Controllers
                 var ids = applicationIds.Split(',')
                     .Select(id => Guid.TryParse(id.Trim(), out var guid) ? guid : (Guid?)null)
                     .Where(id => id.HasValue)
-                    .Select(id => id.Value)
+                    .Select(id => id!.Value)
                     .ToList();
 
                 if (!ids.Any())

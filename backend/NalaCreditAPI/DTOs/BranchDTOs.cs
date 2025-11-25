@@ -30,6 +30,7 @@ namespace NalaCreditAPI.DTOs
         public string Department { get; set; } = string.Empty;
         public List<string> Phones { get; set; } = new List<string>();
         public string Email { get; set; } = string.Empty;
+        [System.ComponentModel.DataAnnotations.RegularExpression("^\\d{4}-\\d{2}-\\d{2}$", ErrorMessage = "OpeningDate doit être au format yyyy-MM-dd")]
         public string OpeningDate { get; set; } = string.Empty;
         public string? ManagerId { get; set; }
         public int MaxEmployees { get; set; }

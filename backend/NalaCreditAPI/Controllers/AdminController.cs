@@ -45,10 +45,10 @@ namespace NalaCreditAPI.Controllers
                 // Apply filters
                 if (!string.IsNullOrEmpty(filters.Search))
                 {
-                    query = query.Where(u => 
-                        u.FirstName.Contains(filters.Search) ||
-                        u.LastName.Contains(filters.Search) ||
-                        u.Email.Contains(filters.Search));
+                    query = query.Where(u =>
+                        (u.FirstName ?? string.Empty).Contains(filters.Search) ||
+                        (u.LastName ?? string.Empty).Contains(filters.Search) ||
+                        (u.Email ?? string.Empty).Contains(filters.Search));
                 }
 
                 if (filters.AdminType.HasValue)
@@ -573,7 +573,7 @@ namespace NalaCreditAPI.Controllers
 
                 var auditLog = new AuditLog
                 {
-                    UserId = currentUserId,
+                    UserId = currentUserId ?? "system",
                     Action = action,
                     EntityType = "Admin",
                     EntityId = targetUserId,

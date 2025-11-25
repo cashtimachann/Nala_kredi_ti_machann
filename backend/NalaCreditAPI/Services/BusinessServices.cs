@@ -27,7 +27,7 @@ public class AuthService : IAuthService
         _configuration = configuration;
     }
 
-    public async Task<string> GenerateJwtToken(User user)
+    public Task<string> GenerateJwtToken(User user)
     {
         var jwtSettings = _configuration.GetSection("JwtSettings");
         var secretKey = jwtSettings["SecretKey"];
@@ -64,7 +64,8 @@ public class AuthService : IAuthService
         };
 
         var token = tokenHandler.CreateToken(tokenDescriptor);
-        return tokenHandler.WriteToken(token);
+        var tokenString = tokenHandler.WriteToken(token);
+        return Task.FromResult(tokenString);
     }
 
     private string GetRoleName(UserRole role)
@@ -215,6 +216,7 @@ public class TransactionService : ITransactionService
 
     private async Task<string> GenerateTransactionNumber()
     {
+        // Retain original sequential-per-day logic (needs DB) -> must stay async.
         var today = DateTime.Today.ToString("yyyyMMdd");
         var lastTransaction = await _context.Transactions
             .Where(t => t.TransactionNumber.StartsWith(today))
@@ -348,40 +350,40 @@ public class DashboardService : IDashboardService
         };
     }
 
-    private async Task<object> GetCashierDashboardAsync(string userId)
+    private Task<object> GetCashierDashboardAsync(string userId)
     {
-        // Implementation similar to DashboardController methods
-        return new { Message = "Cashier dashboard data" };
+        // Placeholder implementation; replace with real aggregated data queries.
+        return Task.FromResult<object>(new { Message = "Cashier dashboard data" });
     }
 
-    private async Task<object> GetCreditAgentDashboardAsync(string userId)
+    private Task<object> GetCreditAgentDashboardAsync(string userId)
     {
-        return new { Message = "Credit agent dashboard data" };
+        return Task.FromResult<object>(new { Message = "Credit agent dashboard data" });
     }
 
-    private async Task<object> GetBranchSupervisorDashboardAsync(string userId)
+    private Task<object> GetBranchSupervisorDashboardAsync(string userId)
     {
-        return new { Message = "Branch supervisor dashboard data" };
+        return Task.FromResult<object>(new { Message = "Branch supervisor dashboard data" });
     }
 
-    private async Task<object> GetRegionalManagerDashboardAsync(string userId)
+    private Task<object> GetRegionalManagerDashboardAsync(string userId)
     {
-        return new { Message = "Regional manager dashboard data" };
+        return Task.FromResult<object>(new { Message = "Regional manager dashboard data" });
     }
 
-    private async Task<object> GetSystemAdminDashboardAsync()
+    private Task<object> GetSystemAdminDashboardAsync()
     {
-        return new { Message = "System admin dashboard data" };
+        return Task.FromResult<object>(new { Message = "System admin dashboard data" });
     }
 
-    private async Task<object> GetAccountingDashboardAsync()
+    private Task<object> GetAccountingDashboardAsync()
     {
-        return new { Message = "Accounting dashboard data" };
+        return Task.FromResult<object>(new { Message = "Accounting dashboard data" });
     }
 
-    private async Task<object> GetSuperAdminDashboardAsync()
+    private Task<object> GetSuperAdminDashboardAsync()
     {
-        return new { Message = "Super admin dashboard data" };
+        return Task.FromResult<object>(new { Message = "Super admin dashboard data" });
     }
 }
 

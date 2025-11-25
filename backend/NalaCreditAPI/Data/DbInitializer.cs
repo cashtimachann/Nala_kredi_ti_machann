@@ -23,8 +23,8 @@ public static class DbInitializer
         }
         catch (Exception ex)
         {
-            // For other errors, rethrow so the deployment fails loudly.
-            throw;
+            Console.WriteLine($"[ERROR] Database migration failed: {ex.Message}");
+            throw; // rethrow after logging
         }
 
         // Create roles if they don't exist

@@ -267,6 +267,21 @@ export function getLoanTypeIcon(loanType: LoanType) {
 }
 
 /**
+ * Obtenir le pourcentage de garantie (épargne bloquée) pour un type de crédit
+ * @param loanType Le type de crédit
+ * @returns Le pourcentage de garantie (0.15 pour la plupart, 0.30 pour Auto et Moto)
+ */
+export function getGuaranteePercentage(loanType: LoanType): number {
+  switch (loanType) {
+    case LoanType.CREDIT_AUTO:
+    case LoanType.CREDIT_MOTO:
+      return 0.30; // 30% pour Auto & Moto
+    default:
+      return 0.15; // 15% pour tous les autres types
+  }
+}
+
+/**
  * Obtenir la liste de tous les types de crédit disponibles
  */
 export function getAllLoanTypes(): LoanTypeInfo[] {

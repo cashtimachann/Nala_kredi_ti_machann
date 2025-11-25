@@ -202,36 +202,32 @@ public class BranchManagementController : ControllerBase
     }
 
     [HttpPost("generate-code")]
-    public async Task<ActionResult<GenerateCodeResponseDto>> GenerateBranchCode([FromBody] GenerateCodeDto dto)
+    public Task<ActionResult<GenerateCodeResponseDto>> GenerateBranchCode([FromBody] GenerateCodeDto dto)
     {
         try
         {
-            // Simple code generation logic
-            var code = dto.Name.Replace(" ", "").ToUpper().Substring(0, Math.Min(3, dto.Name.Length));
-            code += DateTime.Now.ToString("yyMM");
-
-            return Ok(new GenerateCodeResponseDto { Code = code });
+            var code = dto.Name.Replace(" ", "").ToUpper().Substring(0, Math.Min(3, dto.Name.Length)) + DateTime.Now.ToString("yyMM");
+            return Task.FromResult<ActionResult<GenerateCodeResponseDto>>(Ok(new GenerateCodeResponseDto { Code = code }));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error generating branch code");
-            return StatusCode(500, "Une erreur interne s'est produite");
+            return Task.FromResult<ActionResult<GenerateCodeResponseDto>>(StatusCode(500, "Une erreur interne s'est produite"));
         }
     }
 
     [HttpPost("validate-code")]
-    public async Task<ActionResult<ValidateCodeResponseDto>> ValidateBranchCode([FromBody] ValidateCodeDto dto)
+    public Task<ActionResult<ValidateCodeResponseDto>> ValidateBranchCode([FromBody] ValidateCodeDto dto)
     {
         try
         {
-            // Check if code is unique
-            var isValid = true; // In a real implementation, check against database
-            return Ok(new ValidateCodeResponseDto { IsValid = isValid });
+            var isValid = true; // Placeholder uniqueness check
+            return Task.FromResult<ActionResult<ValidateCodeResponseDto>>(Ok(new ValidateCodeResponseDto { IsValid = isValid }));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error validating branch code");
-            return StatusCode(500, "Une erreur interne s'est produite");
+            return Task.FromResult<ActionResult<ValidateCodeResponseDto>>(StatusCode(500, "Une erreur interne s'est produite"));
         }
     }
 

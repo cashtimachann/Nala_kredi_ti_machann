@@ -184,35 +184,35 @@ namespace NalaCreditAPI.Controllers.Savings
         /// Valider une transaction avant traitement
         /// </summary>
         [HttpPost("validate")]
-        public async Task<ActionResult<TransactionValidationDto>> ValidateTransaction([FromBody] SavingsTransactionCreateDto dto)
+        public Task<ActionResult<TransactionValidationDto>> ValidateTransaction([FromBody] SavingsTransactionCreateDto dto)
         {
             try
             {
-                // Ici on pourrait ajouter une méthode de validation sans traitement réel
-                // Pour l'instant, on fait une validation basique
                 if (dto.Amount <= 0)
-                    return BadRequest(new { message = "Le montant doit être positif" });
+                    return Task.FromResult<ActionResult<TransactionValidationDto>>(BadRequest(new { message = "Le montant doit être positif" }));
 
                 if (string.IsNullOrEmpty(dto.AccountNumber))
-                    return BadRequest(new { message = "Le numéro de compte est requis" });
+                    return Task.FromResult<ActionResult<TransactionValidationDto>>(BadRequest(new { message = "Le numéro de compte est requis" }));
 
-                return Ok(new TransactionValidationDto
+                var response = new TransactionValidationDto
                 {
                     IsValid = true,
                     Message = "Transaction valide",
-                    EstimatedFees = dto.Type == SavingsTransactionType.Withdrawal 
-                        ? Math.Max(1m, dto.Amount * 0.005m) 
+                    EstimatedFees = dto.Type == SavingsTransactionType.Withdrawal
+                        ? Math.Max(1m, dto.Amount * 0.005m)
                         : 0m
-                });
+                };
+                return Task.FromResult<ActionResult<TransactionValidationDto>>(Ok(response));
             }
             catch (Exception ex)
             {
-                return Ok(new TransactionValidationDto
+                var response = new TransactionValidationDto
                 {
                     IsValid = false,
                     Message = ex.Message,
                     EstimatedFees = 0m
-                });
+                };
+                return Task.FromResult<ActionResult<TransactionValidationDto>>(Ok(response));
             }
         }
 

@@ -346,7 +346,10 @@ const BranchDetailsModal: React.FC<BranchDetailsModalProps> = ({
                     <p className="text-gray-900 mt-1">
                       {branch.operatingHours.closedDays.length === 0 
                         ? 'Ouvert tous les jours'
-                        : `${branch.operatingHours.closedDays.length} jour(s) par semaine`
+                        : branch.operatingHours.closedDays.map(day => {
+                            const dayNames = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+                            return dayNames[day] || `Jour ${day}`;
+                          }).join(', ')
                       }
                     </p>
                   </div>

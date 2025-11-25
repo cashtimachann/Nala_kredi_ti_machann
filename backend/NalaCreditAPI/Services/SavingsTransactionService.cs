@@ -526,7 +526,7 @@ namespace NalaCreditAPI.Services.Savings
             };
         }
 
-        private async Task<string> GenerateReferenceAsync(SavingsTransactionType type, string accountNumber)
+    private Task<string> GenerateReferenceAsync(SavingsTransactionType type, string accountNumber)
         {
             var prefix = type switch
             {
@@ -541,7 +541,7 @@ namespace NalaCreditAPI.Services.Savings
             var timeStr = DateTime.UtcNow.ToString("HHmmss");
             var accountSuffix = accountNumber.Substring(Math.Max(0, accountNumber.Length - 4));
             
-            return $"{prefix}-{dateStr}-{timeStr}-{accountSuffix}";
+            return Task.FromResult($"{prefix}-{dateStr}-{timeStr}-{accountSuffix}");
         }
 
         private async Task<string> GenerateReceiptNumberAsync()

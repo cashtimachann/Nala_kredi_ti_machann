@@ -231,7 +231,7 @@ const DisburseLoanModal: React.FC<DisburseLoanModalProps> = ({ loan, onClose, on
                   <li>Le statut du prêt passera à "Actif"</li>
                   <li>Le calendrier de remboursement sera activé</li>
                   <li>Le premier paiement sera dû dans 1 mois</li>
-                  <li>La garantie (15%) restera bloquée jusqu'au remboursement complet</li>
+                  <li>La garantie restera bloquée jusqu'au remboursement complet</li>
                 </ul>
               </div>
             </div>

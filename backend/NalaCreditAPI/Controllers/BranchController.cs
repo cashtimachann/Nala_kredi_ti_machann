@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using NalaCreditAPI.Data;
 using NalaCreditAPI.DTOs;
 using NalaCreditAPI.Models;
+using NalaCreditAPI.Services;
 
 namespace NalaCreditAPI.Controllers
 {
@@ -13,10 +14,14 @@ namespace NalaCreditAPI.Controllers
     public class BranchController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
+        private readonly ILogger<BranchController> _logger;
+        private readonly IBranchService _branchService;
 
-        public BranchController(ApplicationDbContext context)
+        public BranchController(ApplicationDbContext context, ILogger<BranchController> logger, IBranchService branchService)
         {
             _context = context;
+            _logger = logger;
+            _branchService = branchService;
         }
 
         [HttpGet]
@@ -24,14 +29,12 @@ namespace NalaCreditAPI.Controllers
         {
             try
             {
-            var branches = await _context.Branches
-                .Include(b => b.Users)
-                .Include(b => b.Manager)
-                .ToListAsync();                var branchDtos = branches.Select(MapToBranchDto).ToList();
+                var branchDtos = await _branchService.GetAllBranchesAsync();
                 return Ok(branchDtos);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "GetAllBranches failed");
                 return StatusCode(500, new { message = "Erreur lors du chargement des succursales", error = ex.Message });
             }
         }
@@ -41,19 +44,16 @@ namespace NalaCreditAPI.Controllers
         {
             try
             {
-                var branch = await _context.Branches
-                    .Include(b => b.Users)
-                    .FirstOrDefaultAsync(b => b.Id == id);
-
-                if (branch == null)
-                {
-                    return NotFound(new { message = "Succursale non trouvée" });
-                }
-
-                return Ok(MapToBranchDto(branch));
+                var dto = await _branchService.GetBranchAsync(id);
+                return Ok(dto);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Succursale non trouvée" });
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "GetBranch failed for {BranchId}", id);
                 return StatusCode(500, new { message = "Erreur lors du chargement de la succursale", error = ex.Message });
             }
         }
@@ -63,54 +63,20 @@ namespace NalaCreditAPI.Controllers
         {
             try
             {
-                // Generate code if not provided
                 if (string.IsNullOrEmpty(createBranchDto.Code))
                 {
-                    createBranchDto.Code = await GenerateBranchCodeFromName(createBranchDto.Name);
+                    createBranchDto.Code = GenerateBranchCodeFallback(createBranchDto.Name);
                 }
-
-                // Check if code already exists
-                var existingBranch = await _context.Branches.FirstOrDefaultAsync(b => b.Code == createBranchDto.Code);
-                if (existingBranch != null)
-                {
-                    return BadRequest(new { message = "Ce code de succursale existe déjà" });
-                }
-
-                var branch = new Branch
-                {
-                    Name = createBranchDto.Name,
-                    Code = createBranchDto.Code,
-                    Address = createBranchDto.Address,
-                    Commune = createBranchDto.Commune,
-                    Phones = createBranchDto.Phones,
-                    Region = createBranchDto.Department,
-                    Email = createBranchDto.Email,
-                    OpeningDate = DateTime.TryParse(createBranchDto.OpeningDate, out var openingDate) ? openingDate : DateTime.UtcNow,
-                    ManagerId = createBranchDto.ManagerId,
-                    MaxEmployees = createBranchDto.MaxEmployees,
-                    PrimaryCurrency = Currency.HTG,
-                    DailyWithdrawalLimit = createBranchDto.Limits.DailyWithdrawalLimit,
-                    DailyDepositLimit = createBranchDto.Limits.DailyDepositLimit,
-                    MaxLocalCreditApproval = createBranchDto.Limits.MaxLocalCreditApproval,
-                    MinCashReserveHTG = createBranchDto.Limits.MinCashReserveHTG,
-                    MinCashReserveUSD = createBranchDto.Limits.MinCashReserveUSD,
-                    OpenTime = TimeSpan.TryParse(createBranchDto.OperatingHours.OpenTime, out var openTime) ? openTime : new TimeSpan(8, 0, 0),
-                    CloseTime = TimeSpan.TryParse(createBranchDto.OperatingHours.CloseTime, out var closeTime) ? closeTime : new TimeSpan(17, 0, 0),
-                    ClosedDays = createBranchDto.OperatingHours.ClosedDays ?? new List<int>(),
-                    IsActive = createBranchDto.Status == "Active",
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                _context.Branches.Add(branch);
-                await _context.SaveChangesAsync();
-
-                return CreatedAtAction(
-                    nameof(GetBranch),
-                    new { id = branch.Id },
-                    MapToBranchDto(branch));
+                var dto = await _branchService.CreateBranchAsync(createBranchDto);
+                return CreatedAtAction(nameof(GetBranch), new { id = dto.Id }, dto);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "CreateBranch failed");
                 return StatusCode(500, new { message = "Erreur lors de la création de la succursale", error = ex.Message });
             }
         }
@@ -120,49 +86,25 @@ namespace NalaCreditAPI.Controllers
         {
             try
             {
-                var branch = await _context.Branches.FindAsync(id);
-                if (branch == null)
-                {
-                    return NotFound(new { message = "Succursale non trouvée" });
-                }
-
-                // Check if code is already used by another branch
-                if (!string.IsNullOrEmpty(updateBranchDto.Code))
-                {
-                    var existingBranch = await _context.Branches.FirstOrDefaultAsync(b => b.Code == updateBranchDto.Code && b.Id != id);
-                    if (existingBranch != null)
-                    {
-                        return BadRequest(new { message = "Ce code de succursale est déjà utilisé par une autre succursale" });
-                    }
-                }
-
-                branch.Name = updateBranchDto.Name;
-                branch.Code = updateBranchDto.Code;
-                branch.Address = updateBranchDto.Address;
-                branch.Commune = updateBranchDto.Commune;
-                branch.Phones = updateBranchDto.Phones;
-                branch.Region = updateBranchDto.Department;
-                branch.Email = updateBranchDto.Email;
-                branch.OpeningDate = DateTime.TryParse(updateBranchDto.OpeningDate, out var openingDate) ? openingDate : branch.OpeningDate;
-                branch.ManagerId = updateBranchDto.ManagerId;
-                branch.MaxEmployees = updateBranchDto.MaxEmployees;
-                branch.DailyWithdrawalLimit = updateBranchDto.Limits.DailyWithdrawalLimit;
-                branch.DailyDepositLimit = updateBranchDto.Limits.DailyDepositLimit;
-                branch.MaxLocalCreditApproval = updateBranchDto.Limits.MaxLocalCreditApproval;
-                branch.MinCashReserveHTG = updateBranchDto.Limits.MinCashReserveHTG;
-                branch.MinCashReserveUSD = updateBranchDto.Limits.MinCashReserveUSD;
-                branch.OpenTime = TimeSpan.TryParse(updateBranchDto.OperatingHours.OpenTime, out var openTime) ? openTime : branch.OpenTime;
-                branch.CloseTime = TimeSpan.TryParse(updateBranchDto.OperatingHours.CloseTime, out var closeTime) ? closeTime : branch.CloseTime;
-                branch.ClosedDays = updateBranchDto.OperatingHours.ClosedDays ?? new List<int>();
-                branch.IsActive = updateBranchDto.Status == "Active";
-                branch.UpdatedAt = DateTime.UtcNow;
-
-                await _context.SaveChangesAsync();
-
-                return Ok(MapToBranchDto(branch));
+                var result = await _branchService.UpdateBranchAsync(id, updateBranchDto);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Succursale non trouvée" });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (FormatException ex)
+            {
+                _logger.LogWarning(ex, "FormatException lors de la modification de la succursale {BranchId}", id);
+                return BadRequest(new { message = "Format de donnée invalide pour la succursale", error = ex.Message });
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "UpdateBranch failed for branch {BranchId}", id);
                 return StatusCode(500, new { message = "Erreur lors de la modification de la succursale", error = ex.Message });
             }
         }
@@ -298,114 +240,38 @@ namespace NalaCreditAPI.Controllers
         }
 
         [HttpGet("{branchId}/history")]
-        public async Task<ActionResult<IEnumerable<BranchHistoryDto>>> GetBranchHistory(int branchId)
+        public Task<ActionResult<IEnumerable<BranchHistoryDto>>> GetBranchHistory(int branchId)
         {
-            try
-            {
-                // For now, return empty list - will implement audit log later
-                var history = new List<BranchHistoryDto>();
-                return Ok(history);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Erreur lors du chargement de l'historique", error = ex.Message });
-            }
+            // Synchronous stub; no await required. Converted to Task.FromResult to remove CS1998 warning.
+            var history = new List<BranchHistoryDto>();
+            ActionResult<IEnumerable<BranchHistoryDto>> result = Ok(history);
+            return Task.FromResult(result);
         }
 
-        private BranchDto MapToBranchDto(Branch branch)
+        // Mapping now centralized in BranchService.MapToDto; keep fallback generator for code only
+
+        private string GenerateBranchCodeFallback(string name)
         {
-            try
-            {
-                // Safely format TimeSpan values
-                string openTime = "08:00";
-                string closeTime = "17:00";
-                try
-                {
-                    openTime = branch.OpenTime.ToString(@"HH\:mm");
-                    closeTime = branch.CloseTime.ToString(@"HH\:mm");
-                }
-                catch
-                {
-                    // Use defaults if TimeSpan formatting fails
-                }
-
-                // Safely format DateTime values
-                string openingDate = DateTime.UtcNow.ToString("yyyy-MM-dd");
-                string createdAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
-                string updatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
-                try
-                {
-                    openingDate = branch.OpeningDate.ToString("yyyy-MM-dd");
-                    createdAt = branch.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ");
-                    updatedAt = branch.UpdatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ");
-                }
-                catch
-                {
-                    // Use defaults if DateTime formatting fails
-                }
-
-                return new BranchDto
-                {
-                    Id = branch.Id,
-                    Name = branch.Name ?? "Unknown Branch",
-                    Code = branch.Code ?? $"BR-{branch.Id:D3}",
-                    Address = branch.Address ?? "Unknown Address",
-                    Commune = branch.Commune ?? ExtractCommune(branch.Address ?? ""),
-                    Department = branch.Region ?? "Unknown",
-                    Phones = branch.Phones ?? new List<string>(),
-                    Email = branch.Email ?? $"succursale{branch.Id}@nalacredit.com",
-                    OpeningDate = openingDate,
-                    ManagerId = branch.ManagerId,
-                    ManagerName = branch.Manager != null ? $"{branch.Manager.FirstName ?? ""} {branch.Manager.LastName ?? ""}".Trim() : null,
-                    MaxEmployees = branch.MaxEmployees,
-                    Status = branch.IsActive ? "Active" : "Inactive",
-                    Limits = new BranchLimitsDto
-                    {
-                        DailyWithdrawalLimit = branch.DailyWithdrawalLimit,
-                        DailyDepositLimit = branch.DailyDepositLimit,
-                        MaxLocalCreditApproval = branch.MaxLocalCreditApproval,
-                        MinCashReserveHTG = branch.MinCashReserveHTG,
-                        MinCashReserveUSD = branch.MinCashReserveUSD
-                    },
-                    OperatingHours = new OperatingHoursDto
-                    {
-                        OpenTime = openTime,
-                        CloseTime = closeTime,
-                        ClosedDays = branch.ClosedDays ?? new List<int> { 0 }
-                    },
-                    CreatedAt = createdAt,
-                    UpdatedAt = updatedAt
-                };
-            }
-            catch (Exception ex)
-            {
-                // Log the error and return a basic DTO
-                Console.WriteLine($"Error mapping branch {branch?.Id}: {ex.Message}");
-                Console.WriteLine($"Branch data: Name={branch?.Name}, Region={branch?.Region}");
-                throw; // Re-throw to let the controller handle it
-            }
-        }
-
-        private string ExtractCommune(string address)
-        {
-            // Simple extraction - in real app this would be more sophisticated
-            return "Port-au-Prince";
+            var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var code = string.Join("", words.Select(w => w.Substring(0, Math.Min(3, w.Length)).ToUpper()));
+            return string.IsNullOrWhiteSpace(code) ? $"BR-{Guid.NewGuid().ToString()[..6].ToUpper()}" : code;
         }
 
         private async Task<string> GenerateBranchCodeFromName(string name)
         {
             var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var code = string.Join("", words.Select(w => w.Substring(0, Math.Min(3, w.Length)).ToUpper()));
-            
-            // Ensure uniqueness
+            var baseCode = string.Join("", words.Select(w => w.Substring(0, Math.Min(3, w.Length)).ToUpper()));
+            if (string.IsNullOrWhiteSpace(baseCode))
+            {
+                baseCode = "BR";
+            }
+            var code = baseCode;
             var counter = 1;
-            var baseCode = code;
             while (await _context.Branches.AnyAsync(b => b.Code == code))
             {
                 code = $"{baseCode}{counter:D2}";
                 counter++;
             }
-
             return code;
         }
 

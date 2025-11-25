@@ -3,6 +3,7 @@ using NalaCreditAPI.DTOs;
 using NalaCreditAPI.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using NalaCreditAPI.Helpers;
 
 namespace NalaCreditAPI.Services
 {
@@ -275,8 +276,32 @@ namespace NalaCreditAPI.Services
                     _context.MicrocreditBorrowers.Add(borrower);
                 }
 
-                // Calculate guarantee amount (15% of requested amount)
-                var guaranteeAmount = dto.RequestedAmount * 0.15m;
+                // Calculate guarantee amount based on loan type via policy helper
+                var guaranteeAmount = dto.RequestedAmount * GuaranteePolicy.GetGuaranteePercentage(dto.LoanType);
+
+                // ✅ VALIDATION 3: Check available balance for guarantee blocking
+                // Vérifier les garanties déjà bloquées pour ce compte
+                var existingBlockedApplications = await _context.MicrocreditLoanApplications
+                    .Where(a => a.BlockedSavingsAccountId == savingsAccount.Id &&
+                               (a.Status == MicrocreditApplicationStatus.Submitted ||
+                                a.Status == MicrocreditApplicationStatus.UnderReview ||
+                                a.Status == MicrocreditApplicationStatus.Approved))
+                    .SumAsync(a => a.BlockedGuaranteeAmount ?? 0);
+
+                var totalBlockedForGuarantees = savingsAccount.BlockedBalance;
+                var availableForNewGuarantee = savingsAccount.Balance - totalBlockedForGuarantees;
+
+                _logger.LogInformation(
+                    "Nouvelle demande - Compte épargne {AccountNumber}: Solde total={TotalBalance}, Bloqué={BlockedBalance}, Disponible pour garantie={AvailableForGuarantee}, Garantie requise={RequiredGuarantee}",
+                    savingsAccount.AccountNumber, savingsAccount.Balance, totalBlockedForGuarantees, availableForNewGuarantee, guaranteeAmount);
+
+                if (availableForNewGuarantee < guaranteeAmount)
+                {
+                    throw new InvalidOperationException(
+                        $"Fonds insuffisants pour la garantie. Solde disponible: {availableForNewGuarantee:N2} {savingsAccount.Currency}. " +
+                        $"Garantie requise: {guaranteeAmount:N2} {dto.Currency}. " +
+                        $"Garanties déjà bloquées: {existingBlockedApplications:N2} {savingsAccount.Currency}.");
+                }
 
                 var application = new MicrocreditLoanApplication
                 {
@@ -329,24 +354,19 @@ namespace NalaCreditAPI.Services
                 };
 
                 // 🔒 Block the guarantee amount from the savings account
-                if (savingsAccount.AvailableBalance >= guaranteeAmount)
-                {
-                    // Block the guarantee amount
-                    savingsAccount.BlockedBalance += guaranteeAmount;
-                    savingsAccount.AvailableBalance -= guaranteeAmount;
-                    savingsAccount.UpdatedAt = DateTime.UtcNow;
-                    application.BlockedSavingsAccountId = savingsAccount.Id;
-                    
-                    // Update application status to indicate guarantee is blocked
-                    application.Status = MicrocreditApplicationStatus.Submitted;
-                    application.SubmittedAt = DateTime.UtcNow;
-                }
-                else
-                {
-                    // If insufficient funds, still create application but don't block
-                    application.BlockedGuaranteeAmount = null;
-                    application.BlockedSavingsAccountId = null;
-                }
+                // Puisque nous avons validé que le solde disponible est suffisant, procéder au blocage
+                savingsAccount.BlockedBalance += guaranteeAmount;
+                savingsAccount.AvailableBalance -= guaranteeAmount;
+                savingsAccount.UpdatedAt = DateTime.UtcNow;
+                application.BlockedSavingsAccountId = savingsAccount.Id;
+
+                // Update application status to indicate guarantee is blocked
+                application.Status = MicrocreditApplicationStatus.Submitted;
+                application.SubmittedAt = DateTime.UtcNow;
+
+                _logger.LogInformation(
+                    "Garantie bloquée avec succès - Compte {AccountNumber}: Montant bloqué={BlockedAmount}, Nouveau solde disponible={NewAvailableBalance}",
+                    savingsAccount.AccountNumber, guaranteeAmount, savingsAccount.AvailableBalance);
 
                 _context.MicrocreditLoanApplications.Add(application);
                 // Add guarantees if provided
@@ -450,6 +470,107 @@ namespace NalaCreditAPI.Services
                 : 0;
 
             application.UpdatedAt = DateTime.UtcNow;
+
+            // Recalculate guarantee requirement based on potential new amount or loan type
+            var newRequiredGuarantee = dto.RequestedAmount * GuaranteePolicy.GetGuaranteePercentage(dto.LoanType);
+            var previousBlocked = application.BlockedGuaranteeAmount;
+            var hadBlocked = application.BlockedSavingsAccountId != null && previousBlocked.HasValue;
+
+            // If this is an update and guarantee was previously blocked, check available balance considering other blocked guarantees
+            if (hadBlocked)
+            {
+                var savingsAccount = await _context.SavingsAccounts.FirstOrDefaultAsync(a => a.Id == application.BlockedSavingsAccountId);
+                if (savingsAccount != null)
+                {
+                    // Calculate available balance excluding this application's current block
+                    var otherBlockedApplications = await _context.MicrocreditLoanApplications
+                        .Where(a => a.BlockedSavingsAccountId == savingsAccount.Id &&
+                                   a.Id != application.Id && // Exclude current application
+                                   (a.Status == MicrocreditApplicationStatus.Submitted ||
+                                    a.Status == MicrocreditApplicationStatus.UnderReview ||
+                                    a.Status == MicrocreditApplicationStatus.Approved))
+                        .SumAsync(a => a.BlockedGuaranteeAmount ?? 0);
+
+                    var totalBlockedExcludingCurrent = savingsAccount.BlockedBalance - (previousBlocked ?? 0);
+                    var availableForNewGuarantee = savingsAccount.Balance - totalBlockedExcludingCurrent;
+
+                    _logger.LogInformation(
+                        "Mise à jour demande - Compte épargne {AccountNumber}: Solde total={TotalBalance}, Bloqué (autres)={OtherBlocked}, Disponible pour garantie={AvailableForGuarantee}, Nouvelle garantie requise={RequiredGuarantee}",
+                        savingsAccount.AccountNumber, savingsAccount.Balance, otherBlockedApplications, availableForNewGuarantee, newRequiredGuarantee);
+
+                    if (availableForNewGuarantee < newRequiredGuarantee)
+                    {
+                        throw new InvalidOperationException(
+                            $"Fonds insuffisants pour ajuster la garantie lors de la mise à jour. Solde disponible: {availableForNewGuarantee:N2} {savingsAccount.Currency}. " +
+                            $"Nouvelle garantie requise: {newRequiredGuarantee:N2} {dto.Currency}. " +
+                            $"Garanties d'autres demandes: {otherBlockedApplications:N2} {savingsAccount.Currency}.");
+                    }
+                }
+            }
+
+            application.BlockedGuaranteeAmount = newRequiredGuarantee;
+
+            // Adjust blocked balances if savings guarantee was already blocked
+            if (hadBlocked)
+            {
+                var savingsAccount = await _context.SavingsAccounts.FirstOrDefaultAsync(a => a.Id == application.BlockedSavingsAccountId);
+                if (savingsAccount != null)
+                {
+                    // Difference between new required and previously blocked
+                    var diff = newRequiredGuarantee - previousBlocked!.Value;
+                    if (diff == 0)
+                    {
+                        // Nothing to do
+                        _logger.LogInformation("Aucun ajustement nécessaire pour la garantie - Compte {AccountNumber}", savingsAccount.AccountNumber);
+                    }
+                    else if (diff > 0)
+                    {
+                        // Need to block additional funds
+                        // Available balance already excludes current application's block, so we can check directly
+                        var currentAvailable = savingsAccount.AvailableBalance + previousBlocked!.Value; // Add back current block temporarily
+                        if (currentAvailable >= newRequiredGuarantee)
+                        {
+                            savingsAccount.AvailableBalance -= diff;
+                            savingsAccount.BlockedBalance += diff;
+                            _logger.LogInformation(
+                                "Garantie augmentée - Compte {AccountNumber}: +{IncreaseAmount}, Nouveau solde disponible={NewAvailableBalance}",
+                                savingsAccount.AccountNumber, diff, savingsAccount.AvailableBalance);
+                        }
+                        else
+                        {
+                            // Insufficient funds for additional block: rollback previous block to avoid mismatch
+                            savingsAccount.BlockedBalance -= previousBlocked!.Value;
+                            savingsAccount.AvailableBalance += previousBlocked!.Value;
+                            application.BlockedSavingsAccountId = null; // mark as not blocked anymore
+                            _logger.LogWarning(
+                                "Fonds insuffisants pour augmenter la garantie - Blocage annulé - Compte {AccountNumber}",
+                                savingsAccount.AccountNumber);
+                        }
+                    }
+                    else // diff < 0, reduce blocked amount
+                    {
+                        var reduce = -diff; // positive value
+                        if (savingsAccount.BlockedBalance >= reduce)
+                        {
+                            savingsAccount.BlockedBalance -= reduce;
+                            savingsAccount.AvailableBalance += reduce;
+                            _logger.LogInformation(
+                                "Garantie réduite - Compte {AccountNumber}: -{ReduceAmount}, Nouveau solde disponible={NewAvailableBalance}",
+                                savingsAccount.AccountNumber, reduce, savingsAccount.AvailableBalance);
+                        }
+                        else
+                        {
+                            // Data inconsistency safeguard: reset blocked balances related to this application
+                            savingsAccount.AvailableBalance += savingsAccount.BlockedBalance;
+                            savingsAccount.BlockedBalance = 0;
+                            application.BlockedSavingsAccountId = null;
+                            _logger.LogError(
+                                "Incohérence détectée dans les soldes bloqués - Réinitialisation - Compte {AccountNumber}",
+                                savingsAccount.AccountNumber);
+                        }
+                    }
+                }
+            }
 
             // Update guarantees on update: remove existing guarantees and re-add incoming DTO guarantees
             if (dto.Guarantees != null)

@@ -700,9 +700,9 @@ namespace NalaCreditAPI.Controllers
         }
 
         // Méthodes privées d'aide
-        private async Task<MicrocreditBorrowerDto> MapToBorrowerDto(MicrocreditBorrower borrower)
+        private Task<MicrocreditBorrowerDto> MapToBorrowerDto(MicrocreditBorrower borrower)
         {
-            return new MicrocreditBorrowerDto
+            var dto = new MicrocreditBorrowerDto
             {
                 Id = borrower.Id,
                 FirstName = borrower.FirstName,
@@ -718,15 +718,15 @@ namespace NalaCreditAPI.Controllers
                 EmploymentType = borrower.EmploymentType,
                 YearsInBusiness = borrower.YearsInBusiness,
                 CreditScore = borrower.CreditScore,
-                PreviousLoans = borrower.PreviousLoans != null ?
-                    JsonSerializer.Deserialize<List<PreviousLoanDto>>(borrower.PreviousLoans) : null,
+                PreviousLoans = borrower.PreviousLoans != null ? JsonSerializer.Deserialize<List<PreviousLoanDto>>(borrower.PreviousLoans) : null,
                 References = JsonSerializer.Deserialize<List<ReferenceDto>>(borrower.References)!,
                 CreatedAt = borrower.CreatedAt,
                 UpdatedAt = borrower.UpdatedAt
             };
+            return Task.FromResult(dto);
         }
 
-        private async Task<int> CalculateCreditScore(MicrocreditBorrower borrower)
+        private Task<int> CalculateCreditScore(MicrocreditBorrower borrower)
         {
             int score = 500; // Score de base
 
@@ -757,7 +757,7 @@ namespace NalaCreditAPI.Controllers
             else score -= 30;
 
             // Limiter le score entre 300 et 900
-            return Math.Max(300, Math.Min(900, score));
+            return Task.FromResult(Math.Max(300, Math.Min(900, score)));
         }
 
         private string GetCreditScoreLevel(int score)
@@ -769,7 +769,7 @@ namespace NalaCreditAPI.Controllers
             return "Très Risqué";
         }
 
-        private async Task<List<CreditScoreFactorDto>> GetCreditScoreFactors(MicrocreditBorrower borrower)
+        private Task<List<CreditScoreFactorDto>> GetCreditScoreFactors(MicrocreditBorrower borrower)
         {
             var factors = new List<CreditScoreFactorDto>();
 
@@ -827,10 +827,10 @@ namespace NalaCreditAPI.Controllers
                 Description = $"{completedLoans} prêts complétés, {overdueLoans} en retard"
             });
 
-            return factors;
+            return Task.FromResult(factors);
         }
 
-        private async Task<RiskAssessmentDto> CalculateRiskAssessment(MicrocreditBorrower borrower)
+        private Task<RiskAssessmentDto> CalculateRiskAssessment(MicrocreditBorrower borrower)
         {
             var assessment = new RiskAssessmentDto
             {
@@ -901,10 +901,10 @@ namespace NalaCreditAPI.Controllers
             else
                 assessment.Recommendation = "Client très risqué - rejeter ou exiger garanties exceptionnelles";
 
-            return assessment;
+            return Task.FromResult(assessment);
         }
 
-        private async Task<BorrowerStatisticsDto> CalculateBorrowerStatistics(MicrocreditBorrower borrower)
+        private Task<BorrowerStatisticsDto> CalculateBorrowerStatistics(MicrocreditBorrower borrower)
         {
             var stats = new BorrowerStatisticsDto
             {
@@ -924,7 +924,7 @@ namespace NalaCreditAPI.Controllers
                 MemberSince = borrower.CreatedAt
             };
 
-            return stats;
+            return Task.FromResult(stats);
         }
 
         private bool HasActiveLoans(MicrocreditBorrower borrower)
