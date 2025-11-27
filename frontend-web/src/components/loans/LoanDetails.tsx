@@ -103,6 +103,7 @@ interface PaymentHistory {
   receiptNumber: string;
   receivedBy: string;
   notes?: string;
+  branchName?: string;
 }
 
 interface LoanDetailsProps {
@@ -305,7 +306,7 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
     setHistoryError(null);
     
     try {
-      const payments = await microcreditPaymentService.getLoanPayments(loanId);
+  const payments = await microcreditPaymentService.getLoanPayments(loanId);
       
       // Map backend data to component format
       const mappedHistory: PaymentHistory[] = payments.map(payment => ({
@@ -318,7 +319,8 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
         paymentMethod: mapPaymentMethod(payment.paymentMethod),
         receiptNumber: payment.receiptNumber,
         receivedBy: payment.processedByName || payment.processedBy,
-        notes: payment.notes
+        notes: payment.notes,
+        branchName: payment.branchName
       }));
 
       setPaymentHistory(mappedHistory.reverse()); // Most recent first
@@ -514,10 +516,132 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
     }
   };
 
-  const handleDownloadReceipt = (receiptNumber: string) => {
-    // Placeholder: implement backend receipt download endpoint when available
-    toast.error('Téléchargement du reçu non implémenté');
-    console.log('Download receipt requested:', receiptNumber);
+  const handlePrintReceipt = async (payment: PaymentHistory) => {
+    try {
+      const receipt = await microcreditPaymentService.getPaymentReceipt(payment.id);
+
+      const fmt = (v: number, currency = loan.currency) => new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + (currency ? ` ${currency}` : '');
+      const esc = (s?: string) => (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const methodLabel = (m: string) => {
+        switch (m) {
+          case 'CASH': return 'Espèces';
+          case 'CHECK': return 'Chèque';
+          case 'TRANSFER': return 'Virement';
+          case 'MOBILE_MONEY': return 'Mobile Money';
+          default: return m;
+        }
+      };
+
+      // Prefer a human-friendly receiver name when available
+      const receivedByDisplay = (receipt as any).receivedByName || payment.receivedBy || receipt.receivedBy;
+
+      // Compute remaining balance including dossier fees at the time of this receipt
+      const receiptDate = new Date((receipt as any).paymentDate || payment.paymentDate);
+      const totalPaidUntil = paymentHistory
+        .filter(p => {
+          const d = new Date(p.paymentDate);
+          return d.getTime() <= receiptDate.getTime() || p.id === payment.id;
+        })
+        .reduce((sum, p) => sum + (p.amount || 0), 0);
+      const grandTotalWithFees = (scheduleFeeTotals?.totalWithFees ?? 0);
+      const remainingWithFeesAtThisReceipt = Math.max(0, roundCurrency(grandTotalWithFees - totalPaidUntil));
+
+      const html = `<!DOCTYPE html>
+        <html lang="fr">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>Reçu - ${esc(receipt.receiptNumber)}</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; color:#111; }
+              .header { text-align: center; margin-bottom: 16px }
+              .muted { color:#666; font-size: 0.9rem }
+              .grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px 16px; }
+              .row { display:flex; justify-content:space-between; margin:6px 0 }
+              .section { border:1px solid #e5e7eb; border-radius:8px; padding:12px; margin-top:12px }
+              h2 { margin: 0 0 4px 0; font-size: 18px; }
+              h3 { margin: 0 0 8px 0; font-size: 14px; color:#374151 }
+              @media print { .no-print { display: none; } }
+            </style>
+            <script>
+              window.addEventListener('load', function(){
+                try { window.print(); } catch(e) {}
+                setTimeout(function(){ try { window.close(); } catch(e) {} }, 300);
+              });
+            </script>
+          </head>
+          <body>
+            <div class="header">
+              <h1>Nala Kredi Ti Machann</h1>
+              <h2>Reçu de Paiement Microcrédit</h2>
+              <div class="muted">N° Reçu: ${esc(receipt.receiptNumber)}</div>
+            </div>
+
+            <div class="grid">
+              <div><strong>Date/Heure:</strong> ${new Date(receipt.paymentDate).toLocaleString('fr-FR')}</div>
+              <div><strong>Généré le:</strong> ${new Date(receipt.generatedAt).toLocaleString('fr-FR')}</div>
+              <div><strong>Client:</strong> ${esc(receipt.borrowerName)}</div>
+              <div><strong>Prêt #:</strong> ${esc(receipt.loanNumber)}</div>
+              <div><strong>Méthode:</strong> ${esc(methodLabel(receipt.paymentMethod))}</div>
+              <div><strong>Référence:</strong> ${esc(receipt.transactionReference || '—')}</div>
+              <div><strong>Succursale:</strong> ${esc(receipt.branchName || payment.branchName || (loan as any).branch || '')}</div>
+              <div><strong>Reçu par:</strong> ${esc(receivedByDisplay)}</div>
+            </div>
+
+            <div class="section">
+              <h3>Montant Payé</h3>
+              <div class="row"><div>Total versé</div><div><strong>${fmt(receipt.paymentAmount)}</strong></div></div>
+            </div>
+
+            <div class="section">
+              <h3>Détail de l'allocation</h3>
+              <div class="row"><div>Capital</div><div>${fmt(receipt.allocation?.principalAmount || 0)}</div></div>
+              <div class="row"><div>Intérêt</div><div>${fmt(receipt.allocation?.interestAmount || 0)}</div></div>
+              <div class="row"><div>Pénalités</div><div>${fmt(receipt.allocation?.penaltyAmount || 0)}</div></div>
+              <div class="row"><div>Frais</div><div>${fmt(receipt.allocation?.feesAmount || 0)}</div></div>
+            </div>
+
+            <div class="section">
+              <h3>Résumé du prêt</h3>
+              <div class="row"><div>Total à rembourser (+ Frais)</div><div>${fmt(grandTotalWithFees)}</div></div>
+              <div class="row"><div>Total payé jusqu'à ce reçu</div><div>${fmt(totalPaidUntil)}</div></div>
+              <div class="row"><div>Solde Restant (+ Frais)</div><div><strong>${fmt(remainingWithFeesAtThisReceipt)}</strong></div></div>
+            </div>
+
+            <div class="muted" style="margin-top:24px;">Merci pour votre paiement.</div>
+            <div class="no-print" style="margin-top:12px; text-align:center; color:#666">Cette fenêtre se fermera après l'impression.</div>
+          </body>
+        </html>`;
+
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url, '_blank');
+      if (w) {
+        setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 2000);
+        toast.success('Reçu prêt à imprimer');
+        return;
+      }
+
+      // Fallback if popup blocked
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.src = url;
+      const cleanup = () => { try { document.body.removeChild(iframe); } catch {} try { URL.revokeObjectURL(url); } catch {} };
+      iframe.onload = () => {
+        try { const win = iframe.contentWindow as Window | null; if (win) { win.focus(); win.print(); } } catch {}
+        setTimeout(cleanup, 1000);
+      };
+      document.body.appendChild(iframe);
+      toast.success('Reçu prêt à imprimer');
+    } catch (error: any) {
+      console.error('Error printing receipt:', error);
+      toast.error(error?.message || "Erreur lors de la génération du reçu");
+    }
   };
 
   const handleDownloadContract = () => {
@@ -533,9 +657,11 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
     try {
       // CSV header with UTF-8 BOM for Excel compatibility
       let csvContent = '\ufeff';
-  csvContent += '"#","Date d\'Échéance","Capital","Intérêt","Frais","Total (hors frais)","Total + Frais","Solde Restant","Statut"\n';
+  csvContent += '"#","Date d\'Échéance","Capital","Intérêt","Frais","Total (hors frais)","Total + Frais","Solde Restant (+ Frais)","Statut"\n';
 
       // Add data rows
+      let cumulativeWithFees = 0;
+      const grandTotalWithFeesCsv = scheduleFeeTotals.totalWithFees || 0;
       paymentSchedule.forEach(item => {
         const statusText = 
           item.status === 'PAID' ? 'Payé' :
@@ -543,14 +669,19 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
           item.status === 'OVERDUE' ? 'En retard' :
           item.status === 'UPCOMING' ? 'À venir' : '';
 
+        const totalHorsFrais = item.totalPayment ?? roundCurrency((item.principalAmount || 0) + (item.interestAmount || 0));
+        const totalAvecFrais = (item.totalAmountWithFee ?? (totalHorsFrais + (item.feePortion || 0)));
+        cumulativeWithFees += totalAvecFrais;
+        const remainingWithFees = Math.max(0, roundCurrency(grandTotalWithFeesCsv - cumulativeWithFees));
+
         csvContent += `${item.installmentNumber},`;
         csvContent += `"${formatDate(item.dueDate)}",`;
         csvContent += `"${formatCurrency(item.principalAmount, loan.currency)}",`;
         csvContent += `"${formatCurrency(item.interestAmount ?? 0, loan.currency)}",`;
         csvContent += `"${formatCurrency(item.feePortion ?? 0, loan.currency)}",`;
-  csvContent += `"${formatCurrency(item.totalPayment ?? 0, loan.currency)}",`;
-  csvContent += `"${formatCurrency((item.totalAmountWithFee ?? ((item.totalPayment ?? 0) + (item.feePortion ?? 0))), loan.currency)}",`;
-        csvContent += `"${formatCurrency(item.remainingBalance, loan.currency)}",`;
+  csvContent += `"${formatCurrency(totalHorsFrais, loan.currency)}",`;
+  csvContent += `"${formatCurrency(totalAvecFrais, loan.currency)}",`;
+        csvContent += `"${formatCurrency(remainingWithFees, loan.currency)}",`;
         csvContent += `"${statusText}"\n`;
       });
 
@@ -583,6 +714,72 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
     } catch (error) {
       console.error('Error exporting schedule:', error);
       toast.error('Erreur lors de l\'export du calendrier');
+    }
+  };
+
+  // Export PDF of loan details (current tab view: overview or schedule table)
+  const handleExportPdf = () => {
+    try {
+      const openPrintWindow = (html: string) => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) { toast.error('Veuillez autoriser les pop-ups pour exporter en PDF'); return; }
+        printWindow.document.open();
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+      };
+
+      const title = `Détails du Prêt — ${loan.loanNumber}`;
+      let contentHtml = '';
+
+      if (activeTab === 'schedule') {
+        if (paymentSchedule.length === 0) { toast.error('Aucun calendrier à exporter'); return; }
+        const header = '<tr><th>#</th><th>Date</th><th>Capital</th><th>Intérêt</th><th>Frais</th><th>Total</th><th>Total + Frais</th><th>Solde (+ Frais)</th><th>Statut</th></tr>';
+        let cumulativeWithFees = 0;
+        const grandTotalWithFeesPdf = scheduleFeeTotals.totalWithFees || 0;
+        const rows = paymentSchedule.map(i => {
+          const statusText = i.status === 'PAID' ? 'Payé' : i.status === 'OVERDUE' ? 'En retard' : i.status === 'UPCOMING' ? 'À venir' : 'En cours';
+          const totalHorsFrais = i.totalPayment ?? roundCurrency((i.principalAmount || 0) + (i.interestAmount || 0));
+          const totalAvecFrais = (i.totalAmountWithFee ?? (totalHorsFrais + (i.feePortion || 0)));
+          cumulativeWithFees += totalAvecFrais;
+          const remainingWithFees = Math.max(0, roundCurrency(grandTotalWithFeesPdf - cumulativeWithFees));
+          return `<tr><td>${i.installmentNumber}</td><td>${formatDate(i.dueDate)}</td><td>${formatCurrency(i.principalAmount, loan.currency)}</td><td>${formatCurrency(i.interestAmount || 0, loan.currency)}</td><td>${formatCurrency(i.feePortion || 0, loan.currency)}</td><td>${formatCurrency(totalHorsFrais, loan.currency)}</td><td>${formatCurrency(totalAvecFrais, loan.currency)}</td><td>${formatCurrency(remainingWithFees, loan.currency)}</td><td>${statusText}</td></tr>`;
+        }).join('');
+        contentHtml = `<table><thead>${header}</thead><tbody>${rows}</tbody></table>`;
+      } else {
+        // Overview: basic key fields
+        contentHtml = `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div><strong>Numéro:</strong> ${loan.loanNumber}</div>
+            <div><strong>Client:</strong> ${loan.customerName}</div>
+            <div><strong>Montant:</strong> ${formatCurrency(loan.principalAmount, loan.currency)}</div>
+            <div><strong>Mensualité:</strong> ${formatCurrency(loan.monthlyPayment, loan.currency)}</div>
+            <div><strong>Durée (mois):</strong> ${loan.termMonths}</div>
+            <div><strong>Statut:</strong> ${loan.status}</div>
+            <div><strong>Succursale:</strong> ${loan.branch}</div>
+            <div><strong>Agent:</strong> ${loan.loanOfficer}</div>
+          </div>`;
+      }
+
+      const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8" />
+        <title>${title}</title>
+        <style>
+          body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Noto Sans',sans-serif;padding:24px}
+          h1{font-size:18px;margin-bottom:12px}
+          table{width:100%;border-collapse:collapse;margin-top:8px}
+          th,td{border:1px solid #ddd;padding:6px;font-size:12px}
+          th{background:#f3f4f6;text-align:left}
+        </style>
+      </head><body>
+        <h1>${title}</h1>
+        ${contentHtml}
+      </body></html>`;
+
+      openPrintWindow(html);
+    } catch (error) {
+      console.error('Error exporting loan PDF:', error);
+      toast.error('Erreur lors de l\'export PDF');
     }
   };
 
@@ -668,6 +865,12 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
     const grandTotal = (scheduleFeeTotals.totalWithFees || 0);
     return Math.max(0, roundCurrency(grandTotal - totalPaidAmount));
   }, [scheduleFeeTotals, totalPaidAmount]);
+
+  // Convenience: dossier fee totals and monthly portion, plus monthly payment including fees
+  const approvedAmountForFees = (loan as any).approvedAmount ?? loan.principalAmount ?? 0;
+  const dossierFeeTotal = roundCurrency(approvedAmountForFees * 0.05);
+  const monthlyFeePortion = roundCurrency(dossierFeeTotal / (loan.termMonths || 1));
+  const monthlyPaymentWithFee = (loan as any).monthlyPaymentWithFee ?? roundCurrency(effectiveMonthlyPayment + monthlyFeePortion);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
@@ -771,7 +974,7 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                       <div className="flex justify-between">
                         <span className="text-gray-600">Frais dossier (5%)</span>
                         <span className="font-semibold text-gray-900">
-                          {formatCurrency(Math.round(((loan as any).approvedAmount || 0) * 0.05), loan.currency)}
+                          {formatCurrency(dossierFeeTotal, loan.currency)}
                         </span>
                       </div>
                     )}
@@ -827,16 +1030,14 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                       <div className="flex justify-between">
                         <span className="text-gray-600">Frais dossier (5%) réparti / mois:</span>
                         <span className="font-semibold text-gray-900">
-                          {formatCurrency(Math.round((((loan as any).approvedAmount || 0) * 0.05) / (loan.termMonths || 1)), loan.currency)}
+                          {formatCurrency(monthlyFeePortion, loan.currency)}
                         </span>
                       </div>
                     )}
-                    {(loan as any).monthlyPaymentWithFee && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Mensualité + Frais:</span>
-                        <span className="font-semibold text-purple-600">{formatCurrency((loan as any).monthlyPaymentWithFee, loan.currency)}</span>
-                      </div>
-                    )}
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Mensualité + Frais:</span>
+                      <span className="font-semibold text-purple-600">{formatCurrency(monthlyPaymentWithFee, loan.currency)}</span>
+                    </div>
                     {(loan as any).requestedAmount && (loan as any).requestedAmount !== loan.principalAmount && (
                       <div className="flex justify-between">
                         <span className="text-gray-600">Montant demandé:</span>
@@ -886,8 +1087,12 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                       <span className="font-semibold text-red-600">{formatCurrency(remainingPlannedInterest, loan.currency)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Total à Rembourser:</span>
+                      <span className="text-gray-600">Total (hors frais):</span>
                       <span className="font-semibold">{formatCurrency(plannedTotalRepayment, loan.currency)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Total à Rembourser (+ Frais):</span>
+                      <span className="font-semibold text-indigo-700">{formatCurrency(scheduleFeeTotals.totalWithFees, loan.currency)}</span>
                     </div>
                   </div>
                 </div>
@@ -1056,6 +1261,14 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                       <Printer className="w-4 h-4" />
                     </button>
                   )}
+                  <button
+                    onClick={handleExportPdf}
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    title="Exporter PDF"
+                  >
+                    <Download className="w-4 h-4" />
+                    Exporter PDF
+                  </button>
                 </div>
               </div>
 
@@ -1093,7 +1306,7 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                         Total + Frais
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Solde Restant
+                        Solde Restant (+ Frais)
                       </th>
                       <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Statut
@@ -1101,7 +1314,15 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {paymentSchedule.map((item) => (
+                    {(() => {
+                      let cumulativeWithFees = 0;
+                      const grandTotalWithFeesUi = scheduleFeeTotals.totalWithFees || 0;
+                      return paymentSchedule.map((item) => {
+                        const totalHorsFrais = item.totalPayment ?? roundCurrency((item.principalAmount || 0) + (item.interestAmount || 0));
+                        const totalAvecFrais = (item.totalAmountWithFee ?? (totalHorsFrais + (item.feePortion || 0)));
+                        cumulativeWithFees += totalAvecFrais;
+                        const remainingWithFees = Math.max(0, roundCurrency(grandTotalWithFeesUi - cumulativeWithFees));
+                        return (
                       <tr key={item.installmentNumber} className={item.status === 'OVERDUE' ? 'bg-red-50' : ''}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {item.installmentNumber}
@@ -1125,7 +1346,7 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                           {formatCurrency((item.totalAmountWithFee ?? ((item.totalPayment ?? 0) + (item.feePortion ?? 0))), loan.currency)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-600">
-                          {formatCurrency(item.remainingBalance, loan.currency)}
+                          {formatCurrency(remainingWithFees, loan.currency)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           {item.status === 'PAID' && (
@@ -1154,7 +1375,9 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                           )}
                         </td>
                       </tr>
-                    ))}
+                        );
+                      });
+                    })()}
                   </tbody>
                   <tfoot className="bg-gray-50 font-semibold">
                     <tr>
@@ -1167,10 +1390,17 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                       <td className="px-6 py-4 text-sm text-right text-gray-900">
                         {formatCurrency(scheduleTotals.interest, loan.currency)}
                       </td>
-                      <td className="px-6 py-4 text-sm text-right text-indigo-600">
+                      <td className="px-6 py-4 text-sm text-right text-gray-900">
+                        {formatCurrency(scheduleFeeTotals.fee, loan.currency)}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-right text-gray-900">
                         {formatCurrency(scheduleTotals.total, loan.currency)}
                       </td>
-                      <td colSpan={2}></td>
+                      <td className="px-6 py-4 text-sm text-right text-indigo-700">
+                        {formatCurrency(scheduleFeeTotals.totalWithFees, loan.currency)}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-right text-gray-900"></td>
+                      <td className="px-6 py-4 text-sm text-center text-gray-900"></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -1291,9 +1521,9 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                           )}
                         </div>
                         <button
-                          onClick={() => handleDownloadReceipt(payment.receiptNumber)}
+                          onClick={() => handlePrintReceipt(payment)}
                           className="text-indigo-600 hover:text-indigo-700 p-2"
-                          title="Télécharger le reçu"
+                          title="Imprimer / Télécharger le reçu"
                         >
                           <Download className="w-5 h-5" />
                         </button>

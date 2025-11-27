@@ -168,10 +168,10 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
     const principalPaid = Math.min(remaining, loan.remainingBalance);
     remaining -= principalPaid;
 
-    // Since loan.remainingBalance is the Total Balance (Principal + Interest),
-    // both principal and interest payments should reduce it.
-  // Base new balance on fee-inclusive remaining, for a more realistic display
-  const newBalance = roundCurrency(Math.max(0, remainingWithFees - (principalPaid + interestPaid + penaltyPaid)));
+    // Since remainingWithFees already includes dossier fees for the remaining schedule,
+    // reduce it by the portion of the payment applied to scheduled dues (amount minus penalty).
+    const coreApplied = Math.max(0, amount - penaltyPaid);
+    const newBalance = roundCurrency(Math.max(0, remainingWithFees - coreApplied));
 
     setPaymentBreakdown({
       principal: roundCurrency(principalPaid),
@@ -182,10 +182,10 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
     });
 
     // Intelligent partial installment detection (excluding penalty portion for comparison)
-    const installmentTotal = monthlyWithFee; // expected regular installment including fee
-    const corePaid = amount - penaltyPaid; // amount applied to interest + principal
-    const isPartial = corePaid < installmentTotal && newBalance > 0;
-    const remainingPortion = isPartial ? roundCurrency(Math.max(0, installmentTotal - corePaid)) : 0;
+  const installmentTotal = monthlyWithFee; // expected regular installment including fee
+  const corePaid = coreApplied; // amount applied to scheduled dues (excl. penalty)
+  const isPartial = corePaid < installmentTotal && newBalance > 0;
+  const remainingPortion = isPartial ? roundCurrency(Math.max(0, installmentTotal - corePaid)) : 0;
     setPartialInfo({ installmentTotal, isPartial, remainingPortion });
   }, [paymentAmount, loan, monthlyRatePercent]);
 
@@ -215,6 +215,31 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
       month: 'long',
       day: 'numeric'
     }).format(date);
+  };
+
+  // Try to get the current authenticated user's display name from JWT
+  const getCurrentUserName = (): string | undefined => {
+    const token = localStorage.getItem('token');
+    if (!token) return undefined;
+    try {
+      const parts = token.split('.');
+      if (parts.length < 2) return undefined;
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const json = decodeURIComponent(atob(base64).split('').map(c => {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+      const payload: any = JSON.parse(json);
+      const composed = (payload.given_name && payload.family_name)
+        ? `${payload.given_name} ${payload.family_name}`
+        : undefined;
+      return (
+        payload.name || payload.fullname || composed ||
+        payload.preferred_username || payload.unique_name ||
+        payload.username || payload.email || payload.sub
+      );
+    } catch {
+      return undefined;
+    }
   };
 
   const handleQuickAmount = (amount: number) => {
@@ -299,8 +324,135 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
   };
 
   const handlePrintReceipt = () => {
-    toast.success('Impression du reçu en cours...');
-    // TODO: Implement print receipt functionality
+    const amount = parseFloat(paymentAmount || '0') || 0;
+    if (amount <= 0) {
+      toast.error('Veuillez saisir un montant valide avant l\'aperçu');
+      return;
+    }
+
+    const methodLabel = (m: string) => {
+      switch (m) {
+        case 'CASH': return 'Espèces';
+        case 'CHECK': return 'Chèque';
+        case 'TRANSFER': return 'Virement';
+        case 'MOBILE_MONEY': return 'Mobile Money';
+        default: return m;
+      }
+    };
+    const esc = (s?: string) => (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const fmt = (v: number) => formatCurrency(v);
+
+    // Build reference similar to submit
+    const checkNumber = watch('checkNumber');
+    const transferReference = watch('transferReference');
+    const mobileProvider = watch('mobileProvider');
+    const mobileReference = watch('mobileReference');
+    const notes = watch('notes');
+    const pDate = watch('paymentDate');
+
+  let reference = notes || '';
+    if (paymentMethod === 'CHECK' && checkNumber) {
+      reference = `Chèque #${checkNumber}${notes ? ` - ${notes}` : ''}`;
+    } else if (paymentMethod === 'TRANSFER' && transferReference) {
+      reference = `Transfert: ${transferReference}${notes ? ` - ${notes}` : ''}`;
+    } else if (paymentMethod === 'MOBILE_MONEY' && mobileProvider && mobileReference) {
+      reference = `${mobileProvider}: ${mobileReference}${notes ? ` - ${notes}` : ''}`;
+    }
+
+    // Estimate fees portion as the remainder after penalty/interest/principal
+    const feesPortionPaid = roundCurrency(Math.max(0, amount - (paymentBreakdown.principal + paymentBreakdown.interest + paymentBreakdown.penalty)));
+    const remainingAfter = paymentBreakdown.newBalance; // already fee-inclusive per our logic
+
+    const receivedByDisplay = getCurrentUserName() || '—';
+    const html = `<!DOCTYPE html>
+      <html lang="fr">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>Aperçu du Reçu — ${esc(loan.loanNumber)}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; color:#111; }
+            .header { text-align: center; margin-bottom: 16px }
+            .muted { color:#666; font-size: 0.9rem }
+            .grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px 16px; }
+            .row { display:flex; justify-content:space-between; margin:6px 0 }
+            .section { border:1px solid #e5e7eb; border-radius:8px; padding:12px; margin-top:12px }
+            h2 { margin: 0 0 4px 0; font-size: 18px; }
+            h3 { margin: 0 0 8px 0; font-size: 14px; color:#374151 }
+            @media print { .no-print { display: none; } }
+          </style>
+          <script>
+            window.addEventListener('load', function(){
+              try { window.print(); } catch(e) {}
+              setTimeout(function(){ try { window.close(); } catch(e) {} }, 300);
+            });
+          </script>
+        </head>
+        <body>
+          <div class="header">
+            <h1>Nala Kredi Ti Machann</h1>
+            <h2>Aperçu du Reçu (Non enregistré)</h2>
+            <div class="muted">Prêt: ${esc(loan.loanNumber)}</div>
+          </div>
+
+          <div class="grid">
+            <div><strong>Date/Heure:</strong> ${formatDate(pDate)}</div>
+            <div><strong>Client:</strong> ${esc(loan.customerName)}</div>
+            <div><strong>Méthode:</strong> ${esc(methodLabel(paymentMethod))}</div>
+            <div><strong>Référence:</strong> ${esc(reference || '—')}</div>
+            <div><strong>Succursale:</strong> ${esc((loan as any).branch || '—')}</div>
+            <div><strong>Reçu par:</strong> ${esc(receivedByDisplay)}</div>
+          </div>
+
+          <div class="section">
+            <h3>Montant Payé</h3>
+            <div class="row"><div>Total saisi</div><div><strong>${fmt(amount)}</strong></div></div>
+          </div>
+
+          <div class="section">
+            <h3>Détail de l'allocation (estimée)</h3>
+            <div class="row"><div>Capital</div><div>${fmt(paymentBreakdown.principal)}</div></div>
+            <div class="row"><div>Intérêt</div><div>${fmt(paymentBreakdown.interest)}</div></div>
+            <div class="row"><div>Pénalités</div><div>${fmt(paymentBreakdown.penalty)}</div></div>
+            <div class="row"><div>Frais</div><div>${fmt(feesPortionPaid)}</div></div>
+          </div>
+
+          <div class="section">
+            <h3>Résumé du prêt</h3>
+            <div class="row"><div>Mensualité + Frais</div><div>${fmt(monthlyWithFee)}</div></div>
+            <div class="row"><div>Solde Restant (+ Frais) après paiement</div><div><strong>${fmt(remainingAfter)}</strong></div></div>
+          </div>
+
+          <div class="muted" style="margin-top:24px;">Ceci est un aperçu; le numéro de reçu final sera généré après enregistrement.</div>
+          <div class="no-print" style="margin-top:12px; text-align:center; color:#666">Cette fenêtre se fermera après l'impression.</div>
+        </body>
+      </html>`;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, '_blank');
+    if (w) {
+      setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 2000);
+      toast.success('Aperçu du reçu prêt à imprimer');
+      return;
+    }
+
+    // Fallback iframe
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.src = url;
+    const cleanup = () => { try { document.body.removeChild(iframe); } catch {} try { URL.revokeObjectURL(url); } catch {} };
+    iframe.onload = () => {
+      try { const win = iframe.contentWindow as Window | null; if (win) { win.focus(); win.print(); } } catch {}
+      setTimeout(cleanup, 1000);
+    };
+    document.body.appendChild(iframe);
+    toast.success('Aperçu du reçu prêt à imprimer');
   };
 
   // Use effectiveMonthlyPayment as the base for suggested payment to ensure 3.5% rate consistency

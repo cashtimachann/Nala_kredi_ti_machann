@@ -1289,6 +1289,102 @@ const LoanManagement: React.FC = () => {
     }
   };
 
+  // Export PDF for current tab view (applications, disbursement, loans, overdue, payments)
+  const handleExportPdf = () => {
+    try {
+      const openPrintWindow = (html: string) => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) { toast.error('Veuillez autoriser les pop-ups pour exporter en PDF'); return; }
+        printWindow.document.open();
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+      };
+
+      const formatAmount = (n?: number, currency: 'HTG' | 'USD' = 'HTG') => formatCurrency(roundCurrency(n ?? 0), currency);
+      const now = new Date();
+      const titleMap: Record<LoanManagementTab, string> = {
+        overview: 'Tableau de Bord',
+        applications: 'Nouvelles Demandes',
+        disbursement: 'À Décaisser',
+        loans: 'Prêts Actifs',
+        overdue: 'Prêts en Retard',
+        payments: 'Paiements',
+        reports: 'Rapports'
+      };
+      const pageTitle = `Export \u2014 ${titleMap[activeTab]} \u2014 ${now.toLocaleDateString('fr-FR')} ${now.toLocaleTimeString('fr-FR')}`;
+
+      // Build rows depending on tab
+      let tableHeader = '';
+      let tableRowsHtml = '';
+
+      if (activeTab === 'payments') {
+        tableHeader = '<tr><th>Date</th><th>Reçu</th><th>Montant</th><th>Traité Par</th><th>Succursale</th><th>Statut</th></tr>';
+        tableRowsHtml = payments.map(p => {
+          const date = p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('fr-FR') : (p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-FR') : 'N/A');
+          const amount = formatAmount(p.amount, (p.currency as any) || 'HTG');
+          const receipt = p.receiptNumber || '';
+          const processedBy = p.processedByName || '';
+          const branch = p.branchName || '';
+          const status = p.status || '';
+          return `<tr><td>${date}</td><td>${receipt}</td><td>${amount}</td><td>${processedBy}</td><td>${branch}</td><td>${status}</td></tr>`;
+        }).join('');
+      } else {
+        tableHeader = '<tr><th>#</th><th>Client</th><th>Montant</th><th>Mensualité</th><th>Statut</th><th>Succursale</th></tr>';
+        tableRowsHtml = filteredLoans.map(l => {
+          const num = l.loanNumber || l.applicationId || l.id;
+          const client = l.customerName || 'Client';
+          const amount = formatAmount(l.principalAmount, l.currency);
+          const mensualite = formatAmount(l.monthlyPaymentWithFee ?? l.monthlyPayment, l.currency);
+          const statutLabel = (() => {
+            switch (l.status) {
+              case LoanStatus.PENDING: return 'En attente';
+              case LoanStatus.APPROVED: return 'Approuvé';
+              case LoanStatus.ACTIVE: return 'Actif';
+              case LoanStatus.COMPLETED: return 'Soldé';
+              case LoanStatus.OVERDUE: return 'En retard';
+              case LoanStatus.DEFAULTED: return 'En défaut';
+              case LoanStatus.CANCELLED: return 'Annulé';
+              default: return String(l.status);
+            }
+          })();
+          const branch = l.branch || '';
+          return `<tr><td>${num}</td><td>${client}</td><td>${amount}</td><td>${mensualite}</td><td>${statutLabel}</td><td>${branch}</td></tr>`;
+        }).join('');
+      }
+
+      const html = `<!doctype html>
+        <html lang="fr"><head>
+        <meta charset="utf-8" />
+        <title>${pageTitle}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif; padding: 24px; }
+          h1 { font-size: 20px; margin-bottom: 16px; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; }
+          th { background: #f3f4f6; text-align: left; }
+          tfoot td { font-weight: 600; }
+        </style>
+        </head><body>
+        <h1>${pageTitle}</h1>
+        <table>
+          <thead>${tableHeader}</thead>
+          <tbody>${tableRowsHtml}</tbody>
+        </table>
+        </body></html>`;
+
+      if (!tableRowsHtml) {
+        toast.error('Aucune donnée à exporter pour cet onglet');
+        return;
+      }
+      openPrintWindow(html);
+    } catch (error: any) {
+      console.error('Error exporting PDF:', error);
+      toast.error('Erreur lors de l\'export PDF');
+    }
+  };
+
   // Export overdue loans to CSV
   const handleExportOverdueLoans = () => {
     try {
@@ -1571,22 +1667,6 @@ const LoanManagement: React.FC = () => {
         </div>
         <div className="flex gap-3">
           <button
-            onClick={loadLoans}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-            title="Actualiser la liste"
-          >
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            Actualiser
-          </button>
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <Download className="w-5 h-5" />
-            Exporter
-          </button>
-          <button
             onClick={handleNewApplication}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
           >
@@ -1605,7 +1685,7 @@ const LoanManagement: React.FC = () => {
               className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'overview'
                   ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-900 hover:text-black hover:border-gray-300'
               }`}
             >
               <div className="flex items-center gap-2">
@@ -1618,7 +1698,7 @@ const LoanManagement: React.FC = () => {
               className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'applications'
                   ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-900 hover:text-black hover:border-gray-300'
               }`}
             >
               <div className="flex items-center gap-2">
@@ -1631,7 +1711,7 @@ const LoanManagement: React.FC = () => {
               className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'disbursement'
                   ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-900 hover:text-black hover:border-gray-300'
               }`}
             >
               <div className="flex items-center gap-2">
@@ -1644,7 +1724,7 @@ const LoanManagement: React.FC = () => {
               className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'loans'
                   ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-900 hover:text-black hover:border-gray-300'
               }`}
             >
               <div className="flex items-center gap-2">
@@ -1657,7 +1737,7 @@ const LoanManagement: React.FC = () => {
               className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'overdue'
                   ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-900 hover:text-black hover:border-gray-300'
               }`}
             >
               <div className="flex items-center gap-2">
@@ -1670,7 +1750,7 @@ const LoanManagement: React.FC = () => {
               className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'payments'
                   ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-900 hover:text-black hover:border-gray-300'
               }`}
             >
               <div className="flex items-center gap-2">
@@ -1683,7 +1763,7 @@ const LoanManagement: React.FC = () => {
             className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'reports'
                 ? 'border-primary-600 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-900 hover:text-black hover:border-gray-300'
             }`}
           >
             <div className="flex items-center gap-2">
@@ -1698,40 +1778,11 @@ const LoanManagement: React.FC = () => {
       {/* Overview/Dashboard Tab */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          {/* En-tête avec Filtres */}
+          {/* En-tête simplifiée (filtres retirés selon demande) */}
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Tableau de Bord Microcrédits</h2>
               <p className="text-gray-600 mt-1">Vue d'ensemble de votre portefeuille</p>
-            </div>
-            <div className="flex gap-4">
-              <select 
-                value={timeRange}
-                onChange={(e) => setTimeRange(e.target.value as any)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="week">7 derniers jours</option>
-                <option value="month">30 derniers jours</option>
-                <option value="quarter">3 derniers mois</option>
-              </select>
-              <select 
-                value={selectedBranch}
-                onChange={(e) => setSelectedBranch(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="all">Toutes les succursales</option>
-                <option value="port-au-prince">Port-au-Prince</option>
-                <option value="cap-haitien">Cap-Haïtien</option>
-                <option value="gonaives">Gonaïves</option>
-              </select>
-              <button
-                onClick={loadDashboardData}
-                disabled={dashboardLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-              >
-                <RefreshCw className={`w-5 h-5 ${dashboardLoading ? 'animate-spin' : ''}`} />
-                Actualiser
-              </button>
             </div>
           </div>
 
@@ -1847,7 +1898,7 @@ const LoanManagement: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-gray-900">Évolution du Portefeuille</h3>
               <div className="flex gap-2">
-                <button className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 rounded-lg">
+                <button className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-900 hover:text-black">
                   <Download className="w-4 h-4" />
                   Exporter
                 </button>
@@ -1962,6 +2013,14 @@ const LoanManagement: React.FC = () => {
 
         <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
           <span>{filteredLoans.length} prêt(s) trouvé(s)</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportPdf}
+              className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              title="Exporter PDF"
+            >
+              Exporter PDF
+            </button>
           {(searchTerm || statusFilter !== 'ALL' || typeFilter !== 'ALL' || currencyFilter !== 'ALL' || branchFilter !== 'ALL' || dateFromFilter || dateToFilter) && (
             <button
               onClick={() => {
@@ -1977,7 +2036,8 @@ const LoanManagement: React.FC = () => {
             >
               Réinitialiser les filtres
             </button>
-          )}
+            )}
+          </div>
         </div>
       </div>
       )}
@@ -1994,6 +2054,13 @@ const LoanManagement: React.FC = () => {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-4">
+                <button
+                  onClick={handleExportPdf}
+                  className="px-3 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
+                  title="Exporter PDF"
+                >
+                  Exporter PDF
+                </button>
                 {/* Type Filter */}
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">Type de Crédit</label>
@@ -2552,7 +2619,7 @@ const LoanManagement: React.FC = () => {
               <div className="flex gap-3">
                 <button
                   onClick={loadLoans}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-900 hover:text-black"
                 >
                   <RefreshCw className="w-4 h-4" />
                   Actualiser
@@ -2564,10 +2631,16 @@ const LoanManagement: React.FC = () => {
                   <Download className="w-4 h-4" />
                   Exporter
                 </button>
+                <button
+                  onClick={handleExportPdf}
+                  className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-gray-900 hover:text-black"
+                  title="Exporter PDF"
+                >
+                  Exporter PDF
+                </button>
               </div>
             </div>
           </div>
-
           <div className="p-6">
             {/* Filters */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
@@ -2973,7 +3046,7 @@ const LoanManagement: React.FC = () => {
               <div className="flex gap-3">
                 <button
                   onClick={loadPayments}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-900 hover:text-black"
                 >
                   <RefreshCw className="w-4 h-4" />
                   Actualiser
@@ -2984,6 +3057,13 @@ const LoanManagement: React.FC = () => {
                 >
                   <Download className="w-4 h-4" />
                   Exporter
+                </button>
+                <button
+                  onClick={handleExportPdf}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-900 hover:text-black"
+                  title="Exporter PDF"
+                >
+                  Exporter PDF
                 </button>
               </div>
             </div>

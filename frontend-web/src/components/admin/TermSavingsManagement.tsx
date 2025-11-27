@@ -4496,7 +4496,7 @@ function printCertificate(account: ClientAccount, context: { principal: number; 
     </head>
     <body>
       <div class="title">Certificat de Dépôt à Terme</div>
-      <div class="subtitle">Kredi Ti Machann • ${account.branchName || 'Succursale'}</div>
+  <div class="subtitle">Nala Kredi Ti Machann • ${account.branchName || 'Succursale'}</div>
       <div class="box">
         <div class="row"><div class="label">Numéro de compte</div><div class="value">${account.accountNumber}</div></div>
         <div class="row"><div class="label">Client</div><div class="value">${account.customerName || ''}</div></div>
@@ -4507,7 +4507,7 @@ function printCertificate(account: ClientAccount, context: { principal: number; 
         <div class="row"><div class="label">Échéance</div><div class="value">${context.maturity.toLocaleDateString('fr-FR')}</div></div>
         <div class="row"><div class="label">Montant à l'échéance (estimé)</div><div class="value">${context.totalAtMaturity}</div></div>
       </div>
-      <div class="footer">Ce certificat confirme le placement à terme auprès de Kredi Ti Machann. Les montants affichés peuvent varier selon les conditions contractuelles et les intérêts calculés.</div>
+  <div class="footer">Ce certificat confirme le placement à terme auprès de Nala Kredi Ti Machann. Les montants affichés peuvent varier selon les conditions contractuelles et les intérêts calculés.</div>
       <script>window.onload = function(){ window.print(); setTimeout(() => window.close(), 300); }</script>
     </body>
     </html>`;

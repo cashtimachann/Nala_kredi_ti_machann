@@ -943,12 +943,7 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-orange-600" />
                 Portefeuille à Risque (PAR)
-                <div className="group relative">
-                  <Info className="w-4 h-4 text-gray-400 cursor-help" />
-                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-64 text-center pointer-events-none z-10">
-                    Pourcentage du portefeuille total qui est en retard de paiement (Capital restant dû des prêts en retard / Capital total restant dû)
-                  </div>
-                </div>
+                {/* Info tooltip retiré selon demande */}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-gray-50 rounded-lg p-4">

@@ -18,6 +18,7 @@ h1, h2, h3, h4, h5, h6,
 }
 
 /* Specific override for the Term Savings 'Comptes' tab to force gray text to black for readability */
+.accounts-contrast-fix .text-gray-800,
 .accounts-contrast-fix .text-gray-700,
 .accounts-contrast-fix .text-gray-600,
 .accounts-contrast-fix .text-gray-500,
@@ -39,6 +40,7 @@ h1, h2, h3, h4, h5, h6,
 }
 
 /* Generic tab contrast fix to be applied to other tabs */
+.tab-contrast-fix .text-gray-800,
 .tab-contrast-fix .text-gray-700,
 .tab-contrast-fix .text-gray-600,
 .tab-contrast-fix .text-gray-500,

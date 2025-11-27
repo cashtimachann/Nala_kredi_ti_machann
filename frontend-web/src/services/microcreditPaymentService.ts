@@ -96,6 +96,29 @@ export interface PaymentStatistics {
   toDate: string;
 }
 
+export interface PaymentAllocationDto {
+  principalAmount: number;
+  interestAmount: number;
+  penaltyAmount: number;
+  feesAmount: number;
+  remainingAmount: number;
+  allocationDate: string;
+}
+
+export interface PaymentReceiptDto {
+  receiptNumber: string;
+  paymentDate: string;
+  borrowerName: string;
+  loanNumber: string;
+  paymentAmount: number;
+  allocation: PaymentAllocationDto;
+  paymentMethod: string;
+  transactionReference?: string;
+  receivedBy: string;
+  branchName: string;
+  generatedAt: string;
+}
+
 class MicrocreditPaymentService {
   private getAuthHeader() {
     const token = localStorage.getItem('token');
@@ -322,6 +345,26 @@ class MicrocreditPaymentService {
         error.response?.data?.message || 
         error.response?.data || 
         'Erreur lors de la récupération des statistiques de paiements'
+      );
+    }
+  }
+
+  /**
+   * Générer/Afficher le reçu d'un paiement (Microcrédit)
+   */
+  async getPaymentReceipt(paymentId: string): Promise<PaymentReceiptDto> {
+    try {
+      const response = await axios.get<PaymentReceiptDto>(
+        `${API_BASE_URL}/MicrocreditPayment/${paymentId}/receipt`,
+        this.getAuthHeader()
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error('Error generating payment receipt:', error);
+      throw new Error(
+        error.response?.data?.message ||
+        error.response?.data ||
+        "Erreur lors de la génération du reçu"
       );
     }
   }
