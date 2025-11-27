@@ -23,21 +23,21 @@ interface TermSavingsFormProps {
   onCancel: () => void;
 }
 
-// Taux d'intérêt par durée
+// Taux d'intérêt mensuel par durée (convertis depuis les taux annuels)
 const interestRates = {
   HTG: {
-    3: 6.0,
-    6: 7.0,
-    12: 8.5,
-    24: 10.0,
-    36: 11.5
+    3: 6.0 / 12,  // 0.5
+    6: 7.0 / 12,  // ~0.583
+    12: 8.5 / 12, // ~0.708
+    24: 10.0 / 12, // ~0.833
+    36: 11.5 / 12  // ~0.958
   },
   USD: {
-    3: 4.5,
-    6: 5.5,
-    12: 7.0,
-    24: 8.5,
-    36: 10.0
+    3: 4.5 / 12,  // 0.375
+    6: 5.5 / 12,  // ~0.458
+    12: 7.0 / 12, // ~0.583
+    24: 8.5 / 12, // ~0.708
+    36: 10.0 / 12  // ~0.833
   }
 };
 
@@ -97,7 +97,7 @@ const TermSavingsForm: React.FC<TermSavingsFormProps> = ({ onSubmit, onCancel })
   useEffect(() => {
     if (watchedAmount && interestRate && watchedTerm) {
       // Calcul des intérêts simples
-      const interest = (watchedAmount * interestRate * (watchedTerm / 12)) / 100;
+      const interest = (watchedAmount * interestRate * watchedTerm) / 100;
       setProjectedInterest(interest);
       setTotalAtMaturity(watchedAmount + interest);
     }
@@ -287,7 +287,7 @@ const TermSavingsForm: React.FC<TermSavingsFormProps> = ({ onSubmit, onCancel })
               <p className={`text-sm mt-1 ${
                 termMonths === option.value ? 'text-primary-700 font-semibold' : 'text-gray-600'
               }`}>
-                {option.rate}% / an
+                {(option.rate / 12).toFixed(2)}% / mois
               </p>
             </button>
           ))}
@@ -372,7 +372,7 @@ const TermSavingsForm: React.FC<TermSavingsFormProps> = ({ onSubmit, onCancel })
             </div>
 
             <div className="bg-white rounded-lg p-4 border border-green-200">
-              <p className="text-sm text-gray-600 mb-1">Intérêts Projetés ({interestRate}%)</p>
+              <p className="text-sm text-gray-600 mb-1">Intérêts Projetés ({(interestRate/12).toFixed(2)}% / mois)</p>
               <p className="text-2xl font-bold text-green-600">
                 + {formatCurrency(projectedInterest, currency)}
               </p>

@@ -250,6 +250,10 @@ namespace NalaCreditAPI.Models
         [Required]
         [Column(TypeName = "decimal(18,2)")]
         public decimal RequestedAmount { get; set; }
+
+    // Montant approuvé lors de l'approbation (peut différer du montant demandé)
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal? ApprovedAmount { get; set; }
         
         [Required]
         public int RequestedDurationMonths { get; set; }

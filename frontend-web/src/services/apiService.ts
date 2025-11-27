@@ -1054,6 +1054,7 @@ class ApiService {
       openingDate: typeof openingDate === 'string' ? openingDate : new Date(openingDate).toISOString(),
       lastTransactionDate: lastTx ? (typeof lastTx === 'string' ? lastTx : new Date(lastTx).toISOString()) : undefined,
       interestRate: dto?.interestRate ?? dto?.InterestRate ?? undefined,
+      interestRateMonthly: dto?.interestRateMonthly ?? dto?.InterestRateMonthly ?? undefined,
       termType: this.mapTermType(dto?.termType ?? dto?.TermType),
       maturityDate: dto?.maturityDate ?? dto?.MaturityDate ?? undefined,
       minimumBalance: dto?.minimumBalance ?? dto?.MinimumBalance ?? undefined,

@@ -203,6 +203,29 @@ namespace NalaCreditAPI.Controllers
         }
 
         /// <summary>
+        /// Régénérer le calendrier de paiement d'un prêt
+        /// </summary>
+        [HttpPost("{id}/regenerate-schedule")]
+        public async Task<ActionResult> RegenerateSchedule(Guid id)
+        {
+            try
+            {
+                var ok = await _loanApplicationService.RegeneratePaymentScheduleAsync(id);
+                if (!ok) return StatusCode(500, "Failed to regenerate schedule");
+                return Ok(new { success = true });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error regenerating payment schedule for loan {LoanId}", id);
+                return StatusCode(500, "An error occurred while regenerating payment schedule");
+            }
+        }
+
+        /// <summary>
         /// Calculer les détails d'un paiement en avance
         /// </summary>
         [HttpPost("{id}/calculate-early-payment")]

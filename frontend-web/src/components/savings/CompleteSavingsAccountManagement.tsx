@@ -13,18 +13,19 @@ import {
   TrendingUp,
   DollarSign,
   Calendar,
+  ChevronUp,
+  ChevronDown,
   Filter,
   Download,
   RefreshCw,
   XCircle,
   CheckCircle,
   AlertCircle,
-  ChevronDown,
-  ChevronUp,
   FileText,
   Building2
 } from 'lucide-react';
 import { apiService } from '../../services/apiService';
+import { getMonthlyInterestRatePercent, getTermMonths } from '../../types/clientAccounts';
 import savingsCustomerService from '../../services/savingsCustomerService';
 import toast from 'react-hot-toast';
 import { unparse } from 'papaparse';
@@ -133,6 +134,7 @@ const CompleteSavingsAccountManagement: React.FC = () => {
   const [showCreateNewClientAccountModal, setShowCreateNewClientAccountModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [includeTermAccounts, setIncludeTermAccounts] = useState(false);
   const [filters, setFilters] = useState<AccountFilters>({});
   const [statistics, setStatistics] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -152,6 +154,11 @@ const CompleteSavingsAccountManagement: React.FC = () => {
     } catch {}
   }, [filters]);
 
+  useEffect(() => {
+    // reload when toggling includeTermAccounts
+    loadAccounts();
+  }, [includeTermAccounts]);
+
   // Reset pagination when search or filters change
   useEffect(() => {
     setCurrentPage(1);
@@ -167,7 +174,46 @@ const CompleteSavingsAccountManagement: React.FC = () => {
         const dateB = new Date(b.openingDate || b.createdAt || 0);
         return dateB.getTime() - dateA.getTime(); // Most recent first
       }) : data;
-      setAccounts(sortedData);
+      // If requested, also load term savings accounts and merge
+      if (includeTermAccounts) {
+        try {
+          const tdata = await apiService.getTermSavingsAccounts({ page: 1, pageSize: 1000 });
+          const termList = (tdata?.accounts || tdata?.Accounts || (Array.isArray(tdata) ? tdata : []));
+          // Map term accounts to the SavingsAccount shape partially for display; keep term fields in metadata
+          const mapped = (termList || []).map((t: any) => ({
+            ...t,
+            accountNumber: t.accountNumber,
+            customerName: t.customerName,
+            branchId: t.branchId,
+            branchName: t.branchName,
+            currency: t.currency,
+            balance: t.balance,
+            availableBalance: t.availableBalance,
+            minimumBalance: t.minimumBalance,
+            openingDate: t.openingDate,
+            lastTransactionDate: t.lastTransactionDate,
+            lastInterestCalculation: t.lastInterestCalculation,
+            status: t.status,
+            interestRate: t.interestRate,
+            termType: t.termType,
+            maturityDate: t.maturityDate,
+            interestRateMonthly: t.interestRateMonthly
+          } as any));
+          const merged = [...sortedData, ...mapped];
+          // Re-sort merged list
+          const mergedSorted = merged.sort((a: any, b: any) => {
+            const dateA = new Date(a.openingDate || a.createdAt || 0);
+            const dateB = new Date(b.openingDate || b.createdAt || 0);
+            return dateB.getTime() - dateA.getTime();
+          });
+          setAccounts(mergedSorted);
+        } catch (termErr) {
+          console.warn('Failed to fetch term savings for merged view', termErr);
+          setAccounts(sortedData);
+        }
+      } else {
+        setAccounts(sortedData);
+      }
     } catch (error) {
       console.error('Error loading accounts:', error);
       toast.error('Erreur lors du chargement des comptes');
@@ -273,6 +319,8 @@ const CompleteSavingsAccountManagement: React.FC = () => {
         branch: a.branchName,
         currency: a.currency,
         balance: a.balance,
+        type: (a as any).termType ? 'Épargne à Terme' : 'Compte d\'Épargne',
+        monthlyRate: (a as any).termType ? getMonthlyInterestRatePercent({ interestRate: a.interestRate, interestRateMonthly: (a as any).interestRateMonthly, termType: (a as any).termType }) : undefined,
         status: a.status,
         opened: a.openingDate
       }));
@@ -300,6 +348,8 @@ const CompleteSavingsAccountManagement: React.FC = () => {
         Succursale: a.branchName,
         Devise: a.currency,
         Solde: a.balance,
+        Type: (a as any).termType ? 'Épargne à Terme' : "Compte d'\'Épargne",
+        TauxParMois: (a as any).termType ? getMonthlyInterestRatePercent({ interestRate: a.interestRate, interestRateMonthly: (a as any).interestRateMonthly, termType: (a as any).termType }) : undefined,
         Statut: a.status,
         OuvertLe: a.openingDate
       }));
@@ -325,6 +375,8 @@ const CompleteSavingsAccountManagement: React.FC = () => {
           <td style="padding:8px;border:1px solid #ddd">${a.currency}</td>
           <td style="padding:8px;border:1px solid #ddd">${a.balance}</td>
           <td style="padding:8px;border:1px solid #ddd">${a.status}</td>
+          <td style="padding:8px;border:1px solid #ddd">${(a as any).termType ? 'Épargne à Terme' : "Compte d'\'Épargne"}</td>
+          <td style="padding:8px;border:1px solid #ddd">${(a as any).termType ? getMonthlyInterestRatePercent({ interestRate: a.interestRate, interestRateMonthly: (a as any).interestRateMonthly, termType: (a as any).termType }).toFixed(2) : ''}</td>
         </tr>
       `).join('');
       const html = `
@@ -334,7 +386,7 @@ const CompleteSavingsAccountManagement: React.FC = () => {
         <h2>Liste Comptes Épargne</h2>
         <p>Exporté le ${new Date().toLocaleString('fr-FR')}</p>
         <table>
-          <thead><tr><th>Compte</th><th>Client</th><th>Succursale</th><th>Devise</th><th>Solde</th><th>Statut</th></tr></thead>
+          <thead><tr><th>Compte</th><th>Client</th><th>Succursale</th><th>Devise</th><th>Solde</th><th>Statut</th><th>Type</th><th>Taux/mois</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
         <script>window.onload = ()=>{ setTimeout(()=>{ window.print(); },300); };</script>
@@ -592,6 +644,16 @@ const CompleteSavingsAccountManagement: React.FC = () => {
                 Réinitialiser
               </button>
             </div>
+            <div className="flex items-center gap-2">
+              <input
+                id="includeTermAccounts"
+                type="checkbox"
+                checked={includeTermAccounts}
+                onChange={(e) => { setIncludeTermAccounts(e.target.checked); setTimeout(() => setShowFilters(false), 10); }}
+                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <label htmlFor="includeTermAccounts" className="text-sm text-gray-700">Inclure Comptes à Terme</label>
+            </div>
           </div>
         )}
       </div>
@@ -690,8 +752,11 @@ const CompleteSavingsAccountManagement: React.FC = () => {
                         {formatCurrency(account.accruedInterest, account.currency)}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {account.interestRate}% / an
+                        {account.interestRate ? `${account.interestRate}% / an` : '—'}
                       </div>
+                      {(account as any).termType && (
+                        <div className="text-xs text-gray-500">Par mois: {getMonthlyInterestRatePercent({ interestRate: account.interestRate, interestRateMonthly: (account as any).interestRateMonthly, termType: (account as any).termType }).toFixed(2)}%</div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
 

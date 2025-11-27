@@ -20,6 +20,7 @@ import toast from 'react-hot-toast';
 import { apiService } from '../../services/apiService';
 import { savingsCustomerService } from '../../services/savingsCustomerService';
 import { formatCurrency, getStatusColor, getStatusIcon } from './CompleteSavingsAccountManagement';
+import { getMonthlyInterestRatePercent, getTermMonths } from '../../types/clientAccounts';
 
 interface AccountDetailsViewProps {
   accountId: string;
@@ -57,6 +58,10 @@ interface AccountDetails {
   branchId: number;
   branchName?: string;
   notes?: string;
+  // Term savings fields
+  termType?: string | number;
+  maturityDate?: string;
+  interestRateMonthly?: number; // fraction, e.g. 0.015 => 1.5% per month
 }
 
 interface Transaction {
@@ -172,13 +177,35 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
     }
   }, [accountId]);
 
+  const isTermAccount = (): boolean => {
+    if (!account) return false;
+    const t = account.accountType ?? '';
+    if (typeof t === 'number') return t === 2;
+    const s = String(t).toUpperCase();
+    return ['TERM', 'TERM_SAVINGS', 'TERMSAVINGS', 'TERM_SAVING', 'ÉPARGNE À TERME'.toUpperCase()].includes(s);
+  };
+
   const loadAccountDetails = async () => {
     setLoading(true);
     try {
-      const [accountData, transactionsData] = await Promise.all([
-        apiService.getSavingsAccount(accountId),
-        apiService.getSavingsTransactions({ accountId })
-      ]);
+      const accountData = await apiService.getAccountDetails(accountId);
+      // Determine which transactions API to call (Term vs regular savings)
+      let transactionsData: any[] = [];
+      const isTerm = (accountData && ((accountData as any).termType !== undefined || String(accountData.accountType || '').toLowerCase().includes('term')));
+      if (isTerm) {
+        // Term savings transactions API expects accountNumber
+        try {
+          transactionsData = await apiService.getAllTermSavingsTransactions({ accountNumber: accountData.accountNumber });
+        } catch (err) {
+          transactionsData = [];
+        }
+      } else {
+        try {
+          transactionsData = await apiService.getSavingsAccountTransactions(accountId);
+        } catch (err) {
+          transactionsData = [];
+        }
+      }
 
       // Enrich missing customer code if needed
       let enrichedAccount: AccountDetails = accountData as any;
@@ -395,6 +422,12 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
                       <div className="text-xs text-gray-500">Taux annuel</div>
                       <div className="text-gray-900 font-medium">{account.interestRate ? `${account.interestRate}%` : '—'}</div>
                     </div>
+                    {isTermAccount() && (
+                      <div>
+                        <div className="text-xs text-gray-500">Taux / mois</div>
+                        <div className="text-gray-900 font-medium">{(getMonthlyInterestRatePercent({ interestRate: account.interestRate, interestRateMonthly: account.interestRateMonthly, termType: (account as any).termType })).toFixed(2)}%</div>
+                      </div>
+                    )}
                     <div>
                       <div className="text-xs text-gray-500">Période estimée</div>
                       <div className="text-gray-900 font-medium">{est.days} jours</div>
@@ -479,7 +512,7 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
                 <X className="h-5 w-5 text-gray-600" />
               </button>
             </div>
-            <div className="grid grid-cols-4 gap-3 mt-3 text-sm">
+              <div className="grid grid-cols-4 gap-3 mt-3 text-sm">
               <div>
                 <div className="text-gray-500">Solde Total</div>
                 <div className="font-semibold">{formatCurrency(account.balance ?? 0, displayCurrency(account.currency))}</div>
@@ -495,6 +528,15 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
               <div>
                 <div className="text-gray-500">Taux</div>
                 <div className="font-semibold">{account.interestRate && account.interestRate > 0 ? `${account.interestRate}%` : '—'}</div>
+                {isTermAccount() && (
+                  <div className="text-xs text-gray-500 mt-0.5">Par mois: {(getMonthlyInterestRatePercent({ interestRate: account.interestRate, interestRateMonthly: account.interestRateMonthly, termType: (account as any).termType })).toFixed(2)}%</div>
+                )}
+                {(account as any).termType && (
+                  <div className="text-xs text-gray-500 mt-0.5">Terme: {getTermMonths((account as any).termType)} mois</div>
+                )}
+                {account.maturityDate && (
+                  <div className="text-xs text-gray-500 mt-0.5">Échéance: {new Date(account.maturityDate).toLocaleDateString('fr-FR')}</div>
+                )}
               </div>
               <div>
                 <div className="text-gray-500">Statut</div>

@@ -1963,7 +1963,16 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
   'Dernière transaction': formatDate(account.lastTransactionDate, ''),
         'Type de compte': getAccountTypeLabel(account.accountType) || '',
         'Solde disponible': account.availableBalance || 0,
-        'Taux d\'intérêt': account.interestRate ? `${(account.interestRate * 100).toFixed(2)}%` : '',
+        'Taux d\'intérêt': (() => {
+          if (account.accountType === AccountType.TERM_SAVINGS) {
+            return account.interestRateMonthly 
+              ? `${(account.interestRateMonthly * 100).toFixed(2)}%/mois` 
+              : account.interestRate 
+                ? `${(account.interestRate * 100).toFixed(2)}%` 
+                : '';
+          }
+          return account.interestRate ? `${(account.interestRate * 100).toFixed(2)}%` : '';
+        })(),
         'Solde minimum': account.minimumBalance || '',
         'Téléphone client': account.customerPhone || ''
       }));
@@ -3256,6 +3265,13 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
                           <span>Terme: {getTermTypeLabel(account.termType)}</span>
                           {account.maturityDate && (
                             <span>Échéance: {formatDate(account.maturityDate)}</span>
+                          )}
+                          {(account.interestRateMonthly || account.interestRate) && (
+                            <span>Taux intérêt: {account.interestRateMonthly 
+                              ? `${(account.interestRateMonthly * 100).toFixed(2)}%/mois` 
+                              : account.interestRate 
+                                ? `${(account.interestRate * 100).toFixed(2)}%` 
+                                : ''}</span>
                           )}
                         </>
                       )}

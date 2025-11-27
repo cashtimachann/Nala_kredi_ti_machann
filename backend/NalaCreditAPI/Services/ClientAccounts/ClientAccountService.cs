@@ -466,7 +466,8 @@ namespace NalaCreditAPI.Services.ClientAccounts
                         InitialDeposit = dto.InitialDeposit,
                         BranchId = dto.BranchId,
                         TermType = dto.TermType.Value,
-                        InterestRate = dto.InterestRate
+                        InterestRate = dto.InterestRate,
+                        InterestRateMonthly = dto.InterestRateMonthly
                     };
 
                     var termAccount = await _termSavingsAccountService.OpenAccountAsync(termDto, userId);

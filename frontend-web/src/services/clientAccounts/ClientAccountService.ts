@@ -394,15 +394,22 @@ export class ClientAccountService extends BaseApiService {
         [TermSavingsType.TWELVE_MONTHS]: 2,
         [TermSavingsType.TWENTY_FOUR_MONTHS]: 3
       };
+      const monthlyRate = data.interestRate; // treat incoming as monthly fraction going forward (optional)
       payload = {
         accountType: 2, // Term Savings
         customerId: data.customerId,
         currency: data.currency === 'HTG' ? 0 : 1,
         initialDeposit: data.initialDeposit,
         branchId: data.branchId,
-        termType: termTypeMap[data.termType],
-        interestRate: data.interestRate
+        termType: termTypeMap[data.termType]
       };
+      // Only include rates if provided; otherwise let backend apply defaults
+      if (typeof monthlyRate === 'number') {
+        const annualRate = Number((monthlyRate * 12).toFixed(6));
+        // Send annual interestRate for backward compatibility and include monthly
+        payload.interestRate = annualRate;
+        payload.interestRateMonthly = monthlyRate;
+      }
       const response = await this.post('/ClientAccount/create', payload);
       return this.mapClientAccountSummary(response);
     } catch (error) {
@@ -513,6 +520,25 @@ export class ClientAccountService extends BaseApiService {
     // eslint-disable-next-line no-console
     console.error('Error updating account status:', err);
     throw err;
+  }
+
+  /**
+   * Update term savings account details (interest rate, status, notes)
+   * @param accountId - account identifier
+   * @param data - update data containing interestRateMonthly and/or status
+   */
+  async updateTermSavingsAccount(accountId: string, data: { interestRateMonthly?: number; status?: string }): Promise<ClientAccount> {
+    try {
+      const payload: any = {};
+      if (data.interestRateMonthly !== undefined) payload.interestRateMonthly = data.interestRateMonthly;
+      if (data.status !== undefined) payload.status = data.status;
+      
+      const response = await this.put(`/TermSavingsAccount/${accountId}`, payload);
+      return this.mapClientAccountSummary(response);
+    } catch (error) {
+      console.error('Error updating term savings account:', error);
+      throw error;
+    }
   }
 
   async getTermSavingsAccounts(filters?: {
@@ -768,6 +794,7 @@ export class ClientAccountService extends BaseApiService {
       openingDate: typeof openingDate === 'string' ? openingDate : new Date(openingDate).toISOString(),
       lastTransactionDate: lastTx ? (typeof lastTx === 'string' ? lastTx : new Date(lastTx).toISOString()) : undefined,
       interestRate: dto?.interestRate ?? dto?.InterestRate ?? undefined,
+      interestRateMonthly: dto?.interestRateMonthly ?? dto?.InterestRateMonthly ?? undefined,
       termType: this.mapTermType(dto?.termType ?? dto?.TermType),
       maturityDate: dto?.maturityDate ?? dto?.MaturityDate ?? undefined,
       minimumBalance: dto?.minimumBalance ?? dto?.MinimumBalance ?? undefined,

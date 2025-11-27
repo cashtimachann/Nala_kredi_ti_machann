@@ -17,6 +17,43 @@ h1, h2, h3, h4, h5, h6,
   color: #6b7280 !important; /* gray-600 */
 }
 
+/* Specific override for the Term Savings 'Comptes' tab to force gray text to black for readability */
+.accounts-contrast-fix .text-gray-700,
+.accounts-contrast-fix .text-gray-600,
+.accounts-contrast-fix .text-gray-500,
+.accounts-contrast-fix .text-gray-400,
+.accounts-contrast-fix .text-gray-300,
+.accounts-contrast-fix p,
+.accounts-contrast-fix span,
+.accounts-contrast-fix .opacity-75,
+.accounts-contrast-fix .opacity-50 {
+  color: #000000 !important;
+  opacity: 1 !important;
+}
+
+
+/* Strong fallback: ensure any element without an explicit color inside the accounts section is black.
+   This helps when some text elements don't have Tailwind text classes or are inherited from other rules. */
+.accounts-contrast-fix {
+  color: #000000 !important;
+}
+
+/* Generic tab contrast fix to be applied to other tabs */
+.tab-contrast-fix .text-gray-700,
+.tab-contrast-fix .text-gray-600,
+.tab-contrast-fix .text-gray-500,
+.tab-contrast-fix .text-gray-400,
+.tab-contrast-fix .text-gray-300,
+.tab-contrast-fix p,
+.tab-contrast-fix span,
+.tab-contrast-fix .opacity-75,
+.tab-contrast-fix .opacity-50,
+.tab-contrast-fix .text-sm,
+.tab-contrast-fix .text-xs {
+  color: #000000 !important;
+  opacity: 1 !important;
+}
+.tab-contrast-fix { color: #000000 !important; }
 /* Texte des inputs/textarea/select en noir */
 input:not([type="checkbox"]):not([type="radio"]),
 textarea,

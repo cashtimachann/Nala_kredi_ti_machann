@@ -44,6 +44,7 @@ interface PaymentRecordingProps {
   loan: Loan;
   onClose: () => void;
   onSubmit: (payment: PaymentData) => void;
+  initialAmount?: number; // optional prefilled amount (e.g., next installment + fees)
 }
 
 interface PaymentData {
@@ -81,7 +82,7 @@ interface PaymentBreakdown {
   newBalance: number;
 }
 
-const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSubmit }) => {
+const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSubmit, initialAmount }) => {
   const [paymentBreakdown, setPaymentBreakdown] = useState<PaymentBreakdown>({
     principal: 0,
     interest: 0,
@@ -90,6 +91,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
     newBalance: loan.remainingBalance
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [partialInfo, setPartialInfo] = useState<{ installmentTotal: number; isPartial: boolean; remainingPortion: number } | null>(null);
 
   const {
     register,
@@ -100,9 +102,16 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
   } = useForm<FormData>({
     defaultValues: {
       paymentDate: new Date().toISOString().split('T')[0],
-      paymentMethod: 'CASH'
+      paymentMethod: 'CASH',
+      amount: initialAmount ? initialAmount.toString() : ''
     }
   });
+  // If initialAmount changes while modal is open (e.g., user clicked quick capture), update form amount
+  useEffect(() => {
+    if (initialAmount && (!paymentAmount || parseFloat(paymentAmount) === 0)) {
+      setValue('amount', initialAmount.toString());
+    }
+  }, [initialAmount]);
 
   const paymentAmount = watch('amount');
   const paymentMethod = watch('paymentMethod');
@@ -118,6 +127,13 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
     calculateMonthlyPaymentFromMonthlyRate(loan.principalAmount, monthlyRatePercent, termMonths)
   );
 
+  // Fee-inclusive monthly payment and remaining with fees
+  const processingFee = (loan as any).approvedAmount ? roundCurrency((loan as any).approvedAmount * 0.05) : 0;
+  const distributedFeePortion = termMonths > 0 ? roundCurrency(processingFee / termMonths) : 0;
+  const monthlyWithFee = roundCurrency(effectiveMonthlyPayment + distributedFeePortion);
+  const totalDueWithFees = roundCurrency(monthlyWithFee * termMonths);
+  const remainingWithFees = roundCurrency(Math.max(0, totalDueWithFees - (loan.paidAmount || 0)));
+
   // Calculer la répartition du paiement
   useEffect(() => {
     const amount = parseFloat(paymentAmount) || 0;
@@ -129,6 +145,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
         total: 0,
         newBalance: loan.remainingBalance
       });
+      setPartialInfo(null);
       return;
     }
 
@@ -138,7 +155,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
       : 0;
     const penaltyRounded = roundCurrency(penalty);
 
-    const interestDue = 0; // Le solde inclut déjà les intérêts, pas de calcul additionnel
+  const interestDue = 0; // Le solde inclut déjà les intérêts, pas de calcul additionnel
 
     // Répartir le paiement: d'abord pénalité, puis intérêt, puis capital
     let remaining = amount;
@@ -153,7 +170,8 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
 
     // Since loan.remainingBalance is the Total Balance (Principal + Interest),
     // both principal and interest payments should reduce it.
-    const newBalance = roundCurrency(Math.max(0, loan.remainingBalance - (principalPaid + interestPaid)));
+  // Base new balance on fee-inclusive remaining, for a more realistic display
+  const newBalance = roundCurrency(Math.max(0, remainingWithFees - (principalPaid + interestPaid + penaltyPaid)));
 
     setPaymentBreakdown({
       principal: roundCurrency(principalPaid),
@@ -162,6 +180,13 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
       total: roundCurrency(amount),
       newBalance
     });
+
+    // Intelligent partial installment detection (excluding penalty portion for comparison)
+    const installmentTotal = monthlyWithFee; // expected regular installment including fee
+    const corePaid = amount - penaltyPaid; // amount applied to interest + principal
+    const isPartial = corePaid < installmentTotal && newBalance > 0;
+    const remainingPortion = isPartial ? roundCurrency(Math.max(0, installmentTotal - corePaid)) : 0;
+    setPartialInfo({ installmentTotal, isPartial, remainingPortion });
   }, [paymentAmount, loan, monthlyRatePercent]);
 
   const calculatePenalty = (daysOverdue: number, paymentAmount: number): number => {
@@ -279,13 +304,13 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
   };
 
   // Use effectiveMonthlyPayment as the base for suggested payment to ensure 3.5% rate consistency
-  const suggestedPayment = effectiveMonthlyPayment;
+  const suggestedPayment = monthlyWithFee;
   
   const penaltyAmount = loan.daysOverdue && loan.daysOverdue > 0 
     ? calculatePenalty(loan.daysOverdue, suggestedPayment) 
     : 0;
 
-  const totalDue = roundCurrency(loan.remainingBalance + penaltyAmount);
+  const totalDue = roundCurrency(remainingWithFees + penaltyAmount);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -315,12 +340,13 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-white rounded-lg p-4">
-                  <p className="text-sm text-gray-600 mb-1">Solde Total Restant</p>
-                  <p className="text-xl font-bold text-gray-900">{formatCurrency(loan.remainingBalance)}</p>
+                  <p className="text-sm text-gray-600 mb-1">Solde Total Restant (+ Frais)</p>
+                  <p className="text-xl font-bold text-gray-900">{formatCurrency(remainingWithFees)}</p>
                 </div>
                 <div className="bg-white rounded-lg p-4">
-                  <p className="text-sm text-gray-600 mb-1">Paiement Mensuel</p>
-                  <p className="text-xl font-bold text-blue-900">{formatCurrency(effectiveMonthlyPayment)}</p>
+                  <p className="text-sm text-gray-600 mb-1">Mensualité + Frais</p>
+                  <p className="text-xl font-bold text-blue-900">{formatCurrency(monthlyWithFee)}</p>
+                  <p className="text-xs text-gray-500">Hors frais: {formatCurrency(effectiveMonthlyPayment)}</p>
                 </div>
                 <div className="bg-white rounded-lg p-4">
                   <p className="text-sm text-gray-600 mb-1">Prochain Paiement</p>
@@ -401,9 +427,9 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                       onClick={() => handleQuickAmount(suggestedPayment)}
                       className="px-3 py-1.5 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
                     >
-                      Paiement mensuel
+                      Mensualité + Frais
                       <span className="block text-xs text-green-700">
-                        {formatCurrency(effectiveMonthlyPayment)}
+                        {formatCurrency(monthlyWithFee)}
                       </span>
                     </button>
                     <button
@@ -411,7 +437,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                       onClick={() => handleQuickAmount(totalDue)}
                       className="px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
                     >
-                      Solde complet
+                      Solde complet (+ frais)
                       <span className="block text-xs text-blue-700">
                         {formatCurrency(totalDue)}
                       </span>
@@ -604,6 +630,22 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                   <Calculator className="w-5 h-5 text-green-600" />
                   Répartition du Paiement
                 </h3>
+                {partialInfo && partialInfo.isPartial && (
+                  <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex gap-3">
+                    <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-yellow-900">
+                      <p className="font-medium">Paiement Partiel de l'Échéance</p>
+                      <p>Montant échéance attendue (Mensualité + Frais): <span className="font-semibold">{formatCurrency(partialInfo.installmentTotal)}</span></p>
+                      <p>Reste à payer pour compléter cette échéance: <span className="font-semibold">{formatCurrency(partialInfo.remainingPortion)}</span></p>
+                      <p className="mt-1 text-xs text-yellow-700">Une fois le reste encaissé, la ligne d'échéance pourra être marquée comme complétée.</p>
+                    </div>
+                  </div>
+                )}
+                {partialInfo && !partialInfo.isPartial && paymentBreakdown.newBalance > 0 && (
+                  <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900">
+                    Paiement couvre l'échéance courante. Prochain paiement requis pour les échéances suivantes.
+                  </div>
+                )}
                 <div className="space-y-3">
                   {paymentBreakdown.penalty > 0 && (
                     <div className="flex justify-between items-center bg-white rounded-lg p-4">
@@ -652,6 +694,11 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ loan, onClose, onSu
                         {formatCurrency(paymentBreakdown.newBalance)}
                       </span>
                     </div>
+                    {partialInfo && partialInfo.isPartial && (
+                      <div className="mt-2 text-xs text-gray-600">
+                        Après encaissement du reste (<span className="font-semibold">{formatCurrency(partialInfo.remainingPortion)}</span>), cette échéance sera complète.
+                      </div>
+                    )}
                   </div>
 
                   {/* Full Payment Message */}

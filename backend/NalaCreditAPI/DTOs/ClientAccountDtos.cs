@@ -166,8 +166,11 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         [Required]
         public TermSavingsType TermType { get; set; }
 
-        [Range(0, 0.15, ErrorMessage = "Le taux d'intérêt ne peut pas dépasser 15%")]
         public decimal? InterestRate { get; set; }
+
+        // Nouveau: prise en charge du taux mensuel (fraction, ex: 0.01 = 1% / mois)
+        // Si fourni, le service convertira vers un taux annuel (mensuel * 12) pour le stockage
+        public decimal? InterestRateMonthly { get; set; }
     }
 
     public class TermSavingsAccountUpdateDto
@@ -175,8 +178,10 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         [Required]
         public ClientAccountStatus Status { get; set; }
 
-        [Range(0, 0.15)]
         public decimal? InterestRate { get; set; }
+
+        // Optionnel: fournir un taux mensuel à la place du taux annuel
+        public decimal? InterestRateMonthly { get; set; }
 
         [StringLength(500)]
         public string? Notes { get; set; }
@@ -200,6 +205,8 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         public DateTime? LastTransactionDate { get; set; }
         public ClientAccountStatus Status { get; set; }
         public decimal InterestRate { get; set; }
+    // Dérivé: taux mensuel (lecture seule) = InterestRate / 12
+    public decimal InterestRateMonthly { get; set; }
         public decimal AccruedInterest { get; set; }
         public DateTime? LastInterestCalculation { get; set; }
         public decimal EarlyWithdrawalPenalty { get; set; }
@@ -410,8 +417,10 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         public bool? AutoRenew { get; set; }
 
         // Optional: override interest rate for the renewed term
-        [Range(0, 0.15)]
         public decimal? InterestRate { get; set; }
+
+        // Optionnel: taux mensuel pour renouvellement (converti en annuel côté service)
+        public decimal? InterestRateMonthly { get; set; }
     }
 
     // DTOs pour les statistiques
@@ -482,8 +491,10 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         public int BranchId { get; set; }
 
         // Pour les comptes d'épargne
-        [Range(0, 0.15)]
         public decimal? InterestRate { get; set; }
+
+    // Nouveau: taux mensuel pour les produits d'épargne
+    public decimal? InterestRateMonthly { get; set; }
 
         [Range(0, 1000000)]
         public decimal? MinimumBalance { get; set; }
@@ -510,7 +521,6 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         [Required]
         public ClientAccountStatus Status { get; set; }
 
-        [Range(0, 0.15)]
         public decimal? InterestRate { get; set; }
 
         [Range(0, 1000000)]
@@ -561,6 +571,7 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         public decimal? DailyDepositLimit { get; set; }
         public decimal? OverdraftLimit { get; set; }
         public decimal? InterestRate { get; set; }
+        public decimal? InterestRateMonthly { get; set; }
         public TermSavingsType? TermType { get; set; }
         public DateTime? MaturityDate { get; set; }
         public decimal? AccruedInterest { get; set; }

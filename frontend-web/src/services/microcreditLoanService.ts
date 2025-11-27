@@ -209,6 +209,8 @@ class MicrocreditLoanService {
     principalAmount: number;
     interestAmount: number;
     totalAmount: number;
+    feePortion?: number;
+    totalAmountWithFee?: number;
     paidAmount: number;
     status: string;
     paidDate?: string;
@@ -226,6 +228,28 @@ class MicrocreditLoanService {
         error.response?.data?.message || 
         error.response?.data || 
         'Erreur lors de la récupération du calendrier de paiement'
+      );
+    }
+  }
+
+  /**
+   * Régénérer le calendrier de paiement côté backend
+   */
+  async regenerateSchedule(loanId: string): Promise<{ success: boolean }>
+  {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/MicrocreditLoan/${loanId}/regenerate-schedule`,
+        {},
+        this.getAuthHeader()
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error('Error regenerating schedule:', error);
+      throw new Error(
+        error.response?.data?.message || 
+        error.response?.data || 
+        'Erreur lors de la régénération du calendrier'
       );
     }
   }

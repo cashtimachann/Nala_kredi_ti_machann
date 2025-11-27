@@ -3,6 +3,7 @@ import { X, Phone, MessageSquare, Calendar, Edit } from 'lucide-react';
 import PaymentRecording from './PaymentRecording';
 import toast from 'react-hot-toast';
 import { microcreditLoanService, CollectionNoteResponse } from '../../services/microcreditLoanService';
+import { calculateMonthlyPaymentFromMonthlyRate, resolveMonthlyRatePercent, roundCurrency } from './loanRateUtils';
 
 // Accept a full loan object from LoanManagement; we deliberately use any to accept normalized Loan types
 type LoanBrief = any;
@@ -20,6 +21,9 @@ const RecouvrementModal: React.FC<Props> = ({ loan, onClose, onSuccess }) => {
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [notes, setNotes] = useState<CollectionNoteResponse[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
+  const [schedule, setSchedule] = useState<any[]>([]);
+  const [loadingSchedule, setLoadingSchedule] = useState(false);
+  const [prefillAmount, setPrefillAmount] = useState<number | undefined>(undefined);
 
   const handleSaveNote = async () => {
     if (!noteText || !noteText.trim()) {
@@ -61,6 +65,35 @@ const RecouvrementModal: React.FC<Props> = ({ loan, onClose, onSuccess }) => {
 
     loadNotes();
   }, [loan?.id]);
+
+  useEffect(() => {
+    const loadSchedule = async () => {
+      if (!loan?.id) return;
+      setLoadingSchedule(true);
+      try {
+        const s = await microcreditLoanService.getPaymentSchedule(loan.id);
+        setSchedule(s || []);
+      } catch (e) {
+        console.error('Could not load payment schedule', e);
+      } finally {
+        setLoadingSchedule(false);
+      }
+    };
+    loadSchedule();
+  }, [loan?.id]);
+
+  // Derived amounts: mensualité + frais and remaining including fees
+  const monthlyRatePercent = resolveMonthlyRatePercent(loan?.monthlyInterestRate, loan?.interestRate, 3.5);
+  const baseMonthly = roundCurrency(calculateMonthlyPaymentFromMonthlyRate(loan?.principalAmount || 0, monthlyRatePercent, loan?.termMonths || 0));
+  const processingFee = (loan?.approvedAmount ?? loan?.principalAmount) ? roundCurrency((loan?.approvedAmount ?? loan?.principalAmount) * 0.05) : 0;
+  const distributedFeePortion = (loan?.termMonths || 0) > 0 ? roundCurrency(processingFee / (loan?.termMonths || 1)) : 0;
+  const monthlyWithFee = roundCurrency(baseMonthly + distributedFeePortion);
+  const totalDueWithFees = roundCurrency(monthlyWithFee * (loan?.termMonths || 0));
+  const paidAmount = roundCurrency(loan?.paidAmount || 0);
+  const remainingWithFees = roundCurrency(Math.max(0, totalDueWithFees - paidAmount));
+
+  // Next unpaid installment from schedule
+  const nextInstallment = (schedule || []).find((i) => (i.status || '').toUpperCase() !== 'COMPLETED' && (i.status || '').toUpperCase() !== 'PAID');
 
   const onPaymentRecorded = (payment: any) => {
     toast.success('Paiement de recouvrement enregistré');
@@ -122,11 +155,36 @@ const RecouvrementModal: React.FC<Props> = ({ loan, onClose, onSuccess }) => {
                   <Edit className="w-4 h-4 inline-block mr-2" />
                   Ouvrir Paiement de Recouvrement
                 </button>
-                <span className="text-sm text-gray-500">Solde: <strong>{loan.remainingBalance}</strong> {loan.currency}</span>
+                <span className="text-sm text-gray-500">Mensualité + Frais: <strong>{monthlyWithFee}</strong> {loan.currency}</span>
+                <span className="text-sm text-gray-500">Reste à payer (+ frais): <strong>{remainingWithFees}</strong> {loan.currency}</span>
                 {loan.daysOverdue && loan.daysOverdue > 0 && (
                   <span className="text-sm text-red-600">{loan.daysOverdue} jours de retard</span>
                 )}
               </div>
+              {nextInstallment && (
+                <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
+                  <p className="text-sm text-rose-700 font-medium">Prochaine Échéance</p>
+                  <div className="text-xs text-rose-800">
+                    <span>Capital: {roundCurrency(nextInstallment.principalAmount)} · Intérêt: {roundCurrency(nextInstallment.interestAmount || 0)} · Frais: {roundCurrency(nextInstallment.feePortion || distributedFeePortion)} {loan.currency}</span>
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => {
+                        const totalInstallment = roundCurrency(
+                          (nextInstallment.totalAmountWithFee) ||
+                          ((nextInstallment.totalPayment || nextInstallment.totalAmount || (nextInstallment.principalAmount + (nextInstallment.interestAmount || 0))) + (nextInstallment.feePortion || distributedFeePortion))
+                        );
+                        setPrefillAmount(totalInstallment);
+                        setShowPayment(true);
+                      }}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs rounded-md"
+                    >Encaisser échéance ({roundCurrency(
+                          (nextInstallment.totalAmountWithFee) ||
+                          ((nextInstallment.totalPayment || nextInstallment.totalAmount || (nextInstallment.principalAmount + (nextInstallment.interestAmount || 0))) + (nextInstallment.feePortion || distributedFeePortion))
+                        )} {loan.currency})</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -213,7 +271,8 @@ const RecouvrementModal: React.FC<Props> = ({ loan, onClose, onSuccess }) => {
         {showPayment && (
           <PaymentRecording
             loan={loan}
-            onClose={() => setShowPayment(false)}
+            initialAmount={prefillAmount}
+            onClose={() => { setShowPayment(false); setPrefillAmount(undefined); }}
             onSubmit={onPaymentRecorded}
           />
         )}

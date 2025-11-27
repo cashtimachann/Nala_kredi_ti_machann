@@ -57,7 +57,7 @@ interface SolvencyEvaluation {
 interface LoanApprovalWorkflowProps {
   application: LoanApplicationType;
   onClose: () => void;
-  onApprove: (applicationId: string, level: number, comment: string, disbursementDate?: string) => void;
+  onApprove: (applicationId: string, level: number, comment: string, approvedAmount?: number, disbursementDate?: string) => void;
   onReject: (applicationId: string, level: number, reason: string) => void;
 }
 
@@ -65,6 +65,7 @@ type ApprovalFormData = {
   decision: 'APPROVE' | 'REJECT' | '';
   disbursementDate?: string;
   comment: string;
+  approvedAmount?: number;
 };
 
 type GuarantorRelation = 'FAMILY' | 'FRIEND' | 'COLLEAGUE' | 'BUSINESS_PARTNER' | 'NEIGHBOR' | 'OTHER';
@@ -146,11 +147,21 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
   
   // Calculate monthly payment using amortization formula: P * [r(1+r)^n] / [(1+r)^n - 1]
   // where P = principal, r = monthly interest rate (as decimal), n = number of months
+  // Track approved amount input when approving; default to requested amount
+  const [approvedAmountInput, setApprovedAmountInput] = useState<number>(requestedAmount);
+
   const computedMonthlyPayment = roundCurrency(
     (application as any).monthlyPayment && (application as any).monthlyPayment > 0
       ? (application as any).monthlyPayment
-      : calculateMonthlyPaymentFromMonthlyRate(requestedAmount, monthlyRatePercent, durationMonths)
+      : calculateMonthlyPaymentFromMonthlyRate(approvedAmountInput || requestedAmount, monthlyRatePercent, durationMonths)
   );
+  // Frais dossier (processing fee) 5% du montant approuvé réparti sur la durée (information seulement)
+  const processingFee = approvedAmountInput ? roundCurrency(approvedAmountInput * 0.05) : 0;
+  const distributedFeePortion = durationMonths > 0 ? roundCurrency(processingFee / durationMonths) : 0;
+  const monthlyPaymentWithFee = roundCurrency(computedMonthlyPayment + distributedFeePortion);
+  const deltaPct = requestedAmount > 0 ? ((approvedAmountInput - requestedAmount) / requestedAmount) * 100 : 0;
+  const netDisbursement = approvedAmountInput ? roundCurrency(approvedAmountInput - processingFee) : 0;
+  const showVarianceWarning = Math.abs(deltaPct) >= 20; // >20% difference threshold
 
   // Calcul de l'évaluation de solvabilité
   const calculateSolvency = (): SolvencyEvaluation => {
@@ -351,10 +362,19 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
         return;
       }
 
+      if (data.decision === 'APPROVE') {
+        const amt = typeof data.approvedAmount === 'number' ? data.approvedAmount : approvedAmountInput;
+        if (!amt || amt <= 0) {
+          toast.error('Montant approuvé invalide');
+          return;
+        }
+      }
+
       const toastId = toast.loading('Traitement en cours...');
 
       if (data.decision === 'APPROVE') {
-        await onApprove(application.id, currentApprovalLevelNumber, data.comment, data.disbursementDate);
+        const amt = typeof data.approvedAmount === 'number' ? data.approvedAmount : approvedAmountInput;
+        await onApprove(application.id, currentApprovalLevelNumber, data.comment, amt, data.disbursementDate);
         toast.success('Demande approuvée avec succès', { id: toastId });
       } else {
         await onReject(application.id, currentApprovalLevelNumber, data.comment);
@@ -480,9 +500,35 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                       {formatCurrency(computedMonthlyPayment, application.currency ?? (application as any).currency ?? 'HTG')}
                     </p>
                   </div>
+                  <div className="bg-purple-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-600 mb-1">Mensualité + Frais</p>
+                    <p className="text-xl font-bold text-purple-900">
+                      {formatCurrency(monthlyPaymentWithFee, application.currency ?? (application as any).currency ?? 'HTG')}
+                    </p>
+                    {processingFee > 0 && (
+                      <p className="text-xs text-gray-700 mt-1">Frais dossier total: {formatCurrency(processingFee, application.currency)} (≈ {formatCurrency(distributedFeePortion, application.currency)} / mois)</p>
+                    )}
+                  </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <p className="text-sm text-gray-600 mb-1">Durée</p>
                     <p className="font-semibold text-gray-900">{durationMonths} mois</p>
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-600 mb-1">Montant Approuvé (saisie)</p>
+                    <p className="text-xl font-bold text-green-900">
+                      {formatCurrency(approvedAmountInput, application.currency)}
+                    </p>
+                    {showVarianceWarning && (
+                      <p className="text-xs mt-1 text-red-700 font-medium flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        Écart {deltaPct.toFixed(1)}% par rapport au demandé
+                      </p>
+                    )}
+                    {!showVarianceWarning && deltaPct !== 0 && (
+                      <p className="text-xs mt-1 text-gray-700">
+                        Différence {deltaPct > 0 ? '+' : ''}{deltaPct.toFixed(1)}%
+                      </p>
+                    )}
+                  </div>
                   </div>
                   <div className="bg-purple-50 p-4 rounded-lg">
                     <p className="text-sm text-gray-600 mb-1">Taux d'Intérêt Mensuel</p>
@@ -492,6 +538,24 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                     <p className="text-sm text-gray-600 mb-1">Total à Rembourser</p>
                     <p className="font-semibold text-gray-900">
                       {formatCurrency(computedMonthlyPayment * durationMonths, application.currency ?? (application as any).currency ?? 'HTG')}
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-600 mb-1">Total + Frais (estimé)</p>
+                    <p className="font-semibold text-gray-900">
+                  <div className="bg-orange-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-600 mb-1">Frais dossier (5%)</p>
+                    <p className="font-semibold text-orange-900">
+                      {formatCurrency(processingFee, application.currency)}
+                    </p>
+                  </div>
+                  <div className="bg-teal-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-600 mb-1">Net à Verser (après frais)</p>
+                    <p className="text-xl font-bold text-teal-900">
+                      {formatCurrency(netDisbursement, application.currency)}
+                    </p>
+                  </div>
+                      {formatCurrency((monthlyPaymentWithFee * durationMonths), application.currency ?? (application as any).currency ?? 'HTG')}
                     </p>
                   </div>
                 </div>
@@ -950,6 +1014,32 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                         </label>
                       </div>
                     </div>
+
+                    {/* Approved Amount - Only shown if APPROVE is selected */}
+                    {decision === 'APPROVE' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <DollarSign className="w-4 h-4 inline-block mr-2" />
+                          Montant approuvé <span className="text-red-500">*</span>
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            defaultValue={approvedAmountInput}
+                            onChange={(e) => setApprovedAmountInput(Number(e.target.value))}
+                            className="w-1/2 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                          <span className="text-sm text-gray-600">
+                            Montant demandé: {formatCurrency(requestedAmount, (application as any).currency || application.currency)}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm text-gray-500">
+                          Vous pouvez ajuster le montant approuvé. Les mensualités estimées seront mises à jour.
+                        </p>
+                      </div>
+                    )}
 
                     {/* Disbursement Date - Only shown if APPROVE is selected */}
                     {decision === 'APPROVE' && (

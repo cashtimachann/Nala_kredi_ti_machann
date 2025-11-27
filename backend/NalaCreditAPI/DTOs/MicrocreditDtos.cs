@@ -96,6 +96,7 @@ namespace NalaCreditAPI.DTOs
         public Guid? LoanId { get; set; } // ID of the loan created from this application (if approved)
         public string LoanType { get; set; } = string.Empty;
         public decimal RequestedAmount { get; set; }
+    public decimal? ApprovedAmount { get; set; }
         public int RequestedDurationMonths { get; set; }
         public string Purpose { get; set; } = string.Empty;
         public string? BusinessPlan { get; set; }
@@ -301,6 +302,10 @@ namespace NalaCreditAPI.DTOs
         public decimal PrincipalAmount { get; set; }
         public decimal InterestAmount { get; set; }
         public decimal TotalAmount { get; set; }
+        // Portion de frais dossier réparti sur cette échéance (non financé dans intérêt)
+        public decimal? FeePortion { get; set; }
+        // Total incluant la portion de frais pour affichage
+        public decimal? TotalAmountWithFee { get; set; }
         public string Status { get; set; } = string.Empty;
         public decimal? PaidAmount { get; set; }
         public DateOnly? PaidDate { get; set; }

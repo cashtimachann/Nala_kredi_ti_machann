@@ -17,8 +17,12 @@ import {
   ClientAccountStats,
   TermSavingsType,
   getTermTypeLabel,
-  getTermInterestRate,
-  AccountTransaction
+  getMonthlyInterestRatePercent,
+  getTermMonthlyInterestPercent,
+  AccountTransaction,
+  computeTermProjectedInterest,
+  computeAccruedInterestByDays,
+  getTermMonths
 } from '../../types/clientAccounts';
 import { parseGender, genderLabel } from '../../utils/gender';
 import jsPDF from 'jspdf';
@@ -32,12 +36,14 @@ const TermSavingsManagement: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState(''); // debounced search input
   const [currencyFilter, setCurrencyFilter] = useState<'ALL' | 'HTG' | 'USD'>('ALL');
   const [statusFilter, setStatusFilter] = useState<'' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'CLOSED'>('');
   const [termFilter, setTermFilter] = useState<'ALL' | TermSavingsType>('ALL');
   const [branchFilter, setBranchFilter] = useState<number | undefined>(undefined);
   const [minAmount, setMinAmount] = useState<string>('');
   const [maxAmount, setMaxAmount] = useState<string>('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showNewClientModal, setShowNewClientModal] = useState(false);
@@ -146,6 +152,7 @@ const TermSavingsManagement: React.FC = () => {
         lastTransactionDate: dto.lastTransactionDate,
         termType: mapTermType(dto.termType), // This is the important field!
         interestRate: dto.interestRate,
+        interestRateMonthly: dto.interestRateMonthly,
         accruedInterest: dto.accruedInterest,
         lastInterestCalculation: dto.lastInterestCalculation,
         earlyWithdrawalPenalty: dto.earlyWithdrawalPenalty,
@@ -207,6 +214,12 @@ const TermSavingsManagement: React.FC = () => {
 
   useEffect(() => { load(); }, []);
 
+  // Debounce search input to avoid excessive re-rendering while typing
+  useEffect(() => {
+    const id = setTimeout(() => setSearchTerm(searchInput), 300);
+    return () => clearTimeout(id);
+  }, [searchInput]);
+
   const filtered = useMemo(() => {
     return (accounts || []).filter(a => {
       const matchesSearch = !searchTerm ||
@@ -229,7 +242,7 @@ const TermSavingsManagement: React.FC = () => {
     currency: (a) => a.currency,
     balance: (a) => a.balance,
     termType: (a) => a.termType || '',
-    interestRate: (a) => a.interestRate ?? getTermInterestRate(a.termType!, a.currency),
+    interestRate: (a) => a.interestRate ?? getTermMonthlyInterestPercent(a.termType!, a.currency),
     openingDate: (a) => new Date(a.openingDate).getTime(),
     maturityDate: (a) => a.maturityDate ? new Date(a.maturityDate).getTime() : 0,
   };
@@ -304,7 +317,7 @@ const TermSavingsManagement: React.FC = () => {
 
   const sortingHeader = (label: string, key: keyof ClientAccount | 'interestRate' | 'maturityDate' | 'balance' | 'termType' | 'customerName' | 'branchName' | 'accountNumber' | 'currency', align: 'left' | 'right' = 'left') => (
     <th
-      className={`px-6 py-3 text-${align} text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none`}
+      className={`px-6 py-3 text-${align} text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer select-none`}
       onClick={() => toggleSort(key)}
     >
       <span className="inline-flex items-center gap-1">
@@ -317,7 +330,7 @@ const TermSavingsManagement: React.FC = () => {
   const exportCsv = (rows: ClientAccount[]) => {
     try {
       const columns = [
-        'Numéro', 'Client', 'Téléphone', 'Succursale', 'Devise', 'Solde', 'Terme', 'Taux(%)', 'Échéance', 'Statut'
+        'Numéro', 'Client', 'Téléphone', 'Succursale', 'Devise', 'Solde', 'Terme', 'Taux(%) / mois', 'Échéance', 'Statut'
       ];
       const lines = [columns.join(',')];
       rows.forEach((a) => {
@@ -329,7 +342,7 @@ const TermSavingsManagement: React.FC = () => {
           a.currency,
           String(a.balance),
           a.termType ? getTermTypeLabel(a.termType) : '',
-          a.interestRate !== undefined ? (Number(a.interestRate) * 100).toFixed(2) : (getTermInterestRate(a.termType || TermSavingsType.TWELVE_MONTHS, a.currency) * 100).toFixed(2),
+          a.interestRate !== undefined ? getMonthlyInterestRatePercent({ interestRate: Number(a.interestRate), interestRateMonthly: (a as any).interestRateMonthly, termType: a.termType }).toFixed(2) : getMonthlyInterestRatePercent({ interestRate: getTermMonthlyInterestPercent(a.termType || TermSavingsType.TWELVE_MONTHS, a.currency), termType: a.termType, isMonthlyPercent: true }).toFixed(2),
           a.maturityDate ? new Date(a.maturityDate).toISOString().split('T')[0] : '',
           a.status
         ];
@@ -377,7 +390,7 @@ const TermSavingsManagement: React.FC = () => {
               <th>Devise</th>
               <th>Solde</th>
               <th>Terme</th>
-              <th>Taux(%)</th>
+              <th>Taux(%) / mois</th>
               <th>Échéance</th>
               <th>Jours restants</th>
               <th>Statut</th>
@@ -392,7 +405,7 @@ const TermSavingsManagement: React.FC = () => {
                 <td>${a.currency}</td>
                 <td>${a.balance}</td>
                 <td>${a.termType ? getTermTypeLabel(a.termType) : ''}</td>
-                <td>${a.interestRate !== undefined ? (Number(a.interestRate) * 100).toFixed(2) : ''}</td>
+                <td>${a.interestRate !== undefined ? (getMonthlyInterestRatePercent({ interestRate: Number(a.interestRate), interestRateMonthly: (a as any).interestRateMonthly, termType: a.termType }).toFixed(2)) : ''}</td>
                 <td>${a.maturityDate ? new Date(a.maturityDate).toLocaleDateString('fr-FR') : ''}</td>
                 <td>${daysUntil(a.maturityDate)}</td>
                 <td>${a.status}</td>
@@ -423,7 +436,9 @@ const TermSavingsManagement: React.FC = () => {
         Devise: a.currency,
         Solde: a.balance,
         Terme: a.termType ? getTermTypeLabel(a.termType) : '',
-        'Taux(%)': a.interestRate !== undefined ? (Number(a.interestRate) * 100).toFixed(2) : (getTermInterestRate(a.termType || TermSavingsType.TWELVE_MONTHS, a.currency) * 100).toFixed(2),
+        'Taux(%) / mois': a.interestRate !== undefined
+          ? getMonthlyInterestRatePercent({ interestRate: Number(a.interestRate), interestRateMonthly: (a as any).interestRateMonthly, termType: a.termType }).toFixed(2)
+          : getMonthlyInterestRatePercent({ interestRate: getTermMonthlyInterestPercent(a.termType || TermSavingsType.TWELVE_MONTHS, a.currency), termType: a.termType, isMonthlyPercent: true }).toFixed(2),
         Échéance: a.maturityDate ? new Date(a.maturityDate).toLocaleDateString('fr-FR') : '',
         Statut: a.status
       }));
@@ -444,8 +459,8 @@ const TermSavingsManagement: React.FC = () => {
 
   const exportMaturitiesCsv = (accounts: ClientAccount[]) => {
     try {
-      const rows = getUpcomingMaturities(accounts);
-      const headers = ['Numéro','Client','Téléphone','Succursale','Devise','Solde','Terme','Taux(%)','Échéance','Jours restants'];
+  const rows = getUpcomingMaturities(accounts);
+  const headers = ['Numéro','Client','Téléphone','Succursale','Devise','Solde','Terme','Taux(%) / mois','Échéance','Jours restants'];
       const lines = [headers.join(',')];
       rows.forEach(a => {
         const vals = [
@@ -456,7 +471,7 @@ const TermSavingsManagement: React.FC = () => {
           a.currency,
           String(a.balance),
           a.termType ? getTermTypeLabel(a.termType) : '',
-          a.interestRate !== undefined ? (Number(a.interestRate) * 100).toFixed(2) : '',
+          a.interestRate !== undefined ? getMonthlyInterestRatePercent({ interestRate: Number(a.interestRate), interestRateMonthly: (a as any).interestRateMonthly, termType: a.termType }).toFixed(2) : '',
           a.maturityDate ? new Date(a.maturityDate).toISOString().split('T')[0] : '',
           String(daysUntil(a.maturityDate))
         ];
@@ -486,7 +501,7 @@ const TermSavingsManagement: React.FC = () => {
     const maturing30 = termAccounts.filter(a => a.maturityDate && inDays(a.maturityDate) >= 0 && inDays(a.maturityDate) <= 30).length;
     const matured = termAccounts.filter(a => a.maturityDate && inDays(a.maturityDate) < 0).length;
     const avgRate = (() => {
-      const rates = termAccounts.map(a => Number(a.interestRate ?? getTermInterestRate(a.termType || TermSavingsType.TWELVE_MONTHS, a.currency)));
+      const rates = termAccounts.map(a => Number(a.interestRate ?? getTermMonthlyInterestPercent(a.termType || TermSavingsType.TWELVE_MONTHS, a.currency)));
       if (!rates.length) return 0;
       return rates.reduce((s, r) => s + r, 0) / rates.length;
     })();
@@ -514,8 +529,8 @@ const TermSavingsManagement: React.FC = () => {
         </div>
         <div className="bg-gradient-to-br from-violet-500 to-violet-600 p-6 rounded-xl text-white shadow-lg">
           <div>
-            <p className="text-sm opacity-90">Taux moyen (annuel)</p>
-            <p className="text-2xl font-bold">{(avgRate * 100).toFixed(2)}%</p>
+            <p className="text-sm opacity-90">Taux moyen (mensuel)</p>
+            <p className="text-2xl font-bold">{((avgRate * 100) / 12).toFixed(2)}%</p>
             <p className="text-xs mt-1 opacity-75">Solde total: {new Intl.NumberFormat('fr-FR').format(totalBalance)}</p>
           </div>
         </div>
@@ -538,7 +553,8 @@ const TermSavingsManagement: React.FC = () => {
       toast('Aucune échéance correspondante');
       return;
     }
-    setSearchTerm('');
+  setSearchInput('');
+  setSearchTerm('');
     setStatusFilter('');
     setCurrencyFilter('ALL');
     setTermFilter('ALL');
@@ -548,6 +564,20 @@ const TermSavingsManagement: React.FC = () => {
     // Optional: auto-sort by maturity date asc
     setSortKey('maturityDate' as any);
     setSortDir('asc');
+  };
+
+  const clearFilters = () => {
+    setSearchInput('');
+    setSearchTerm('');
+    setCurrencyFilter('ALL');
+    setStatusFilter('');
+    setTermFilter('ALL');
+    setBranchFilter(undefined);
+    setMinAmount('');
+    setMaxAmount('');
+    setSortKey('openingDate');
+    setSortDir('desc');
+    setPage(1);
   };
 
   const openTransactions = async (account: ClientAccount) => {
@@ -565,16 +595,13 @@ const TermSavingsManagement: React.FC = () => {
   };
 
   const calculateInterestInline = (account: ClientAccount) => {
-    const monthsMap: Record<any, number> = {
-      [TermSavingsType.THREE_MONTHS]: 3,
-      [TermSavingsType.SIX_MONTHS]: 6,
-      [TermSavingsType.TWELVE_MONTHS]: 12,
-      [TermSavingsType.TWENTY_FOUR_MONTHS]: 24
-    };
-    const termMonths = monthsMap[account.termType || TermSavingsType.TWELVE_MONTHS] || 12;
-    const rate = Number(account.interestRate ?? getTermInterestRate(account.termType || TermSavingsType.TWELVE_MONTHS, account.currency));
+    const monthlyRate = getMonthlyInterestRatePercent({ 
+      interestRate: Number(account.interestRate), 
+      interestRateMonthly: account.interestRateMonthly, 
+      termType: account.termType 
+    });
     const principal = Number(account.balance || 0);
-    const projectedInterest = principal * rate * (termMonths / 12);
+    const projectedInterest = computeTermProjectedInterest(principal, monthlyRate, account.termType);
     toast.success(`Intérêt projeté: ${projectedInterest.toFixed(2)} ${account.currency}`);
   };
 
@@ -733,7 +760,7 @@ const TermSavingsManagement: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 tab-contrast-fix">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Comptes d'Épargne à Terme</h2>
@@ -778,7 +805,7 @@ const TermSavingsManagement: React.FC = () => {
       </div>
 
       {tab === 'overview' && (
-        <div className="space-y-6">
+        <div className="space-y-6 tab-contrast-fix">
           <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
             <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-xl text-white shadow-lg">
               <div className="flex items-center justify-between">
@@ -839,7 +866,7 @@ const TermSavingsManagement: React.FC = () => {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-lg font-semibold">Prochaines échéances (Comptes à Terme)</h3>
-                <p className="text-sm text-gray-500">Tous les comptes arrivant prochainement à échéance</p>
+          <p className="text-sm text-gray-700">Tous les comptes arrivant prochainement à échéance</p>
               </div>
               <div className="flex items-center gap-2">
                 <select
@@ -870,12 +897,12 @@ const TermSavingsManagement: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Numéro</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Terme</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Échéance</th>
-                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Jours</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Numéro</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Client</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Montant</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Terme</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Échéance</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">Jours</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -903,7 +930,7 @@ const TermSavingsManagement: React.FC = () => {
 
             {/* Pagination controls for upcoming maturities */}
             {allUpcoming.length > 0 && (
-              <div className="flex items-center justify-between text-sm text-gray-600 mt-3">
+              <div className="flex items-center justify-between text-sm text-gray-700 mt-3">
                 <div>
                   Page {upcomingPage} sur {upcomingTotalPages} • {allUpcoming.length} éléments
                 </div>
@@ -919,102 +946,131 @@ const TermSavingsManagement: React.FC = () => {
         </div>
       )}
 
-      {tab === 'accounts' && (
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col lg:flex-row gap-4 items-center">
-        <div className="relative w-full md:flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-5 w-5" />
+  {tab === 'accounts' && (
+  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col gap-4 accounts-contrast-fix">
+        <div className="relative w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 h-5 w-5" />
           <input
             type="text"
             placeholder="Rechercher par numéro, nom client..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
           />
         </div>
-        <select
-          value={currencyFilter}
-          onChange={(e) => setCurrencyFilter(e.target.value as any)}
-          className="px-3 py-2 border border-gray-300 rounded-lg"
-        >
-          <option value="ALL">Toutes devises</option>
-          <option value="HTG">HTG</option>
-          <option value="USD">USD</option>
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as any)}
-          className="px-3 py-2 border border-gray-300 rounded-lg"
-        >
-          <option value="">Tous statuts</option>
-          <option value="ACTIVE">Actif</option>
-          <option value="INACTIVE">Inactif</option>
-          <option value="SUSPENDED">Suspendu</option>
-          <option value="CLOSED">Fermé</option>
-        </select>
-        <select
-          value={branchFilter ?? ''}
-          onChange={(e) => setBranchFilter(e.target.value ? Number(e.target.value) : undefined)}
-          className="px-3 py-2 border border-gray-300 rounded-lg"
-        >
-          <option value="">Toutes succursales</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
-        <select
-          value={termFilter}
-          onChange={(e) => setTermFilter(e.target.value === 'ALL' ? 'ALL' : (e.target.value as TermSavingsType))}
-          className="px-3 py-2 border border-gray-300 rounded-lg"
-        >
-          <option value="ALL">Toutes durées</option>
-          <option value={TermSavingsType.THREE_MONTHS}>3 mois</option>
-          <option value={TermSavingsType.SIX_MONTHS}>6 mois</option>
-          <option value={TermSavingsType.TWELVE_MONTHS}>12 mois</option>
-          <option value={TermSavingsType.TWENTY_FOUR_MONTHS}>24 mois</option>
-        </select>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <select
+            value={currencyFilter}
+            onChange={(e) => setCurrencyFilter(e.target.value as any)}
+            className="px-3 py-2 border border-gray-300 rounded-lg"
+          >
+            <option value="ALL">Toutes devises</option>
+            <option value="HTG">HTG</option>
+            <option value="USD">USD</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="px-3 py-2 border border-gray-300 rounded-lg"
+          >
+            <option value="">Tous statuts</option>
+            <option value="ACTIVE">Actif</option>
+            <option value="INACTIVE">Inactif</option>
+            <option value="SUSPENDED">Suspendu</option>
+            <option value="CLOSED">Fermé</option>
+          </select>
+          <select
+            value={branchFilter ?? ''}
+            onChange={(e) => setBranchFilter(e.target.value ? Number(e.target.value) : undefined)}
+            className="px-3 py-2 border border-gray-300 rounded-lg"
+          >
+            <option value="">Toutes succursales</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+          <select
+            value={termFilter}
+            onChange={(e) => setTermFilter(e.target.value === 'ALL' ? 'ALL' : (e.target.value as TermSavingsType))}
+            className="px-3 py-2 border border-gray-300 rounded-lg"
+          >
+            <option value="ALL">Toutes durées</option>
+            <option value={TermSavingsType.THREE_MONTHS}>3 mois</option>
+            <option value={TermSavingsType.SIX_MONTHS}>6 mois</option>
+            <option value={TermSavingsType.TWELVE_MONTHS}>12 mois</option>
+            <option value={TermSavingsType.TWENTY_FOUR_MONTHS}>24 mois</option>
+          </select>
+        </div>
         <div className="flex items-center gap-2">
-          <input
-            type="number"
-            inputMode="decimal"
-            placeholder="Montant min"
-            value={minAmount}
-            onChange={(e) => setMinAmount(e.target.value)}
-            className="w-28 px-3 py-2 border border-gray-300 rounded-lg"
-          />
-          <span className="text-gray-400">-</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            placeholder="Montant max"
-            value={maxAmount}
-            onChange={(e) => setMaxAmount(e.target.value)}
-            className="w-28 px-3 py-2 border border-gray-300 rounded-lg"
-          />
-        </div>
-        <div className="flex items-center gap-2 ml-auto">
           <button
-            onClick={() => exportCsv(sorted)}
+            onClick={() => setShowAdvancedFilters((s) => !s)}
             className="px-3 py-2 border border-gray-300 rounded-lg flex items-center gap-2 hover:bg-gray-50"
-            title="Exporter en CSV"
+            title="Afficher/masquer les filtres avancés"
           >
-            <Download className="h-4 w-4" />
-            Export
+            <Filter className="h-4 w-4" />
+            {showAdvancedFilters ? 'Masquer filtres avancés' : 'Filtres avancés'}
           </button>
           <button
-            onClick={() => exportPdf(sorted)}
-            className="px-3 py-2 border border-gray-300 rounded-lg flex items-center gap-2 hover:bg-gray-50"
-            title="Exporter en PDF"
+            onClick={clearFilters}
+            className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            title="Réinitialiser tous les filtres"
           >
-            <FileText className="h-4 w-4" />
-            PDF
+            Réinitialiser
           </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => exportCsv(sorted)}
+              className="px-3 py-2 border border-gray-300 rounded-lg flex items-center gap-2 hover:bg-gray-50"
+              title="Exporter en CSV"
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </button>
+            <button
+              onClick={() => exportPdf(sorted)}
+              className="px-3 py-2 border border-gray-300 rounded-lg flex items-center gap-2 hover:bg-gray-50"
+              title="Exporter en PDF"
+            >
+              <FileText className="h-4 w-4" />
+              PDF
+            </button>
+          </div>
         </div>
+        {showAdvancedFilters && (
+          <div className="bg-gray-50 rounded-lg p-3 border">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="Montant min"
+                  value={minAmount}
+                  onChange={(e) => setMinAmount(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="Montant max"
+                  value={maxAmount}
+                  onChange={(e) => setMaxAmount(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div className="text-sm text-gray-700 flex items-center">
+                Astuce: combinez les montants avec la devise pour filtrer précisément.
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       )}
 
-      {tab === 'accounts' && (
-      <div className="flex flex-wrap gap-2 items-center text-sm">
-        <span className="text-gray-500">Échéances rapides:</span>
+  {tab === 'accounts' && (
+  <div className="flex flex-wrap gap-2 items-center text-sm accounts-contrast-fix">
+  <span className="text-gray-900">Échéances rapides:</span>
         <button onClick={() => setSearchTerm('')} className="px-2 py-1 border rounded-lg hover:bg-gray-50">Toutes</button>
         <button onClick={() => applyMaturityQuickFilter(7)} className="px-2 py-1 border rounded-lg hover:bg-gray-50">Dans 7 jours</button>
         <button onClick={() => applyMaturityQuickFilter(30)} className="px-2 py-1 border rounded-lg hover:bg-gray-50">Dans 30 jours</button>
@@ -1022,17 +1078,17 @@ const TermSavingsManagement: React.FC = () => {
       </div>
       )}
 
-      {tab === 'accounts' && (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+  {tab === 'accounts' && (
+  <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden accounts-contrast-fix">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <TrendingUp className="h-8 w-8 text-blue-600 animate-pulse" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-12">
-            <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <FileText className="mx-auto h-12 w-12 text-gray-600 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun compte trouvé</h3>
-            <p className="text-gray-500">Essayez de modifier vos critères de recherche</p>
+            <p className="text-gray-900">Essayez de modifier vos critères de recherche</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -1045,11 +1101,11 @@ const TermSavingsManagement: React.FC = () => {
                   {sortingHeader('Devise', 'currency')}
                   {sortingHeader('Solde', 'balance', 'right')}
                   {sortingHeader('Terme', 'termType')}
-                  {sortingHeader('Taux', 'interestRate')}
+                  {sortingHeader('Taux (% / mois)', 'interestRate')}
                   {sortingHeader('Échéance', 'maturityDate')}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jours restants</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Jours restants</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Statut</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -1059,9 +1115,9 @@ const TermSavingsManagement: React.FC = () => {
                     <td className="px-6 py-4">{a.accountNumber}</td>
                     <td className="px-6 py-4">
                       <div className="font-medium text-gray-900">
-                        {a.customerName && a.customerName !== 'undefined undefined' ? a.customerName : (a as any).customerFullName && (a as any).customerFullName !== 'undefined undefined' ? (a as any).customerFullName : ((a as any).customer?.fullName && (a as any).customer?.fullName !== 'undefined undefined' ? (a as any).customer?.fullName : <span className="italic text-gray-400">Nom inconnu</span>)}
+                        {a.customerName && a.customerName !== 'undefined undefined' ? a.customerName : (a as any).customerFullName && (a as any).customerFullName !== 'undefined undefined' ? (a as any).customerFullName : ((a as any).customer?.fullName && (a as any).customer?.fullName !== 'undefined undefined' ? (a as any).customer?.fullName : <span className="italic text-gray-700">Nom inconnu</span>)}
                       </div>
-                      <div className="text-xs text-gray-500">{a.customerPhone || (a as any).customer?.contact?.primaryPhone || ''}</div>
+                      <div className="text-xs text-gray-700">{a.customerPhone || (a as any).customer?.contact?.primaryPhone || ''}</div>
                     </td>
                     <td className="px-6 py-4">{a.branchName}</td>
                     <td className="px-6 py-4">
@@ -1071,14 +1127,14 @@ const TermSavingsManagement: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 text-right font-semibold">{formatCurrency(a.balance, a.currency)}</td>
                     <td className="px-6 py-4">
-                      {a.termType ? getTermTypeLabel(a.termType) : <span className="text-gray-400 italic">Non défini</span>}
+                      {a.termType ? getTermTypeLabel(a.termType) : <span className="text-gray-700 italic">Non défini</span>}
                     </td>
                     <td className="px-6 py-4">
                       {a.interestRate !== undefined 
-                        ? `${(Number(a.interestRate) * 100).toFixed(2)}%` 
+                        ? `${getMonthlyInterestRatePercent({ interestRate: Number(a.interestRate), interestRateMonthly: (a as any).interestRateMonthly, termType: a.termType }).toFixed(2)}% / mois` 
                         : a.termType 
-                          ? `${(getTermInterestRate(a.termType, a.currency) * 100).toFixed(2)}%`
-                          : <span className="text-gray-400 italic">-</span>
+                          ? `${getMonthlyInterestRatePercent({ interestRate: getTermMonthlyInterestPercent(a.termType, a.currency), termType: a.termType, isMonthlyPercent: true }).toFixed(2)}% / mois`
+                          : <span className="text-gray-700 italic">-</span>
                       }
                     </td>
                     <td className="px-6 py-4">
@@ -1094,7 +1150,7 @@ const TermSavingsManagement: React.FC = () => {
                               maturity.setMonth(maturity.getMonth() + months);
                               return maturity.toLocaleDateString('fr-FR');
                             })()
-                          : <span className="text-gray-400 italic">Non calculée</span>
+                          : <span className="text-gray-700 italic">Non calculée</span>
                       }
                     </td>
                     <td className="px-6 py-4">
@@ -1115,7 +1171,7 @@ const TermSavingsManagement: React.FC = () => {
                             const diff = Math.ceil((maturity.getTime() - now.getTime()) / (1000*60*60*24));
                             return <span className={diff < 0 ? 'text-red-600 font-semibold' : diff < 30 ? 'text-orange-600 font-semibold' : ''}>{diff}</span>;
                           })()
-                        : <span className="text-gray-400 italic">-</span>
+                        : <span className="text-gray-700 italic">-</span>
                       }
                     </td>
                     <td className="px-6 py-4 text-center">
@@ -1150,12 +1206,12 @@ const TermSavingsManagement: React.FC = () => {
       {tab === 'accounts' && !loading && filtered.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="px-4 py-3 flex items-center justify-between">
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-gray-700">
               Affichage {Math.min((page - 1) * pageSize + 1, sorted.length)}–{Math.min(page * pageSize, sorted.length)} de {sorted.length} comptes
             </div>
 
             <div className="flex items-center space-x-2">
-              <label className="text-sm text-gray-600">Afficher</label>
+              <label className="text-sm text-gray-700">Afficher</label>
               <select
                 value={pageSize}
                 onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
@@ -1211,11 +1267,15 @@ const TermSavingsManagement: React.FC = () => {
       )}
 
       {tab === 'clients' && (
-        <ClientsTab onOpenTerm={(customer) => { setInitialCustomerForOpen(customer); setShowOpenModal(true); }} />
+        <div className="tab-contrast-fix">
+          <ClientsTab onOpenTerm={(customer) => { setInitialCustomerForOpen(customer); setShowOpenModal(true); }} />
+        </div>
       )}
 
       {tab === 'transactions' && (
-        <TransactionsTab />
+        <div className="tab-contrast-fix">
+          <TransactionsTab />
+        </div>
       )}
 
       {/* Transactions modal for account details */}
@@ -1225,7 +1285,7 @@ const TermSavingsManagement: React.FC = () => {
             <div className="bg-gray-100 p-4 flex items-center justify-between">
               <div>
                 <h3 className="font-semibold">Historique - {txModalAccount.accountNumber}</h3>
-                <p className="text-sm text-gray-600">{txModalAccount.customerName}</p>
+                <p className="text-sm text-gray-700">{txModalAccount.customerName}</p>
               </div>
               <div>
                 <button onClick={() => { setTxModalAccount(null); setTxList([]); }} className="px-3 py-1">Fermer</button>
@@ -1233,19 +1293,19 @@ const TermSavingsManagement: React.FC = () => {
             </div>
             <div className="p-4">
               {txLoading ? (
-                <div className="py-10 text-center text-gray-500">Chargement...</div>
+                <div className="py-10 text-center text-gray-700">Chargement...</div>
               ) : txList.length === 0 ? (
-                <div className="py-10 text-center text-gray-500">Aucune transaction</div>
+                <div className="py-10 text-center text-gray-700">Aucune transaction</div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Devise</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Date</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Type</th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">Montant</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Devise</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Description</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -1958,7 +2018,7 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
   const paginatedResults = results.slice(startIndex, startIndex + clientPageSize);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 tab-contrast-fix">
       {/* Client Search Bar */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
         <div className="relative">
@@ -2141,13 +2201,13 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
         )}
       </div>
 
-      {loading && <div className="text-sm text-gray-500">Recherche en cours...</div>}
+  {loading && <div className="text-sm text-gray-700">Recherche en cours...</div>}
 
       {!loading && results.length === 0 && (
         <div className="text-center py-12">
           <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">{term.trim() ? 'Aucun client trouvé' : 'Aucun client avec compte à terme'}</h3>
-          <p className="text-gray-500">{term.trim() ? 'Essayez de modifier vos critères de recherche' : 'Les clients ayant des comptes d\'épargne à terme apparaîtront ici'}</p>
+          <p className="text-gray-700">{term.trim() ? 'Essayez de modifier vos critères de recherche' : 'Les clients ayant des comptes d\'épargne à terme apparaîtront ici'}</p>
         </div>
       )}
 
@@ -2183,7 +2243,7 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
                   <td colSpan={6} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center justify-center">
                       <Users className="h-12 w-12 text-gray-400 mb-4" />
-                      <p className="text-gray-500">
+                      <p className="text-gray-700">
                         {term.trim() 
                           ? 'Aucun client ne correspond à votre recherche'
                           : 'Aucun client avec compte à terme pour le moment'}
@@ -2201,7 +2261,7 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">{c.fullName || 'N/A'}</div>
-                          <div className="text-sm text-gray-500">
+                          <div className="text-sm text-gray-700">
                             {c.customerCode ? `Code: ${c.customerCode}` : 'ID: ' + c.id}
                           </div>
                         </div>
@@ -2210,7 +2270,7 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">{formatPhoneDisplay(c.contact?.primaryPhone || c.primaryPhone || c.phone)}</div>
                       {c.contact?.email && (
-                        <div className="text-sm text-gray-500">{c.contact.email}</div>
+                        <div className="text-sm text-gray-700">{c.contact.email}</div>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -2234,16 +2294,16 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
                         ) : c.identity?.documentType !== undefined ? (
                           <div className="flex flex-col">
                             <span className="font-medium">{docTypeLabel(c.identity.documentType)}</span>
-                            <span className="text-xs text-gray-500">{c.identity.documentNumber || '—'}</span>
+                            <span className="text-xs text-gray-700">{c.identity.documentNumber || '—'}</span>
                           </div>
                         ) : (
-                          <span className="text-gray-500">Aucun document</span>
+                          <span className="text-gray-700">Aucun document</span>
                         )}
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-900">{c.address?.commune || 'N/A'}</div>
-                      <div className="text-sm text-gray-500">{c.address?.department || 'N/A'}</div>
+                      <div className="text-sm text-gray-700">{c.address?.department || 'N/A'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {c.isActive ? (
@@ -2360,31 +2420,31 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">Prénom</label>
+                    <label className="block text-sm font-medium text-gray-700">Prénom</label>
                     <p className="text-base text-gray-900">{selectedCustomer.firstName}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">Nom</label>
+                    <label className="block text-sm font-medium text-gray-700">Nom</label>
                     <p className="text-base text-gray-900">{selectedCustomer.lastName}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">Date de Naissance</label>
+                    <label className="block text-sm font-medium text-gray-700">Date de Naissance</label>
                     <p className="text-base text-gray-900">
                       {selectedCustomer.dateOfBirth ? new Date(selectedCustomer.dateOfBirth).toLocaleDateString('fr-FR') : 'N/A'}
                     </p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">Genre</label>
+                    <label className="block text-sm font-medium text-gray-700">Genre</label>
                     <p className="text-base text-gray-900">{genderLabel(selectedCustomer.gender) === 'Masculin' ? 'Homme' : genderLabel(selectedCustomer.gender) === 'Féminin' ? 'Femme' : '—'}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">ID Client</label>
+                    <label className="block text-sm font-medium text-gray-700">ID Client</label>
                     <p className="text-base text-gray-900 font-mono bg-blue-50 px-2 py-1 rounded inline-block">
                       {selectedCustomer.customerCode || selectedCustomer.id}
                     </p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">Statut</label>
+                    <label className="block text-sm font-medium text-gray-700">Statut</label>
                     <p className="text-base">
                       {selectedCustomer.isActive ? (
                         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
@@ -2408,15 +2468,15 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-500">Rue</label>
+                    <label className="block text-sm font-medium text-gray-700">Rue</label>
                     <p className="text-base text-gray-900">{selectedCustomer.address?.street || 'N/A'}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">Commune</label>
+                    <label className="block text-sm font-medium text-gray-700">Commune</label>
                     <p className="text-base text-gray-900">{selectedCustomer.address?.commune || 'N/A'}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">Département</label>
+                    <label className="block text-sm font-medium text-gray-700">Département</label>
                     <p className="text-base text-gray-900">{selectedCustomer.address?.department || 'N/A'}</p>
                   </div>
                 </div>
@@ -2430,15 +2490,15 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">Téléphone Principal</label>
+                    <label className="block text-sm font-medium text-gray-700">Téléphone Principal</label>
                     <p className="text-base text-gray-900">{formatPhoneDisplay(selectedCustomer.contact?.primaryPhone || selectedCustomer.primaryPhone)}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">Téléphone Secondaire</label>
+                    <label className="block text-sm font-medium text-gray-700">Téléphone Secondaire</label>
                     <p className="text-base text-gray-900">{formatPhoneDisplay(selectedCustomer.contact?.secondaryPhone || selectedCustomer.secondaryPhone) || 'N/A'}</p>
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-500">Email</label>
+                    <label className="block text-sm font-medium text-gray-700">Email</label>
                     <p className="text-base text-gray-900">{selectedCustomer.contact?.email || selectedCustomer.email || 'N/A'}</p>
                   </div>
                 </div>
@@ -2452,7 +2512,7 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-500">Type de Document</label>
+                    <label className="block text-sm font-medium text-gray-700">Type de Document</label>
                     <p className="text-base text-gray-900">{docTypeLabel(selectedCustomer.identity?.documentType) || 'N/A'}</p>
                   </div>
                   <div>
@@ -2897,7 +2957,7 @@ const TransactionsTab: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 tab-contrast-fix">
       {/* Toggle entre Recherche et Historique */}
       <div className="bg-white rounded-xl shadow-sm border p-2 flex gap-2">
         <button
@@ -3145,13 +3205,13 @@ const TransactionsTab: React.FC = () => {
         {loading ? (
           <div className="py-20 text-center">
             <Loader className="h-10 w-10 animate-spin text-blue-600 mx-auto mb-3" />
-            <p className="text-gray-500">Chargement des transactions...</p>
+            <p className="text-gray-700">Chargement des transactions...</p>
           </div>
         ) : items.length === 0 ? (
           <div className="py-20 text-center">
             <FileText className="h-16 w-16 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 text-lg mb-2">Aucune transaction</p>
-            <p className="text-gray-400 text-sm">Entrez un numéro de compte et cliquez sur "Charger"</p>
+            <p className="text-gray-700 text-lg mb-2">Aucune transaction</p>
+            <p className="text-gray-700 text-sm">Entrez un numéro de compte et cliquez sur "Charger"</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -3170,7 +3230,7 @@ const TransactionsTab: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                    <td colSpan={7} className="px-6 py-8 text-center text-gray-700">
                       Aucune transaction ne correspond aux filtres
                     </td>
                   </tr>
@@ -3196,13 +3256,8 @@ const TransactionsTab: React.FC = () => {
                             {t.type}
                           </span>
                         </td>
-                        <td className={`px-4 py-3 text-sm text-right font-medium ${
-                          isDeposit || isInterest ? 'text-green-600' :
-                          isWithdrawal ? 'text-red-600' :
-                          'text-gray-900'
-                        }`}>
-                          {isDeposit || isInterest ? '+' : isWithdrawal ? '-' : ''}
-                          {Number(t.amount).toFixed(2)} {t.currency}
+                        <td className="px-4 py-3 text-sm text-right text-gray-700">
+                          { (isDeposit || isInterest) ? '+' : isWithdrawal ? '-' : '' }{Number(t.amount).toFixed(2)} {t.currency}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
                           {t.description || '—'}
@@ -3213,7 +3268,7 @@ const TransactionsTab: React.FC = () => {
                         <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">
                           {Number(t.balanceAfter).toFixed(2)}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">
+                        <td className="px-4 py-3 text-sm text-gray-700">
                           {t.reference || '—'}
                         </td>
                       </tr>
@@ -3818,19 +3873,19 @@ const NewTransactionModal: React.FC<{
           {/* Info compte */}
           <div className="bg-gray-50 rounded-lg p-4 border space-y-1 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-600">Solde actuel:</span>
+              <span className="text-gray-900">Solde actuel:</span>
               <span className="font-semibold">{Number(account.balance).toFixed(2)} {account.currency}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Solde disponible:</span>
+              <span className="text-gray-900">Solde disponible:</span>
               <span className="font-semibold">{Number(account.availableBalance || 0).toFixed(2)} {account.currency}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Terme:</span>
+              <span className="text-gray-900">Terme:</span>
               <span className="font-semibold">{getTermTypeLabel(account.termType || TermSavingsType.TWELVE_MONTHS)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Échéance:</span>
+              <span className="text-gray-900">Échéance:</span>
               <span className="font-semibold">{account.maturityDate ? new Date(account.maturityDate).toLocaleDateString('fr-FR') : '—'}</span>
             </div>
           </div>
@@ -3969,7 +4024,7 @@ const KpiMaturitySoon: React.FC<{ accounts: ClientAccount[] }> = ({ accounts }) 
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   }).length;
   const avgRate = (() => {
-    const rates = accounts.map(a => Number(a.interestRate ?? getTermInterestRate(a.termType || TermSavingsType.TWELVE_MONTHS, a.currency)));
+    const rates = accounts.map(a => Number(a.interestRate ?? getTermMonthlyInterestPercent(a.termType || TermSavingsType.TWELVE_MONTHS, a.currency)));
     if (!rates.length) return 0;
     return rates.reduce((s, r) => s + r, 0) / rates.length;
   })();
@@ -3979,7 +4034,7 @@ const KpiMaturitySoon: React.FC<{ accounts: ClientAccount[] }> = ({ accounts }) 
         <div>
           <p className="text-sm opacity-90">Échéances</p>
           <p className="text-lg font-semibold">7j: {in7} • 30j: {in30}</p>
-          <p className="text-xs mt-1 opacity-75">Nouveaux (ce mois): {newThisMonth} • Taux moyen: {(avgRate*100).toFixed(2)}%</p>
+          <p className="text-xs mt-1 opacity-75">Nouveaux (ce mois): {newThisMonth} • Taux moyen: {((avgRate*100)/12).toFixed(2)}%</p>
         </div>
         <Calendar className="h-10 w-10 opacity-80" />
       </div>
@@ -3991,27 +4046,21 @@ const KpiMaturitySoon: React.FC<{ accounts: ClientAccount[] }> = ({ accounts }) 
 const TermSavingsDetailsModal: React.FC<{ account: ClientAccount; onClose: () => void; onRefresh: () => void }> = ({ account, onClose, onRefresh }) => {
   const [txLoading, setTxLoading] = useState(false);
 
-  const monthsMap: Record<TermSavingsType, number> = {
-    [TermSavingsType.THREE_MONTHS]: 3,
-    [TermSavingsType.SIX_MONTHS]: 6,
-    [TermSavingsType.TWELVE_MONTHS]: 12,
-    [TermSavingsType.TWENTY_FOUR_MONTHS]: 24,
-  };
   const opening = new Date(account.openingDate);
   const maturity = account.maturityDate ? new Date(account.maturityDate) : (() => {
     const d = new Date(opening);
-    const m = monthsMap[account.termType || TermSavingsType.TWELVE_MONTHS] || 12;
+    const m = getTermMonths(account.termType || TermSavingsType.TWELVE_MONTHS) || 12;
     d.setMonth(d.getMonth() + m);
     return d;
   })();
-  const termMonths = monthsMap[account.termType || TermSavingsType.TWELVE_MONTHS] || 12;
-  const rate = Number(account.interestRate ?? getTermInterestRate(account.termType || TermSavingsType.TWELVE_MONTHS, account.currency));
+  const termMonths = getTermMonths(account.termType || TermSavingsType.TWELVE_MONTHS) || 12;
+  const monthlyRate = getMonthlyInterestRatePercent({ interestRate: Number(account.interestRate), interestRateMonthly: account.interestRateMonthly, termType: account.termType });
   const principal = Number(account.balance || 0); // approximation if principal not provided
   const now = new Date();
   const elapsedDays = Math.max(0, Math.floor((now.getTime() - opening.getTime()) / (1000 * 60 * 60 * 24)));
   const totalDays = Math.max(1, Math.floor((maturity.getTime() - opening.getTime()) / (1000 * 60 * 60 * 24)));
-  const projectedInterest = principal * rate * (termMonths / 12);
-  const accruedInterest = principal * rate * (elapsedDays / 365);
+  const projectedInterest = computeTermProjectedInterest(principal, monthlyRate, account.termType);
+  const accruedInterest = computeAccruedInterestByDays(principal, monthlyRate, account.openingDate, now); // approximate monthly by days
   const totalAtMaturity = principal + projectedInterest;
 
   const format = (amount: number) => {
@@ -4309,7 +4358,7 @@ const TermSavingsDetailsModal: React.FC<{ account: ClientAccount; onClose: () =>
                 <li><span className="text-gray-500">Succursale: </span>{account.branchName || '—'}</li>
                 <li><span className="text-gray-500">Ouverture: </span>{new Date(account.openingDate).toLocaleDateString('fr-FR')}</li>
                 <li><span className="text-gray-500">Échéance: </span>{maturity.toLocaleDateString('fr-FR')} ({Math.max(0, Math.ceil((maturity.getTime() - now.getTime()) / (1000*60*60*24)))} jours restants)</li>
-                <li><span className="text-gray-500">Taux: </span>{(rate * 100).toFixed(2)}%/an</li>
+                <li><span className="text-gray-500">Taux: </span>{monthlyRate.toFixed(2)}%/mois</li>
                 <li><span className="text-gray-500">Statut: </span>{account.status}</li>
               </ul>
             </div>
@@ -4397,7 +4446,7 @@ const TermSavingsDetailsModal: React.FC<{ account: ClientAccount; onClose: () =>
               )}
             </button>
             <button
-              onClick={() => printCertificate(account, { principal, rate, maturity, totalAtMaturity })}
+              onClick={() => printCertificate(account, { principal, rate: monthlyRate / 100 * 12, maturity, totalAtMaturity })}
               className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
               title="Imprimer le certificat"
             >
@@ -4453,7 +4502,7 @@ function printCertificate(account: ClientAccount, context: { principal: number; 
         <div class="row"><div class="label">Client</div><div class="value">${account.customerName || ''}</div></div>
         <div class="row"><div class="label">Devise</div><div class="value">${account.currency}</div></div>
         <div class="row"><div class="label">Montant (capital)</div><div class="value">${context.principal}</div></div>
-        <div class="row"><div class="label">Taux</div><div class="value">${(context.rate * 100).toFixed(2)}% par an</div></div>
+  <div class="row"><div class="label">Taux</div><div class="value">${getMonthlyInterestRatePercent({ interestRate: context.rate, termType: account.termType }).toFixed(2)}% par mois</div></div>
         <div class="row"><div class="label">Ouverture</div><div class="value">${open.toLocaleDateString('fr-FR')}</div></div>
         <div class="row"><div class="label">Échéance</div><div class="value">${context.maturity.toLocaleDateString('fr-FR')}</div></div>
         <div class="row"><div class="label">Montant à l'échéance (estimé)</div><div class="value">${context.totalAtMaturity}</div></div>
@@ -4507,14 +4556,8 @@ const OpenTermSavingsAccountModal: React.FC<{ onClose: () => void; onSuccess: ()
     currency: 'HTG' as 'HTG' | 'USD',
     termType: TermSavingsType.TWELVE_MONTHS as TermSavingsType,
     initialDeposit: 0,
-    interestRatePercent: 0
+    interestRatePercent: ''
   });
-
-  useEffect(() => {
-    // initialize suggested rate
-    setForm((f) => ({ ...f, interestRatePercent: +(getTermInterestRate(f.termType, f.currency) * 100).toFixed(2) }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Preselect customer when provided by Clients tab
   useEffect(() => {
@@ -4524,11 +4567,6 @@ const OpenTermSavingsAccountModal: React.FC<{ onClose: () => void; onSuccess: ()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialCustomer]);
-
-  useEffect(() => {
-    // update suggestion when term or currency changes
-    setForm((f) => ({ ...f, interestRatePercent: +(getTermInterestRate(f.termType, f.currency) * 100).toFixed(2) }));
-  }, [form.termType, form.currency]);
 
   const searchCustomers = async () => {
     const raw = customerSearch?.trim();
@@ -4594,13 +4632,17 @@ const OpenTermSavingsAccountModal: React.FC<{ onClose: () => void; onSuccess: ()
       toast.error('Veuillez sélectionner une succursale');
       return;
     }
+  const monthlyRateFraction = form.interestRatePercent ? Number((Number(form.interestRatePercent) / 100).toFixed(6)) : undefined;
+  const annualRateFraction = monthlyRateFraction !== undefined ? Number((monthlyRateFraction * 12).toFixed(6)) : undefined;
     const payload = {
       customerId: selectedCustomer.id || selectedCustomer.Id,
       currency: form.currency,
       initialDeposit: Number(form.initialDeposit),
       branchId: Number(form.branchId),
       termType: form.termType,
-      interestRate: Number((form.interestRatePercent / 100).toFixed(6))
+      // Maintain backward compatibility: send annual for existing backend, plus monthly field for new backend
+      interestRate: annualRateFraction,
+      interestRateMonthly: monthlyRateFraction
     };
     try {
       setLoading(true);
@@ -4760,16 +4802,16 @@ const OpenTermSavingsAccountModal: React.FC<{ onClose: () => void; onSuccess: ()
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Taux d'intérêt (% / an)</label>
+                  <label className="block text_sm font-medium text-gray-700 mb-2">Taux d'intérêt (% / mois)</label>
                   <input
                     type="number"
                     step={0.01}
                     min={0}
-                    value={form.interestRatePercent}
-                    onChange={(e) => setForm({ ...form, interestRatePercent: parseFloat(e.target.value) || 0 })}
+                    value={form.interestRatePercent || ''}
+                    onChange={(e) => setForm({ ...form, interestRatePercent: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
-                  <p className="text-xs text-gray-500 mt-2">Suggestion: {getTermInterestRate(form.termType, form.currency) * 100}%</p>
+
                 </div>
               </div>
               <div className="flex gap-3 pt-4">
@@ -4796,16 +4838,8 @@ const CreateTermSavingsWithNewCustomerModal: React.FC<{ onClose: () => void; onS
     currency: 'HTG' as 'HTG' | 'USD',
     termType: TermSavingsType.TWELVE_MONTHS as TermSavingsType,
     initialDeposit: 0,
-    interestRatePercent: 0
+    interestRatePercent: ''
   });
-
-  useEffect(() => {
-    setForm((f) => ({ ...f, interestRatePercent: +(getTermInterestRate(f.termType, f.currency) * 100).toFixed(2) }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  useEffect(() => {
-    setForm((f) => ({ ...f, interestRatePercent: +(getTermInterestRate(f.termType, f.currency) * 100).toFixed(2) }));
-  }, [form.termType, form.currency]);
 
   useEffect(() => {
     if (step === 'account') {
@@ -4892,13 +4926,18 @@ const CreateTermSavingsWithNewCustomerModal: React.FC<{ onClose: () => void; onS
       toast.error('Veuillez sélectionner une succursale');
       return;
     }
-    const payload = {
+    const monthlyRateFraction = form.interestRatePercent ? Number((Number(form.interestRatePercent) / 100).toFixed(6)) : undefined;
+    const annualRateFraction = monthlyRateFraction !== undefined ? Number((monthlyRateFraction * 12).toFixed(6)) : undefined;
+
+    const payload: any = {
       customerId: createdCustomer.id || createdCustomer.Id,
       currency: form.currency,
       initialDeposit: Number(form.initialDeposit),
       branchId: Number(form.branchId),
       termType: form.termType,
-      interestRate: Number((form.interestRatePercent / 100).toFixed(6))
+      // If user provided a monthly rate (as percent), send both monthly fraction and annual for compatibility
+      interestRate: annualRateFraction,
+      interestRateMonthly: monthlyRateFraction
     };
     setLoading(true);
     try {
@@ -4986,13 +5025,14 @@ const CreateTermSavingsWithNewCustomerModal: React.FC<{ onClose: () => void; onS
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Taux d'intérêt (% / an)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Taux d'intérêt (% / mois)</label>
                   <input
                     type="number"
                     min={0}
                     step={0.01}
-                    value={form.interestRatePercent}
-                    onChange={(e) => setForm({ ...form, interestRatePercent: parseFloat(e.target.value) || 0 })}
+                    value={form.interestRatePercent || ''}
+                    onChange={(e) => setForm({ ...form, interestRatePercent: e.target.value })}
+                    placeholder=""
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                 </div>

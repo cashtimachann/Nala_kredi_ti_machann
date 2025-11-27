@@ -46,10 +46,15 @@ interface Loan {
   dependents?: number;
   loanType: LoanType;
   principalAmount: number;
+  // Additional visibility fields for application context
+  approvedAmount?: number;
+  requestedAmount?: number;
   interestRate: number;
   monthlyInterestRate?: number;
   termMonths: number;
   monthlyPayment: number;
+  // Monthly payment including distributed processing fee (frais dossier réparti)
+  monthlyPaymentWithFee?: number;
   disbursementDate: string;
   maturityDate: string;
   remainingBalance: number;
@@ -386,6 +391,9 @@ const LoanManagement: React.FC = () => {
           const normalizedMonthlyPayment = roundCurrency(
             loan.monthlyPayment ?? loan.installmentAmount ?? calculateMonthlyPaymentFromMonthlyRate(principalAmount, monthlyRate, termMonths)
           );
+          const processingFee = (loan.approvedAmount ?? loan.principalAmount) ? roundCurrency((loan.approvedAmount ?? principalAmount) * 0.05) : 0;
+          const distributedFeePortion = termMonths > 0 ? roundCurrency(processingFee / termMonths) : 0;
+          const monthlyPaymentWithFee = roundCurrency(normalizedMonthlyPayment + distributedFeePortion);
           const remainingBalance = roundCurrency(
             loan.remainingBalance ?? loan.outstandingBalance ?? Math.max(principalAmount - (loan.paidAmount ?? loan.amountPaid ?? 0), 0)
           );
@@ -405,10 +413,13 @@ const LoanManagement: React.FC = () => {
             customerPhone: loan.customer?.contact?.phone || loan.customer?.contact?.phoneNumber || loan.borrower?.contact?.phone || loan.borrower?.contact?.phoneNumber || loan.customerPhone,
             loanType: loan.loanType as LoanType,
             principalAmount,
+            approvedAmount: (loan as any).approvedAmount ?? principalAmount,
+            requestedAmount: (loan as any).requestedAmount ?? principalAmount,
             interestRate: annualRate,
             monthlyInterestRate: monthlyRate,
             termMonths,
             monthlyPayment: normalizedMonthlyPayment,
+            monthlyPaymentWithFee,
             disbursementDate: loan.disbursementDate ?? '',
             maturityDate: loan.maturityDate ?? '',
             remainingBalance,
@@ -433,11 +444,16 @@ const LoanManagement: React.FC = () => {
         
         // Convert approved applications to Loan format (for disbursement)
         const approvedLoansData: Loan[] = approvedApplications.map((app: any) => {
-          const requestedAmount = roundCurrency(app.requestedAmount ?? app.approvedAmount ?? 0);
+          const requestedAmount = roundCurrency(app.requestedAmount ?? 0);
+          const approvedAmount = roundCurrency(app.approvedAmount ?? requestedAmount);
+          const effectiveAmount = approvedAmount || requestedAmount;
           const termMonths = app.requestedDurationMonths ?? app.durationMonths ?? 12;
           const monthlyRate = resolveMonthlyRatePercent(app.monthlyInterestRate, app.interestRate, 3.5);
           const annualRate = resolveAnnualRatePercent(monthlyRate, app.interestRate, normalizePercentValue(app.interestRate ?? monthlyRate * 12));
-          const monthlyPayment = roundCurrency(calculateMonthlyPaymentFromMonthlyRate(requestedAmount, monthlyRate, termMonths));
+          const monthlyPayment = roundCurrency(calculateMonthlyPaymentFromMonthlyRate(effectiveAmount, monthlyRate, termMonths));
+          const processingFee = approvedAmount ? roundCurrency(approvedAmount * 0.05) : 0;
+          const distributedFeePortion = termMonths > 0 ? roundCurrency(processingFee / termMonths) : 0;
+          const monthlyPaymentWithFee = roundCurrency(monthlyPayment + distributedFeePortion);
           const loanRecordId = app.loanId || app.loanRecordId || app.loan?.id;
           const currency = (app.currency === 'USD' ? 'USD' : 'HTG') as 'HTG' | 'USD';
 
@@ -451,16 +467,19 @@ const LoanManagement: React.FC = () => {
             customerName: app.customerName ?? (app.borrower ? `${app.borrower.firstName} ${app.borrower.lastName}`.trim() : 'Client'),
             customerPhone: app.customerPhone ?? app.borrower?.contact?.phone ?? app.borrower?.contact?.phoneNumber,
             loanType: app.loanType as LoanType,
-            principalAmount: requestedAmount,
+            principalAmount: effectiveAmount,
+            approvedAmount,
+            requestedAmount,
             interestRate: annualRate,
             monthlyInterestRate: monthlyRate,
             termMonths,
             monthlyPayment,
+            monthlyPaymentWithFee,
             disbursementDate: app.disbursementDate || '',
             maturityDate: app.disbursementDate
               ? new Date(new Date(app.disbursementDate).setMonth(new Date(app.disbursementDate).getMonth() + termMonths)).toISOString()
               : '',
-            remainingBalance: requestedAmount,
+            remainingBalance: effectiveAmount,
             paidAmount: 0,
             status: mapApplicationStatusToLoanStatus(app.status as string),
             applicationStatus: castApplicationStatus(app.status as string) ?? ApplicationStatus.DRAFT,
@@ -597,7 +616,13 @@ const LoanManagement: React.FC = () => {
   const loansData: Loan[] = applications.map(app => {
           const monthlyRate = resolveMonthlyRatePercent((app as any).monthlyInterestRate, app.interestRate, 3.5);
           const interestRate = resolveAnnualRatePercent(monthlyRate, app.interestRate, monthlyRate > 0 ? monthlyRate * 12 : 0); // annual
-          const monthlyPayment = calculateMonthlyPaymentFromMonthlyRate(app.requestedAmount, monthlyRate, app.requestedDurationMonths);
+          const requestedAmount = roundCurrency(app.requestedAmount ?? 0);
+          const approvedAmount = roundCurrency((app as any).approvedAmount ?? 0);
+          const effectiveAmount = approvedAmount > 0 ? approvedAmount : requestedAmount;
+          const monthlyPayment = calculateMonthlyPaymentFromMonthlyRate(effectiveAmount, monthlyRate, app.requestedDurationMonths);
+    const processingFee = approvedAmount > 0 ? roundCurrency(approvedAmount * 0.05) : 0;
+    const distributedFeePortion = app.requestedDurationMonths > 0 ? roundCurrency(processingFee / app.requestedDurationMonths) : 0;
+    const monthlyPaymentWithFee = roundCurrency(monthlyPayment + distributedFeePortion);
           
           return {
             id: app.id,
@@ -612,16 +637,19 @@ const LoanManagement: React.FC = () => {
               : 'Client',
             customerPhone: app.borrower?.contact?.phone || app.borrower?.contact?.phoneNumber,
             loanType: app.loanType as LoanType,
-            principalAmount: app.requestedAmount,
+            principalAmount: effectiveAmount,
+            requestedAmount,
+            approvedAmount: approvedAmount > 0 ? approvedAmount : undefined,
             interestRate: interestRate,
             monthlyInterestRate: monthlyRate,
             termMonths: app.requestedDurationMonths,
             monthlyPayment: monthlyPayment,
+            monthlyPaymentWithFee,
             disbursementDate: app.disbursementDate || '',
             maturityDate: app.disbursementDate 
               ? new Date(new Date(app.disbursementDate).setMonth(new Date(app.disbursementDate).getMonth() + app.requestedDurationMonths)).toISOString()
               : '',
-            remainingBalance: app.requestedAmount, // TODO: calculate from payments
+            remainingBalance: effectiveAmount, // TODO: calculate from payments
             paidAmount: 0, // TODO: calculate from payments
             status: mapApplicationStatusToLoanStatus(app.status as string),
             applicationStatus: castApplicationStatus(app.status as string) ?? ApplicationStatus.DRAFT,
@@ -682,6 +710,20 @@ const LoanManagement: React.FC = () => {
 
     const pendingCount = page.totalCount ?? sorted.filter(l => l.status === LoanStatus.PENDING).length;
     setPendingApplicationsCount(pendingCount);
+
+    // Assurer que le compteur "Prêts à Décaisser" (approved non encore déboursés)
+    // est aussi mis à jour quand on est sur l'onglet overview (sinon restait à 0 ou ancien état)
+    try {
+      const [activeLoansForCount, approvedApplicationsForCount] = await Promise.all([
+        microcreditLoanApplicationService.getActiveLoans(),
+        (microcreditLoanApplicationService as any).getApprovedLoans()
+      ]);
+      const disbursedIds = new Set(activeLoansForCount.map((l: any) => l.applicationId || l.application?.id).filter(Boolean));
+      const notYetDisbursed = approvedApplicationsForCount.filter((app: any) => !disbursedIds.has(app.id));
+      setLoansToDisburseCount(notYetDisbursed.length);
+    } catch (e) {
+      console.warn('Impossible de rafraîchir le compteur Prêts à Décaisser sur overview:', e);
+    }
 
     // Calculate statistics for applications
         const pendingLoans = sorted.filter(l => l.status === LoanStatus.PENDING);
@@ -879,9 +921,14 @@ const LoanManagement: React.FC = () => {
         const interestRate = resolveAnnualRatePercent(monthlyRate, sourceAnnualRate, normalizePercentValue(sourceAnnualRate ?? 0));
         const durationMonths = app.requestedDurationMonths ?? loan.termMonths ?? 12;
         const requestedAmount = app.requestedAmount ?? loan.principalAmount ?? 0;
+        const approvedAmount = (app as any).approvedAmount ?? (loan as any).approvedAmount;
+        const effectiveAmount = approvedAmount ?? requestedAmount;
         const monthlyPayment = monthlyRate > 0
-          ? calculateMonthlyPaymentFromMonthlyRate(requestedAmount, monthlyRate, durationMonths)
+          ? calculateMonthlyPaymentFromMonthlyRate(effectiveAmount, monthlyRate, durationMonths)
           : roundCurrency(loan.monthlyPayment);
+        const processingFee = approvedAmount ? roundCurrency(approvedAmount * 0.05) : 0;
+        const distributedFeePortion = durationMonths > 0 ? roundCurrency(processingFee / durationMonths) : 0;
+        const monthlyPaymentWithFee = roundCurrency((monthlyPayment || 0) + distributedFeePortion);
 
         const mappedLoan: Loan = {
           ...loan,
@@ -900,14 +947,17 @@ const LoanManagement: React.FC = () => {
           monthlyIncome: app.monthlyIncome ?? loan.monthlyIncome,
           dependents: (app as any).dependents ?? loan.dependents,
           loanType: app.loanType as LoanType,
-          principalAmount: app.requestedAmount ?? loan.principalAmount,
+          principalAmount: effectiveAmount,
+          approvedAmount: approvedAmount,
+          requestedAmount: requestedAmount,
           interestRate,
           termMonths: durationMonths,
           monthlyPayment: monthlyPayment || loan.monthlyPayment,
+          monthlyPaymentWithFee,
+          remainingBalance: effectiveAmount,
           monthlyInterestRate: monthlyRate > 0 ? monthlyRate : undefined,
           disbursementDate: app.disbursementDate ?? loan.disbursementDate,
           maturityDate: app.disbursementDate ? new Date(new Date(app.disbursementDate).setMonth(new Date(app.disbursementDate).getMonth() + (durationMonths ?? 0))).toISOString() : loan.maturityDate,
-          remainingBalance: loan.remainingBalance ?? app.requestedAmount ?? 0,
           paidAmount: loan.paidAmount ?? 0,
           status: mapApplicationStatusToLoanStatus(app.status as string),
           currency: (app.currency as 'HTG' | 'USD') || loan.currency,
@@ -964,6 +1014,7 @@ const LoanManagement: React.FC = () => {
           monthlyInterestRate: normalizedMonthlyRate > 0 ? normalizedMonthlyRate : undefined,
           termMonths,
           monthlyPayment: normalizedMonthlyPayment,
+          monthlyPaymentWithFee: normalizedMonthlyPayment, // Active loan schedule already includes only principal+interest; fee not financed here
           disbursementDate: fullLoan.disbursementDate ?? loan.disbursementDate,
           maturityDate: fullLoan.maturityDate ?? loan.maturityDate,
           remainingBalance: fullLoan.outstandingBalance ?? loan.remainingBalance,
@@ -1056,7 +1107,7 @@ const LoanManagement: React.FC = () => {
     toast.success('Le prêt a été déboursé avec succès');
   };
 
-  const handleApproveLoan = async (applicationId: string, level: number, comment: string, disbursementDate?: string) => {
+  const handleApproveLoan = async (applicationId: string, level: number, comment: string, approvedAmount?: number, disbursementDate?: string) => {
   // Prevent duplicate approve requests for the same application
   if (approvingId === applicationId) return;
   setApprovingId(applicationId);
@@ -1095,7 +1146,7 @@ const LoanManagement: React.FC = () => {
       }
       
       // Now approve with disbursement date
-      await microcreditLoanApplicationService.approveApplication(applicationId, comment, undefined, disbursementDate);
+  await microcreditLoanApplicationService.approveApplication(applicationId, comment, approvedAmount, disbursementDate);
       toast.success('Demande approuvée avec succès!', { id: toastId });
       setShowApprovalWorkflow(false);
       // Reload loans to show updated status
@@ -1151,8 +1202,91 @@ const LoanManagement: React.FC = () => {
   };
 
   const handleExport = () => {
-    toast.success('Export en cours...');
-    // TODO: Implement export functionality
+    try {
+      if (activeTab === 'applications') {
+        // Export pending applications shown in the Applications tab
+        const rows = filteredLoans
+          .filter(l => l.status === LoanStatus.PENDING)
+          .map(l => {
+            const requested = l.requestedAmount ?? l.principalAmount ?? 0;
+            const approved = l.approvedAmount ?? null;
+            const deltaPct = approved && requested > 0
+              ? (((approved - requested) / requested) * 100)
+              : null;
+            // Application processing fee and net-to-client, based on approved amount when available
+            const fee = approved ? roundCurrency(approved * 0.05) : null;
+            const netAmount = approved ? roundCurrency(approved - (fee ?? 0)) : null;
+            const mensualiteAvecFrais = l.monthlyPaymentWithFee ?? (l.monthlyPayment + (fee && l.termMonths ? roundCurrency(fee / l.termMonths) : 0));
+            return {
+              date: l.createdAt,
+              numero: l.loanNumber,
+              client: l.customerName,
+              branche: l.branch,
+              type: getLoanTypeLabel(l.loanType),
+              devise: l.currency,
+              montant_demande: requested,
+              montant_approuve: approved ?? '',
+              difference_pct: deltaPct !== null ? deltaPct.toFixed(1) + '%' : '',
+              mensualite_estimee: l.monthlyPayment,
+              duree_mois: l.termMonths,
+              frais_dossier_5pct: fee ?? '',
+              net_a_verser: netAmount ?? '',
+              mensualite_avec_frais: mensualiteAvecFrais
+            };
+          });
+
+        const headers = [
+          'Date Demande',
+          'Numéro',
+          'Client',
+          'Succursale',
+          'Type',
+          'Devise',
+          'Montant Demandé',
+          'Montant Approuvé',
+          'Différence %',
+          'Mensualité (estimée)',
+          'Durée (mois)',
+          'Frais dossier (5%)',
+          'Net à verser',
+          'Mensualité + Frais (estimée)'
+        ];
+
+        const csvContent = [
+          headers.join(','),
+          ...rows.map(r => [
+            new Date(r.date).toLocaleDateString('fr-FR'),
+            r.numero,
+            `"${r.client}"`,
+            r.branche,
+            r.type,
+            r.devise,
+            r.montant_demande,
+            r.montant_approuve,
+            r.difference_pct,
+            r.mensualite_estimee,
+            r.duree_mois,
+            r.frais_dossier_5pct,
+            r.net_a_verser,
+            r.mensualite_avec_frais
+          ].join(','))
+        ].join('\n');
+
+        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `demandes_${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+        toast.success('Export des demandes réussi');
+        return;
+      }
+
+      // Fallback: simple notification for other tabs (existing behavior can be extended later)
+      toast.success('Export en cours...');
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      toast.error("Erreur lors de l'export");
+    }
   };
 
   // Export overdue loans to CSV
@@ -1649,7 +1783,7 @@ const LoanManagement: React.FC = () => {
             
             <StatCard 
               title="À Décaisser"
-              value={dashboardStats.loansToDisburse.toString()}
+              value={loansToDisburseCount.toString()}
               trend={0}
               icon={<CheckCircle className="w-6 h-6" />}
               color="blue"
@@ -1672,7 +1806,8 @@ const LoanManagement: React.FC = () => {
               <PriorityAlerts 
                 pendingApplications={dashboardStats.pendingApplications}
                 criticalOverdue={dashboardStats.criticalOverdueLoans}
-                loansToDisburse={dashboardStats.loansToDisburse}
+                loansToDisburse={loansToDisburseCount}
+                activeLoansCount={activeLoansCount}
                 onNavigate={(tab, status) => {
                   changeTab(tab);
                   if (status) {
@@ -2022,11 +2157,26 @@ const LoanManagement: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <p className="text-sm font-bold text-gray-900">
-                          {formatCurrency(loan.principalAmount, loan.currency)}
+                          {formatCurrency(loan.requestedAmount ?? loan.principalAmount, loan.currency)}
                         </p>
+                        {loan.approvedAmount && (loan.approvedAmount !== (loan.requestedAmount ?? loan.principalAmount)) && (
+                          <div className="text-xs text-blue-600 font-medium">
+                            <p>Approuvé: {formatCurrency(loan.approvedAmount, loan.currency)}</p>
+                            {loan.requestedAmount && loan.requestedAmount > 0 && (
+                              <p className="text-[11px] text-blue-500">
+                                Différence: {(((loan.approvedAmount - loan.requestedAmount) / loan.requestedAmount) * 100).toFixed(1)}%
+                              </p>
+                            )}
+                          </div>
+                        )}
                         <p className="text-xs text-gray-500">
-                          Mensualité: {formatCurrency(loan.monthlyPayment, loan.currency)}
+                          Mensualité (hors frais): {formatCurrency(loan.monthlyPayment, loan.currency)}
                         </p>
+                        {typeof loan.monthlyPaymentWithFee === 'number' && loan.monthlyPaymentWithFee > 0 && (
+                          <p className="text-xs font-semibold text-purple-600">
+                            Mensualité + Frais: {formatCurrency(loan.monthlyPaymentWithFee, loan.currency)}
+                          </p>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <p className="text-sm text-gray-900">{loan.termMonths} mois</p>
@@ -2125,7 +2275,7 @@ const LoanManagement: React.FC = () => {
                   Montant
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Mensualité
+                  Mensualité + Frais
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Restant
@@ -2165,12 +2315,16 @@ const LoanManagement: React.FC = () => {
                   const effectiveMonthlyPayment = roundCurrency(
                     calculateMonthlyPaymentFromMonthlyRate(loan.principalAmount, monthlyRatePercent, loan.termMonths)
                   );
+                  const processingFeeA = (loan.approvedAmount ?? loan.principalAmount) ? roundCurrency((loan.approvedAmount ?? loan.principalAmount) * 0.05) : 0;
+                  const distributedFeePortionA = loan.termMonths > 0 ? roundCurrency(processingFeeA / loan.termMonths) : 0;
+                  const effectiveMonthlyPaymentWithFee = roundCurrency(effectiveMonthlyPayment + distributedFeePortionA);
                   
                   // Recalculate remaining balance to be consistent with the new monthly payment
                   // We assume the paid amount is correct, but the total due needs to be adjusted to the new rate
                   // This is a display-only fix; the database ledger remains as is until corrected
                   const totalDue = effectiveMonthlyPayment * loan.termMonths;
-                  const effectiveRemainingBalance = roundCurrency(Math.max(0, totalDue - (loan.paidAmount ?? 0)));
+                  const totalDueWithFees = roundCurrency((effectiveMonthlyPayment + distributedFeePortionA) * loan.termMonths);
+                  const effectiveRemainingBalance = roundCurrency(Math.max(0, totalDueWithFees - (loan.paidAmount ?? 0)));
                   
                   const paidAmount = roundCurrency(loan.paidAmount ?? 0);
 
@@ -2196,16 +2350,38 @@ const LoanManagement: React.FC = () => {
                         <p className="text-sm font-semibold text-gray-900">
                           {formatCurrency(roundCurrency(loan.principalAmount), loan.currency)}
                         </p>
+                        {loan.approvedAmount && (
+                          <p className="text-[11px] text-gray-600">
+                            Frais dossier (5%): {formatCurrency(Math.round((loan.approvedAmount || 0) * 0.05), loan.currency)}
+                          </p>
+                        )}
+                        {(loan.requestedAmount && loan.requestedAmount !== loan.principalAmount) && (
+                          <p className="text-xs text-gray-500">Demandé: {formatCurrency(loan.requestedAmount, loan.currency)}</p>
+                        )}
+                        {(loan.approvedAmount && loan.approvedAmount !== loan.principalAmount) && (
+                          <div className="text-xs text-blue-600 font-medium">
+                            <p>Approuvé: {formatCurrency(loan.approvedAmount, loan.currency)}</p>
+                            {loan.requestedAmount && loan.requestedAmount > 0 && (
+                              <p className="text-[11px] text-blue-500">
+                                Différence: {(((loan.approvedAmount - loan.requestedAmount) / loan.requestedAmount) * 100).toFixed(1)}%
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <p className="text-sm font-medium text-blue-600">
-                          {formatCurrency(effectiveMonthlyPayment, loan.currency)}
+                          {formatCurrency(effectiveMonthlyPaymentWithFee, loan.currency)}
                         </p>
+                        <p className="text-[11px] text-gray-500">Hors frais: {formatCurrency(effectiveMonthlyPayment, loan.currency)}</p>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
                           <p className="text-sm font-semibold text-purple-600">
                             {formatCurrency(effectiveRemainingBalance, loan.currency)}
+                          </p>
+                          <p className="text-[11px] text-gray-500">
+                            Reste à payer (avec frais)
                           </p>
                           <p className="text-xs text-gray-500">
                             Payé: {formatCurrency(paidAmount, loan.currency)}
@@ -3177,8 +3353,9 @@ const PriorityAlerts: React.FC<{
   pendingApplications: number;
   criticalOverdue: number;
   loansToDisburse: number;
+  activeLoansCount: number;
   onNavigate: (tab: 'applications' | 'loans' | 'disbursement', status?: string) => void;
-}> = ({ pendingApplications, criticalOverdue, loansToDisburse, onNavigate }) => {
+}> = ({ pendingApplications, criticalOverdue, loansToDisburse, activeLoansCount, onNavigate }) => {
   const alerts = [
     {
       type: 'high' as const,
@@ -3203,6 +3380,14 @@ const PriorityAlerts: React.FC<{
       action: 'Décaisser',
       onClick: () => onNavigate('disbursement', 'APPROVED'),
       icon: <CheckCircle className="w-5 h-5" />
+    },
+    {
+      type: 'active' as const,
+      title: 'Prêts Actifs',
+      count: activeLoansCount,
+      action: 'Voir',
+      onClick: () => onNavigate('loans', 'ACTIVE'),
+      icon: <TrendingUp className="w-5 h-5" />
     }
   ];
 
@@ -3214,21 +3399,27 @@ const PriorityAlerts: React.FC<{
           <div
             key={index}
             className={`p-4 rounded-lg border ${
-              alert.type === 'high' 
-                ? 'bg-red-50 border-red-200' 
-                : 'bg-yellow-50 border-yellow-200'
+              alert.type === 'high'
+                ? 'bg-red-50 border-red-200'
+                : alert.type === 'active'
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-yellow-50 border-yellow-200'
             }`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-full ${
-                  alert.type === 'high' ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600'
+                  alert.type === 'high'
+                    ? 'bg-red-100 text-red-600'
+                    : alert.type === 'active'
+                      ? 'bg-green-100 text-green-600'
+                      : 'bg-yellow-100 text-yellow-600'
                 }`}>
                   {alert.icon}
                 </div>
                 <div>
                   <p className="font-medium text-gray-900">{alert.title}</p>
-                  <p className="text-sm text-gray-600">{alert.count} élément(s)</p>
+                  <p className="text-sm text-gray-600">{alert.count !== undefined ? `${alert.count} élément(s)` : 'Chargement...'}</p>
                 </div>
               </div>
               <button 

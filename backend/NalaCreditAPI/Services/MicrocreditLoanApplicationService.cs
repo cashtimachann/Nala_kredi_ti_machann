@@ -58,6 +58,7 @@ namespace NalaCreditAPI.Services
         Task<PaymentStatisticsDto> GetPaymentStatisticsAsync(DateTime? fromDate = null, 
             DateTime? toDate = null, int? branchId = null);
         Task<PaymentReceiptDto?> GeneratePaymentReceiptAsync(Guid paymentId);
+        Task<bool> RegeneratePaymentScheduleAsync(Guid loanId);
         Task<MicrocreditPaymentDto> ProcessEarlyPayoffAsync(EarlyPayoffDto dto, string processedBy);
 
         // Dashboard methods
@@ -676,6 +677,8 @@ namespace NalaCreditAPI.Services
 
             // Create the loan from the approved application
             var loanAmount = approvedAmount ?? application.RequestedAmount;
+            // Persist approved amount on the application record as requested
+            application.ApprovedAmount = loanAmount;
             var durationMonths = application.RequestedDurationMonths;
             
             // Use application interest rate if available, otherwise fallback to configuration
@@ -1270,22 +1273,64 @@ namespace NalaCreditAPI.Services
         {
             var schedule = await _context.MicrocreditPaymentSchedules
                 .Where(s => s.LoanId == loanId)
-                .OrderBy(s => s.DueDate)
+                .OrderBy(s => s.InstallmentNumber)
                 .ToListAsync();
 
-            return schedule.Select(s => new MicrocreditPaymentScheduleDto
+            var loan = await _context.MicrocreditLoans.FirstOrDefaultAsync(l => l.Id == loanId);
+            decimal? feePortionBase = null;
+            decimal?[] feePortions = Array.Empty<decimal?>();
+            if (loan != null && loan.PrincipalAmount > 0 && loan.DurationMonths > 0)
             {
-                Id = s.Id,
-                InstallmentNumber = s.InstallmentNumber,
-                DueDate = s.DueDate,
-                PrincipalAmount = s.PrincipalAmount,
-                InterestAmount = s.InterestAmount,
-                TotalAmount = s.TotalAmount,
-                PaidAmount = s.PaidAmount,
-                Status = s.Status.ToString(),
-                PaidDate = s.PaidDate,
-                CreatedAt = s.CreatedAt
-            }).ToList();
+                var processingFeeTotal = Math.Round(loan.PrincipalAmount * 0.05m, 2);
+                var perInstallmentRaw = processingFeeTotal / loan.DurationMonths;
+                var perInstallmentRounded = Math.Round(perInstallmentRaw, 2);
+                feePortionBase = perInstallmentRounded;
+                feePortions = new decimal?[loan.DurationMonths];
+                decimal distributed = 0m;
+                for (int i = 0; i < loan.DurationMonths; i++)
+                {
+                    if (i == loan.DurationMonths - 1)
+                    {
+                        // Dernière échéance: ajuster le résiduel pour que la somme == frais total
+                        var residual = processingFeeTotal - distributed;
+                        feePortions[i] = Math.Round(residual, 2);
+                    }
+                    else
+                    {
+                        feePortions[i] = perInstallmentRounded;
+                        distributed += perInstallmentRounded;
+                    }
+                }
+            }
+
+            var result = new List<MicrocreditPaymentScheduleDto>(schedule.Count);
+            foreach (var s in schedule)
+            {
+                decimal? feeP = null;
+                decimal? totalWithFee = null;
+                if (feePortions.Length > 0 && s.InstallmentNumber - 1 < feePortions.Length)
+                {
+                    feeP = feePortions[s.InstallmentNumber - 1];
+                    totalWithFee = feeP.HasValue ? Math.Round(s.TotalAmount + feeP.Value, 2) : s.TotalAmount;
+                }
+
+                result.Add(new MicrocreditPaymentScheduleDto
+                {
+                    Id = s.Id,
+                    InstallmentNumber = s.InstallmentNumber,
+                    DueDate = s.DueDate,
+                    PrincipalAmount = s.PrincipalAmount,
+                    InterestAmount = s.InterestAmount,
+                    TotalAmount = s.TotalAmount,
+                    FeePortion = feeP,
+                    TotalAmountWithFee = totalWithFee,
+                    PaidAmount = s.PaidAmount,
+                    Status = s.Status.ToString(),
+                    PaidDate = s.PaidDate,
+                    CreatedAt = s.CreatedAt
+                });
+            }
+            return result;
         }
 
         public async Task<MicrocreditCollectionNoteDto> AddCollectionNoteAsync(Guid loanId, CreateMicrocreditCollectionNoteDto dto, string createdBy)
@@ -1867,6 +1912,26 @@ namespace NalaCreditAPI.Services
             };
         }
 
+        public async Task<bool> RegeneratePaymentScheduleAsync(Guid loanId)
+        {
+            var loan = await _context.MicrocreditLoans.FirstOrDefaultAsync(l => l.Id == loanId);
+            if (loan == null)
+                throw new KeyNotFoundException("Loan not found");
+
+            // Remove existing schedule items
+            var existing = await _context.MicrocreditPaymentSchedules.Where(s => s.LoanId == loanId).ToListAsync();
+            if (existing.Any())
+            {
+                _context.MicrocreditPaymentSchedules.RemoveRange(existing);
+                await _context.SaveChangesAsync();
+            }
+
+            // Rebuild schedule based on current loan terms (InstallmentAmount, InterestRate, Duration, Principal)
+            await GeneratePaymentScheduleAsync(loan);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
         public async Task<PaymentReceiptDto?> GeneratePaymentReceiptAsync(Guid paymentId)
         {
             var payment = await _context.MicrocreditPayments
@@ -2296,7 +2361,7 @@ namespace NalaCreditAPI.Services
             return MapLoanToDtoSync(loan, savingsAccountsLookup);
         }
 
-        private MicrocreditLoanApplicationDto MapToDtoSync(MicrocreditLoanApplication application, Dictionary<string, string> savingsAccountsLookup)
+    private MicrocreditLoanApplicationDto MapToDtoSync(MicrocreditLoanApplication application, Dictionary<string, string> savingsAccountsLookup)
         {
             // Note: LoanId is not included in sync mapping to avoid DB calls
             // Use MapToDto for complete data including LoanId
@@ -2309,6 +2374,7 @@ namespace NalaCreditAPI.Services
                 LoanId = null, // Not loaded in sync method
                 LoanType = application.LoanType.ToString(),
                 RequestedAmount = application.RequestedAmount,
+                ApprovedAmount = application.ApprovedAmount,
                 RequestedDurationMonths = application.RequestedDurationMonths,
                 Purpose = application.Purpose,
                 BusinessPlan = application.BusinessPlan,

@@ -58,8 +58,17 @@ namespace NalaCreditAPI.Services.ClientAccounts
             // Calculer la date d'échéance
             var maturityDate = CalculateMaturityDate(DateTime.UtcNow, dto.TermType);
 
-            // Déterminer le taux d'intérêt
-            var interestRate = dto.InterestRate ?? GetDefaultInterestRate(dto.TermType, dto.Currency);
+            // Déterminer le taux d'intérêt (stocké en annuel). Supporte soit InterestRate (annuel), soit InterestRateMonthly (mensuel)
+            decimal interestRate;
+            if (dto.InterestRateMonthly.HasValue)
+            {
+                var annualFromMonthly = dto.InterestRateMonthly.Value * 12m;
+                interestRate = annualFromMonthly;
+            }
+            else
+            {
+                interestRate = dto.InterestRate ?? GetDefaultInterestRate(dto.TermType, dto.Currency);
+            }
 
             var account = new TermSavingsAccount
             {
@@ -229,7 +238,15 @@ namespace NalaCreditAPI.Services.ClientAccounts
                 throw new ArgumentException("Compte introuvable");
 
             account.Status = dto.Status;
-            if (dto.InterestRate.HasValue) account.InterestRate = dto.InterestRate.Value;
+            if (dto.InterestRateMonthly.HasValue)
+            {
+                var annualFromMonthly = dto.InterestRateMonthly.Value * 12m;
+                account.InterestRate = annualFromMonthly;
+            }
+            else if (dto.InterestRate.HasValue)
+            {
+                account.InterestRate = dto.InterestRate.Value;
+            }
             account.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
@@ -494,8 +511,15 @@ namespace NalaCreditAPI.Services.ClientAccounts
                 account.TermType = dto.RenewalTermType.Value;
 
             // Optionally override interest rate
-            if (dto?.InterestRate != null)
+            if (dto?.InterestRateMonthly != null)
+            {
+                var annualFromMonthly = dto.InterestRateMonthly.Value * 12m;
+                account.InterestRate = annualFromMonthly;
+            }
+            else if (dto?.InterestRate != null)
+            {
                 account.InterestRate = dto.InterestRate.Value;
+            }
 
             // Re-start the term: set new opening/maturity dates
             var now = DateTime.UtcNow;
@@ -847,6 +871,7 @@ namespace NalaCreditAPI.Services.ClientAccounts
                 LastTransactionDate = account.LastTransactionDate,
                 Status = account.Status,
                 InterestRate = account.InterestRate,
+                InterestRateMonthly = account.InterestRate / 12m,
                 AccruedInterest = account.AccruedInterest,
                 LastInterestCalculation = account.LastInterestCalculation,
                 EarlyWithdrawalPenalty = account.EarlyWithdrawalPenalty,

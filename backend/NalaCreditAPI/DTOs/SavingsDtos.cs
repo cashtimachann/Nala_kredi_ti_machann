@@ -293,7 +293,6 @@ namespace NalaCreditAPI.DTOs.Savings
         [Range(1, int.MaxValue, ErrorMessage = "Succursale invalide")]
         public int BranchId { get; set; }
 
-        [Range(0, 0.15, ErrorMessage = "Le taux d'intérêt ne peut pas dépasser 15%")]
         public decimal? InterestRate { get; set; }
 
         public SavingsAccountLimitsDto? AccountLimits { get; set; }
@@ -304,7 +303,6 @@ namespace NalaCreditAPI.DTOs.Savings
         [Required]
         public SavingsAccountStatus Status { get; set; }
 
-        [Range(0, 0.15)]
         public decimal? InterestRate { get; set; }
 
         public SavingsAccountLimitsDto? AccountLimits { get; set; }

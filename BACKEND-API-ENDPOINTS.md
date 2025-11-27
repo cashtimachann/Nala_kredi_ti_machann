@@ -16,6 +16,12 @@
 ### Loan Validation
 - `GET /api/branch/loans/pending` - Get all pending loans
 - `POST /api/branch/loans/{id}/approve` - Approve a loan
+
+## Microcredit Loan Applications
+
+- `POST /api/MicrocreditLoanApplication/{id}/approve`
+	- Body: `{ "comments": string, "approvedAmount"?: number, "disbursementDate"?: string }`
+	- Effect: creates loan from application and now also persists `ApprovedAmount` on the application record.
 - `POST /api/branch/loans/{id}/reject` - Reject a loan
 
 ## ⚠️ ERRORS FOUND

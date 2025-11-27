@@ -21,6 +21,7 @@ import {
   Printer,
   Loader
 } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PaymentRecording from './PaymentRecording';
 import {
@@ -81,6 +82,10 @@ interface PaymentScheduleItem {
   principalAmount: number;
   interestAmount: number | null;
   totalPayment: number | null;
+  // Backend-derived fee portion per installment (optional)
+  feePortion?: number;
+  // Convenience total including fee (optional)
+  totalAmountWithFee?: number;
   remainingBalance: number;
   status: 'PAID' | 'PENDING' | 'OVERDUE' | 'UPCOMING';
   paidDate?: string;
@@ -115,6 +120,7 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
   const [loadingDocuments, setLoadingDocuments] = useState(false);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [loadingSchedule, setLoadingSchedule] = useState(false);
+  const [regeneratingSchedule, setRegeneratingSchedule] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -165,6 +171,9 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
         // If backend provided interest amount, use it; otherwise compute from loan monthly rate
         interestAmount: typeof item.interestAmount === 'number' && item.interestAmount > 0 ? item.interestAmount : null,
         totalPayment: item.totalAmount ?? null,
+        // Map backend fee fields through to the UI when available
+        feePortion: typeof item.feePortion === 'number' ? item.feePortion : undefined,
+        totalAmountWithFee: typeof item.totalAmountWithFee === 'number' ? item.totalAmountWithFee : undefined,
         remainingBalance: 0, // Will be calculated below
         status: mapPaymentStatus(item.status),
         paidDate: item.paidDate,
@@ -190,6 +199,12 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
         mappedSchedule.length || loan.termMonths,
         loan.disbursementDate || loan.createdAt
       );
+
+      // Compute fee distribution locally if backend did not provide it
+  const termCount = mappedSchedule.length || loan.termMonths;
+  const totalFee = roundCurrency((loan.principalAmount || 0) * 0.05);
+  const baseFeePerInstallment = termCount > 0 ? Math.floor((totalFee / termCount)) : 0; // integer rounding for HTG
+  const feeResidual = Math.max(0, totalFee - (baseFeePerInstallment * termCount));
 
       mappedSchedule.forEach((item, index) => {
         const isLastInstallment = index === mappedSchedule.length - 1;
@@ -225,6 +240,17 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
         item.principalAmount = principalPortion;
         item.interestAmount = interest;
         item.totalPayment = totalPayment;
+
+        // Ensure fee fields are set: prefer backend-provided values, else compute evenly
+        if (typeof item.feePortion !== 'number') {
+          // Distribute residual +1 to the first "feeResidual" installments for nicer equalization
+          const addOne = index < feeResidual ? 1 : 0;
+          const computedFee = baseFeePerInstallment + addOne;
+          item.feePortion = roundCurrency(computedFee);
+        }
+        if (typeof item.totalAmountWithFee !== 'number') {
+          item.totalAmountWithFee = roundCurrency((item.totalPayment || 0) + (item.feePortion || 0));
+        }
 
         // Nouveau solde après paiement du capital
         remainingBalance = roundCurrency(Math.max(0, remainingBalance - principalPortion));
@@ -507,7 +533,7 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
     try {
       // CSV header with UTF-8 BOM for Excel compatibility
       let csvContent = '\ufeff';
-      csvContent += '"#","Date d\'Échéance","Capital","Intérêt","Total","Solde Restant","Statut"\n';
+  csvContent += '"#","Date d\'Échéance","Capital","Intérêt","Frais","Total (hors frais)","Total + Frais","Solde Restant","Statut"\n';
 
       // Add data rows
       paymentSchedule.forEach(item => {
@@ -521,7 +547,9 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
         csvContent += `"${formatDate(item.dueDate)}",`;
         csvContent += `"${formatCurrency(item.principalAmount, loan.currency)}",`;
         csvContent += `"${formatCurrency(item.interestAmount ?? 0, loan.currency)}",`;
-        csvContent += `"${formatCurrency(item.totalPayment ?? 0, loan.currency)}",`;
+        csvContent += `"${formatCurrency(item.feePortion ?? 0, loan.currency)}",`;
+  csvContent += `"${formatCurrency(item.totalPayment ?? 0, loan.currency)}",`;
+  csvContent += `"${formatCurrency((item.totalAmountWithFee ?? ((item.totalPayment ?? 0) + (item.feePortion ?? 0))), loan.currency)}",`;
         csvContent += `"${formatCurrency(item.remainingBalance, loan.currency)}",`;
         csvContent += `"${statusText}"\n`;
       });
@@ -529,9 +557,14 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
       // Add totals row
       csvContent += '\n';
       csvContent += `"TOTAL","",`;
-      csvContent += `"${formatCurrency(scheduleTotals.principal, loan.currency)}",`;
-      csvContent += `"${formatCurrency(scheduleTotals.interest, loan.currency)}",`;
-      csvContent += `"${formatCurrency(scheduleTotals.total, loan.currency)}","",""\n`;
+  // Totals row: sum of fee portions and total with fees
+  const totalFees = paymentSchedule.reduce((sum, i) => sum + (i.feePortion || 0), 0);
+  const totalWithFees = scheduleTotals.total + totalFees;
+  csvContent += `"${formatCurrency(scheduleTotals.principal, loan.currency)}",`;
+  csvContent += `"${formatCurrency(scheduleTotals.interest, loan.currency)}",`;
+  csvContent += `"${formatCurrency(totalFees, loan.currency)}",`;
+  csvContent += `"${formatCurrency(scheduleTotals.total, loan.currency)}",`;
+  csvContent += `"${formatCurrency(totalWithFees, loan.currency)}","",""\n`;
 
       // Create and trigger download
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -550,6 +583,32 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
     } catch (error) {
       console.error('Error exporting schedule:', error);
       toast.error('Erreur lors de l\'export du calendrier');
+    }
+  };
+
+  // Trigger backend schedule regeneration then reload local schedule
+  const handleRegenerateSchedule = async () => {
+    const loanId = loan.loanRecordId || loan.id;
+    if (!loanId) {
+      toast.error("ID du prêt non disponible");
+      return;
+    }
+    try {
+      setRegeneratingSchedule(true);
+      const result = await microcreditLoanService.regenerateSchedule(loanId);
+      if ((result as any)?.success === false) {
+        // Some backends may return plain ok; still proceed to reload
+        toast('Régénération terminée');
+      } else {
+        toast.success('Calendrier régénéré avec succès');
+      }
+      // Reload schedule from backend to reflect recalculated lines
+      await loadPaymentSchedule();
+    } catch (error: any) {
+      console.error('Error regenerating schedule:', error);
+      toast.error(error?.message || "Erreur lors de la régénération du calendrier");
+    } finally {
+      setRegeneratingSchedule(false);
     }
   };
 
@@ -581,6 +640,15 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
     };
   }, [paymentSchedule]);
 
+  // Fee totals and grand totals including fees
+  const scheduleFeeTotals = React.useMemo(() => {
+    const feeTotal = paymentSchedule.reduce((sum, i) => sum + (i.feePortion || 0), 0);
+    return {
+      fee: roundCurrency(feeTotal),
+      totalWithFees: roundCurrency(scheduleTotals.total + feeTotal)
+    };
+  }, [paymentSchedule, scheduleTotals]);
+
   // Si on a un calendrier, utiliser ses totaux; sinon estimer
   const plannedInterestTotal = scheduleTotals.interest > 0
     ? scheduleTotals.interest
@@ -594,6 +662,13 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
 
   const remainingPlannedInterest = Math.max(0, roundCurrency(plannedInterestTotal - totalInterestPaid));
 
+  // Remaining to pay including fees, based on schedule totals and payment history amounts
+  const totalPaidAmount = paymentHistory.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const remainingPlannedTotalWithFees = React.useMemo(() => {
+    const grandTotal = (scheduleFeeTotals.totalWithFees || 0);
+    return Math.max(0, roundCurrency(grandTotal - totalPaidAmount));
+  }, [scheduleFeeTotals, totalPaidAmount]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[95vh] overflow-hidden flex flex-col">
@@ -604,6 +679,12 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
             <div className="flex items-center gap-4">
               <p className="text-indigo-100">#{loan.loanNumber}</p>
               <div>{getStatusBadge(loan.status)}</div>
+              {(loan as any).approvedAmount && loan.status === LoanStatus.APPROVED && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-blue-100 text-blue-900 border border-blue-200">
+                  <CheckCircle className="w-4 h-4" />
+                  Calendrier basé sur le Montant approuvé
+                </span>
+              )}
               <div className="ml-3">
                 <p className="text-sm text-indigo-200">Numéro Compte Épargne</p>
                 <p className="text-indigo-100 text-sm">{loan.savingsAccountNumber || loan.customerCode || loan.customerId}</p>
@@ -686,6 +767,14 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
               <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">Progression du Remboursement</h3>
+                    {(loan as any).approvedAmount && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Frais dossier (5%)</span>
+                        <span className="font-semibold text-gray-900">
+                          {formatCurrency(Math.round(((loan as any).approvedAmount || 0) * 0.05), loan.currency)}
+                        </span>
+                      </div>
+                    )}
                   <span className="text-2xl font-bold text-indigo-600">{progressPercentage.toFixed(1)}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-6 mb-4">
@@ -707,10 +796,10 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                     <p className="text-sm text-gray-600 mb-1">Intérêts Payés</p>
                     <p className="text-lg font-bold text-gray-900">{formatCurrency(totalInterestPaid, loan.currency)}</p>
                   </div>
-                  <div className="bg-white rounded-lg p-4">
-                    <p className="text-sm text-gray-600 mb-1">Reste à Payer</p>
-                    <p className="text-lg font-bold text-red-600">{formatCurrency(loan.remainingBalance, loan.currency)}</p>
-                  </div>
+                    <div className="bg-white rounded-lg p-4">
+                      <p className="text-sm text-gray-600 mb-1">Reste à Payer (+ Frais)</p>
+                      <p className="text-lg font-bold text-red-600">{formatCurrency(remainingPlannedTotalWithFees, loan.currency)}</p>
+                    </div>
                 </div>
               </div>
 
@@ -734,6 +823,40 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                       <span className="text-gray-600">Montant Principal:</span>
                       <span className="font-semibold text-indigo-600">{formatCurrency(loan.principalAmount, loan.currency)}</span>
                     </div>
+                    {(loan as any).approvedAmount && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Frais dossier (5%) réparti / mois:</span>
+                        <span className="font-semibold text-gray-900">
+                          {formatCurrency(Math.round((((loan as any).approvedAmount || 0) * 0.05) / (loan.termMonths || 1)), loan.currency)}
+                        </span>
+                      </div>
+                    )}
+                    {(loan as any).monthlyPaymentWithFee && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Mensualité + Frais:</span>
+                        <span className="font-semibold text-purple-600">{formatCurrency((loan as any).monthlyPaymentWithFee, loan.currency)}</span>
+                      </div>
+                    )}
+                    {(loan as any).requestedAmount && (loan as any).requestedAmount !== loan.principalAmount && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Montant demandé:</span>
+                        <span className="font-semibold">{formatCurrency((loan as any).requestedAmount, loan.currency)}</span>
+                      </div>
+                    )}
+                    {(loan as any).approvedAmount && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Montant approuvé:</span>
+                        <span className="font-semibold text-blue-600">{formatCurrency((loan as any).approvedAmount, loan.currency)}</span>
+                      </div>
+                    )}
+                    {(loan as any).approvedAmount && (loan as any).requestedAmount && (loan as any).requestedAmount > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Différence vs demandé:</span>
+                        <span className="font-semibold text-blue-500">
+                          {((((loan as any).approvedAmount - (loan as any).requestedAmount) / (loan as any).requestedAmount) * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-gray-600">Taux mensuel (effectif):</span>
                       <span className="font-semibold">{getMonthlyInterestRatePercent().toFixed(2)}%</span>
@@ -910,14 +1033,30 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Calendrier d'Amortissement</h3>
-                {paymentSchedule.length > 0 && !loadingSchedule && (
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={handlePrintSchedule}
-                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    onClick={handleRegenerateSchedule}
+                    disabled={regeneratingSchedule}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors border ${regeneratingSchedule ? 'bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed' : 'bg-indigo-600 border-indigo-700 text-white hover:bg-indigo-700'}`}
+                    title="Régénérer le calendrier côté serveur"
                   >
-                    <Printer className="w-4 h-4" />
+                    {regeneratingSchedule ? (
+                      <Loader className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    <span className="text-sm">Regénérer</span>
                   </button>
-                )}
+                  {paymentSchedule.length > 0 && !loadingSchedule && (
+                    <button
+                      onClick={handlePrintSchedule}
+                      className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                      title="Exporter en CSV"
+                    >
+                      <Printer className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {paymentSchedule.length === 0 && !loadingSchedule ? (
@@ -945,7 +1084,13 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                         Intérêt
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Total
+                        Frais
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Total (hors frais)
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Total + Frais
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Solde Restant
@@ -970,8 +1115,14 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-600">
                           {formatCurrency(item.interestAmount ?? 0, loan.currency)}
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-600">
+                          {formatCurrency(item.feePortion ?? 0, loan.currency)}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-semibold text-gray-900">
                           {formatCurrency(item.totalPayment ?? 0, loan.currency)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-semibold text-indigo-700">
+                          {formatCurrency((item.totalAmountWithFee ?? ((item.totalPayment ?? 0) + (item.feePortion ?? 0))), loan.currency)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-600">
                           {formatCurrency(item.remainingBalance, loan.currency)}
@@ -1023,6 +1174,29 @@ const LoanDetails: React.FC<LoanDetailsProps> = ({ loan, onClose, onRecordPaymen
                     </tr>
                   </tfoot>
                 </table>
+                  {/* Totals summary below table */}
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-3">
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <p className="text-xs text-gray-600">Total Capital</p>
+                      <p className="text-sm font-semibold text-gray-900">{formatCurrency(scheduleTotals.principal, loan.currency)}</p>
+                    </div>
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <p className="text-xs text-gray-600">Total Intérêt</p>
+                      <p className="text-sm font-semibold text-gray-900">{formatCurrency(scheduleTotals.interest, loan.currency)}</p>
+                    </div>
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <p className="text-xs text-gray-600">Total Frais</p>
+                      <p className="text-sm font-semibold text-indigo-700">{formatCurrency(scheduleFeeTotals.fee, loan.currency)}</p>
+                    </div>
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <p className="text-xs text-gray-600">Total (hors frais)</p>
+                      <p className="text-sm font-semibold text-gray-900">{formatCurrency(scheduleTotals.total, loan.currency)}</p>
+                    </div>
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <p className="text-xs text-gray-600">Total + Frais</p>
+                      <p className="text-sm font-bold text-purple-700">{formatCurrency(scheduleFeeTotals.totalWithFees, loan.currency)}</p>
+                    </div>
+                  </div>
               </div>
               )}
             </div>
