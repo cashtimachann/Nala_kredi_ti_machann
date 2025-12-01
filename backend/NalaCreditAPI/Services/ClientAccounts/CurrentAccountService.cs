@@ -89,8 +89,16 @@ namespace NalaCreditAPI.Services.ClientAccounts
                         AccountId = account.Id,
                         FullName = s.FullName.Trim(),
                         Role = string.IsNullOrWhiteSpace(s.Role) ? null : s.Role.Trim(),
+                        DocumentType = s.DocumentType,
                         DocumentNumber = string.IsNullOrWhiteSpace(s.DocumentNumber) ? null : s.DocumentNumber.Trim().ToUpper(),
-                        Phone = string.IsNullOrWhiteSpace(s.Phone) ? null : NormalizePhoneNumber(s.Phone)
+                        Phone = string.IsNullOrWhiteSpace(s.Phone) ? null : NormalizePhoneNumber(s.Phone),
+                        RelationshipToCustomer = string.IsNullOrWhiteSpace(s.RelationshipToCustomer) ? null : s.RelationshipToCustomer.Trim(),
+                        Address = string.IsNullOrWhiteSpace(s.Address) ? null : s.Address.Trim(),
+                        AuthorizationLimit = s.AuthorizationLimit,
+                        Signature = s.Signature,
+                        PhotoUrl = s.PhotoUrl,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
                     };
                     _context.CurrentAccountAuthorizedSigners.Add(signer);
                 }
@@ -604,6 +612,42 @@ namespace NalaCreditAPI.Services.ClientAccounts
             if (dto.OverdraftLimit.HasValue) account.OverdraftLimit = dto.OverdraftLimit.Value;
             account.UpdatedAt = DateTime.UtcNow;
 
+            // Update authorized signers if provided
+            if (dto.AuthorizedSigners != null)
+            {
+                // Remove existing signers
+                var existingSigners = await _context.CurrentAccountAuthorizedSigners
+                    .Where(s => s.AccountId == id)
+                    .ToListAsync();
+                _context.CurrentAccountAuthorizedSigners.RemoveRange(existingSigners);
+
+                // Add new signers
+                foreach (var signerDto in dto.AuthorizedSigners)
+                {
+                    if (string.IsNullOrWhiteSpace(signerDto.FullName) || string.IsNullOrWhiteSpace(signerDto.DocumentNumber))
+                        continue; // Skip invalid signers
+
+                    var signer = new CurrentAccountAuthorizedSigner
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        AccountId = id,
+                        FullName = signerDto.FullName.Trim(),
+                        Role = string.IsNullOrWhiteSpace(signerDto.Role) ? null : signerDto.Role.Trim(),
+                        DocumentType = signerDto.DocumentType,
+                        DocumentNumber = signerDto.DocumentNumber.Trim(),
+                        Phone = string.IsNullOrWhiteSpace(signerDto.Phone) ? null : signerDto.Phone.Trim(),
+                        RelationshipToCustomer = string.IsNullOrWhiteSpace(signerDto.RelationshipToCustomer) ? null : signerDto.RelationshipToCustomer.Trim(),
+                        Address = string.IsNullOrWhiteSpace(signerDto.Address) ? null : signerDto.Address.Trim(),
+                        AuthorizationLimit = signerDto.AuthorizationLimit,
+                        Signature = string.IsNullOrWhiteSpace(signerDto.Signature) ? null : signerDto.Signature,
+                        PhotoUrl = string.IsNullOrWhiteSpace(signerDto.PhotoUrl) ? null : signerDto.PhotoUrl,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.CurrentAccountAuthorizedSigners.Add(signer);
+                }
+            }
+
             await _context.SaveChangesAsync();
 
             return await MapToResponseDto(account);
@@ -756,6 +800,7 @@ namespace NalaCreditAPI.Services.ClientAccounts
                 AccountNumber = account.AccountNumber,
                 CustomerId = account.CustomerId,
                 CustomerName = customer != null ? $"{customer.FirstName} {customer.LastName}" : string.Empty,
+                CustomerCode = customer?.CustomerCode ?? string.Empty,
                 CustomerPhone = customer?.PrimaryPhone ?? string.Empty,
                 BranchId = account.BranchId,
                 BranchName = branch?.Name ?? string.Empty,
@@ -789,8 +834,14 @@ namespace NalaCreditAPI.Services.ClientAccounts
                     Id = s.Id,
                     FullName = s.FullName,
                     Role = s.Role,
+                    DocumentType = s.DocumentType,
                     DocumentNumber = s.DocumentNumber,
                     Phone = s.Phone,
+                    RelationshipToCustomer = s.RelationshipToCustomer,
+                    Address = s.Address,
+                    AuthorizationLimit = s.AuthorizationLimit,
+                    Signature = s.Signature,
+                    PhotoUrl = s.PhotoUrl,
                     IsActive = s.IsActive,
                     CreatedAt = s.CreatedAt
                 }).ToList()

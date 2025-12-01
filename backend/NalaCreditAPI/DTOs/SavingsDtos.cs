@@ -296,6 +296,9 @@ namespace NalaCreditAPI.DTOs.Savings
         public decimal? InterestRate { get; set; }
 
         public SavingsAccountLimitsDto? AccountLimits { get; set; }
+
+        // Signataires autorisés
+        public List<SavingsAccountAuthorizedSignerDto>? AuthorizedSigners { get; set; }
     }
 
     public class SavingsAccountUpdateDto
@@ -309,6 +312,9 @@ namespace NalaCreditAPI.DTOs.Savings
 
         [StringLength(500)]
         public string? Notes { get; set; }
+
+        // Signataires autorisés (pour mise à jour)
+        public List<SavingsAccountAuthorizedSignerDto>? AuthorizedSigners { get; set; }
     }
 
     public class SavingsAccountResponseDto
@@ -337,6 +343,47 @@ namespace NalaCreditAPI.DTOs.Savings
         public DateTime? ClosedAt { get; set; }
         public string? ClosedBy { get; set; }
         public string? ClosureReason { get; set; }
+        public List<SavingsAccountAuthorizedSignerResponseDto> AuthorizedSigners { get; set; } = new();
+    }
+
+    public class SavingsAccountAuthorizedSignerDto
+    {
+        [Required]
+        [StringLength(100, MinimumLength = 2)]
+        public string FullName { get; set; } = string.Empty;
+
+        [StringLength(50)]
+        public string? Role { get; set; }
+
+        public SavingsIdentityDocumentType? DocumentType { get; set; }
+
+        [StringLength(50)]
+        public string? DocumentNumber { get; set; }
+
+        [StringLength(20)]
+        public string? Phone { get; set; }
+
+        [StringLength(100)]
+        public string? RelationshipToCustomer { get; set; }
+
+        [StringLength(300)]
+        public string? Address { get; set; }
+
+        [Range(0, double.MaxValue)]
+        public decimal? AuthorizationLimit { get; set; }
+
+        public string? Signature { get; set; } // Base64 signature image
+
+        [StringLength(500)]
+        public string? PhotoUrl { get; set; } // Base64 photo or URL
+    }
+
+    public class SavingsAccountAuthorizedSignerResponseDto : SavingsAccountAuthorizedSignerDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
     }
 
     public class SavingsAccountLimitsDto

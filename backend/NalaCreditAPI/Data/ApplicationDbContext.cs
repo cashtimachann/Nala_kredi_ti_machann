@@ -28,6 +28,7 @@ public class ApplicationDbContext : IdentityDbContext<User>
     public DbSet<SavingsCustomerDocument> SavingsCustomerDocuments { get; set; }
     public DbSet<SavingsAccount> SavingsAccounts { get; set; }
     public DbSet<SavingsTransaction> SavingsTransactions { get; set; }
+    public DbSet<SavingsAccountAuthorizedSigner> SavingsAccountAuthorizedSigners { get; set; }
     
     // Client Accounts Module DbSets
     public DbSet<CurrentAccount> CurrentAccounts { get; set; }

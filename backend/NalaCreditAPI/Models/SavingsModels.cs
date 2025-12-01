@@ -396,6 +396,57 @@ namespace NalaCreditAPI.Models
         public virtual Branch? Branch { get; set; }
 
         public virtual ICollection<SavingsTransaction> Transactions { get; set; } = new List<SavingsTransaction>();
+
+        // Signataires autorisés
+        public virtual ICollection<SavingsAccountAuthorizedSigner> AuthorizedSigners { get; set; } = new List<SavingsAccountAuthorizedSigner>();
+    }
+
+    [Table("SavingsAccountAuthorizedSigners")]
+    public class SavingsAccountAuthorizedSigner
+    {
+        [Key]
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+
+        [Required]
+        public string AccountId { get; set; } = string.Empty;
+
+        [Required]
+        [MaxLength(100)]
+        public string FullName { get; set; } = string.Empty;
+
+        [MaxLength(50)]
+        public string? Role { get; set; } // Signataire, Co-titulaire, etc.
+
+        public SavingsIdentityDocumentType? DocumentType { get; set; }
+
+        [MaxLength(50)]
+        public string? DocumentNumber { get; set; }
+
+        [MaxLength(20)]
+        public string? Phone { get; set; }
+
+        [MaxLength(100)]
+        public string? RelationshipToCustomer { get; set; } // Bénéficiaire, Co-titulaire, Mandataire, etc.
+
+        [MaxLength(300)]
+        public string? Address { get; set; }
+
+        public string? Signature { get; set; } // Base64 signature
+
+        [MaxLength(500)]
+        public string? PhotoUrl { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal? AuthorizationLimit { get; set; } // Limite d'autorisation pour les transactions
+
+        public bool IsActive { get; set; } = true;
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        // Relations
+        [ForeignKey("AccountId")]
+        public virtual SavingsAccount Account { get; set; } = null!;
     }
 
     [Table("SavingsTransactions")]
@@ -1016,6 +1067,7 @@ namespace NalaCreditAPI.Models
         public ClientAccountType AccountType { get; set; }
         public string CustomerId { get; set; } = string.Empty;
         public string CustomerName { get; set; } = string.Empty;
+        public string CustomerCode { get; set; } = string.Empty;
         public string CustomerPhone { get; set; } = string.Empty;
         public int BranchId { get; set; }
         public string BranchName { get; set; } = string.Empty;

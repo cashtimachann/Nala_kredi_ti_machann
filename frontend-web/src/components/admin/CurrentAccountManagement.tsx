@@ -1,3 +1,4 @@
+import { extractApiErrorMessage } from '../../utils/errorHandling';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   CreditCard,
@@ -27,8 +28,12 @@ import {
   ChevronDown,
   ChevronUp,
   ToggleRight,
-  ToggleLeft
+  ToggleLeft,
+  Upload,
+  User,
+  X
 } from 'lucide-react';
+import SignatureCanvas from '../savings/SignatureCanvas';
 import toast from 'react-hot-toast';
 import { unparse } from 'papaparse';
 import * as XLSX from 'xlsx';
@@ -3242,6 +3247,21 @@ function OpenCurrentAccountModal({ onClose, onSuccess, initialCustomer }: { onCl
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const lastSearchedRef = useRef<string>('');
   const CODE_PATTERN = /^[A-Z]{2}\d{3,}$/; // e.g., TD5765
+  
+  // Authorized signers state
+  const [authorizedSigners, setAuthorizedSigners] = useState<Array<{
+    fullName: string;
+    documentType: number;
+    documentNumber: string;
+    relationshipToCustomer: string;
+    phoneNumber: string;
+    authorizationLimit?: number;
+    photoUrl?: string;
+    signature?: string;
+  }>>([]);
+  const [showSignatureCanvas, setShowSignatureCanvas] = useState<number | null>(null);
+  const [signatureMethod, setSignatureMethod] = useState<'digital' | 'upload'>('digital');
+  
   const [accountForm, setAccountForm] = useState({
     branchId: 1,
     currency: 'HTG' as 'HTG' | 'USD',
@@ -3330,6 +3350,67 @@ function OpenCurrentAccountModal({ onClose, onSuccess, initialCustomer }: { onCl
     }
   }, [step]);
 
+  // Authorized signers handlers
+  const addSigner = () => {
+    setAuthorizedSigners([...authorizedSigners, {
+      fullName: '',
+      documentType: 0,
+      documentNumber: '',
+      relationshipToCustomer: '',
+      phoneNumber: '',
+      authorizationLimit: undefined,
+      photoUrl: '',
+      signature: ''
+    }]);
+  };
+
+  const updateSigner = (idx: number, field: string, value: any) => {
+    const updated = [...authorizedSigners];
+    (updated[idx] as any)[field] = value;
+    setAuthorizedSigners(updated);
+  };
+
+  const removeSigner = (idx: number) => {
+    const updated = [...authorizedSigners];
+    updated.splice(idx, 1);
+    setAuthorizedSigners(updated);
+  };
+
+  const handlePhotoUpload = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Le fichier est trop volumineux (max 5MB)');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        updateSigner(idx, 'photoUrl', reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSignatureUpload = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error('Le fichier est trop volumineux (max 2MB)');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        updateSigner(idx, 'signature', reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSignatureSave = (idx: number, signature: string) => {
+    updateSigner(idx, 'signature', signature);
+    setShowSignatureCanvas(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer?.id && !selectedCustomer?.Id) {
@@ -3343,6 +3424,37 @@ function OpenCurrentAccountModal({ onClose, onSuccess, initialCustomer }: { onCl
       toast.error('Veuillez sélectionner une succursale');
       return;
     }
+    
+    // Valider les signataires autorisés
+    if (authorizedSigners.length > 0) {
+      for (let i = 0; i < authorizedSigners.length; i++) {
+        const signer = authorizedSigners[i];
+        if (!signer.fullName || signer.fullName.trim().length < 2) {
+          toast.error(`Signataire #${i + 1}: Le nom complet est obligatoire (min. 2 caractères)`);
+          return;
+        }
+        if (!signer.documentNumber || signer.documentNumber.trim().length === 0) {
+          toast.error(`Signataire #${i + 1}: Le numéro de pièce est obligatoire`);
+          return;
+        }
+        if (!signer.relationshipToCustomer || signer.relationshipToCustomer.trim().length === 0) {
+          toast.error(`Signataire #${i + 1}: La relation avec le client est obligatoire`);
+          return;
+        }
+        if (!signer.phoneNumber || signer.phoneNumber.trim().length === 0) {
+          toast.error(`Signataire #${i + 1}: Le numéro de téléphone est obligatoire`);
+          return;
+        }
+        if (!signer.photoUrl || signer.photoUrl.trim().length === 0) {
+          toast.error(`Signataire #${i + 1}: La photo de la pièce d'identité est obligatoire`);
+          return;
+        }
+        if (!signer.signature || signer.signature.trim().length === 0) {
+          toast.error(`Signataire #${i + 1}: La signature est obligatoire`);
+          return;
+        }
+      }
+    }
     const customerId = selectedCustomer.id || selectedCustomer.Id;
     const payload: any = {
       customerId,
@@ -3354,6 +3466,23 @@ function OpenCurrentAccountModal({ onClose, onSuccess, initialCustomer }: { onCl
     if (accountForm.dailyWithdrawalLimit) payload.dailyWithdrawalLimit = Number(accountForm.dailyWithdrawalLimit);
     if (accountForm.monthlyWithdrawalLimit) payload.monthlyWithdrawalLimit = Number(accountForm.monthlyWithdrawalLimit);
     if (accountForm.allowOverdraft && accountForm.overdraftLimit) payload.overdraftLimit = Number(accountForm.overdraftLimit);
+    
+    // Add authorized signers if any (enforce min length >=2 like backend validation)
+    if (authorizedSigners.length > 0) {
+      const filtered = authorizedSigners.filter(s => (s.fullName || '').trim().length >= 2);
+      if (filtered.length > 0) {
+        payload.authorizedSigners = filtered.map(s => ({
+          fullName: s.fullName,
+          documentType: s.documentType,
+          documentNumber: s.documentNumber,
+          relationshipToCustomer: s.relationshipToCustomer,
+          phone: s.phoneNumber,
+          authorizationLimit: s.authorizationLimit,
+          signature: s.signature,
+          photoUrl: s.photoUrl
+        }));
+      }
+    }
 
     try {
       setLoading(true);
@@ -3362,7 +3491,7 @@ function OpenCurrentAccountModal({ onClose, onSuccess, initialCustomer }: { onCl
       onSuccess();
     } catch (error: any) {
       console.error(error);
-      toast.error(error?.response?.data?.message || "Erreur lors de l'ouverture du compte");
+      toast.error(extractApiErrorMessage(error, "Erreur lors de l'ouverture du compte"));
     } finally {
       setLoading(false);
     }
@@ -3562,6 +3691,232 @@ function OpenCurrentAccountModal({ onClose, onSuccess, initialCustomer }: { onCl
                 </div>
               </div>
 
+              {/* Signataires Autorisés */}
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Signataires Autorisés (Optionnel)</h3>
+                
+                {authorizedSigners.length === 0 && (
+                  <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                    <UserPlus className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-600 mb-1">Aucun signataire autorisé</p>
+                    <p className="text-xs text-gray-500">Ajoutez des personnes autorisées à gérer ce compte</p>
+                  </div>
+                )}
+
+                {authorizedSigners.map((signer, idx) => (
+                  <div key={idx} className="bg-white border-2 border-gray-200 rounded-lg p-4 mb-4 hover:border-blue-300 transition-colors">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                          <User className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <span className="font-semibold text-gray-900">Signataire #{idx + 1}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeSigner(idx)}
+                        className="flex items-center space-x-1 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                        <span>Retirer</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Nom complet *</label>
+                        <input
+                          type="text"
+                          value={signer.fullName}
+                          onChange={(e) => updateSigner(idx, 'fullName', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="Prénom et nom"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Type de pièce *</label>
+                        <select
+                          value={signer.documentType}
+                          onChange={(e) => updateSigner(idx, 'documentType', parseInt(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value={0}>CIN (Carte d'Identité)</option>
+                          <option value={1}>Passeport</option>
+                          <option value={2}>Permis de Conduire</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Numéro de pièce *</label>
+                        <input
+                          type="text"
+                          value={signer.documentNumber}
+                          onChange={(e) => updateSigner(idx, 'documentNumber', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="Ex: 001-123-456-7"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Relation avec le client *</label>
+                        <input
+                          type="text"
+                          value={signer.relationshipToCustomer}
+                          onChange={(e) => updateSigner(idx, 'relationshipToCustomer', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="Ex: Conjoint(e), Directeur"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Téléphone *</label>
+                        <input
+                          type="tel"
+                          value={signer.phoneNumber}
+                          onChange={(e) => updateSigner(idx, 'phoneNumber', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="+509 3712 3456"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Limite d'autorisation (HTG)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={signer.authorizationLimit ?? ''}
+                          onChange={(e) => updateSigner(idx, 'authorizationLimit', e.target.value ? parseFloat(e.target.value) : undefined)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="Ex: 50000"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Montant maximum autorisé par transaction</p>
+                      </div>
+
+                      {/* Photo */}
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Pièce d'identité (Photo)</label>
+                        {signer.photoUrl ? (
+                          <div className="relative inline-block">
+                            <img
+                              src={signer.photoUrl}
+                              alt="Pièce d'identité"
+                              className="w-32 h-32 object-cover rounded-lg border-2 border-gray-300"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => updateSigner(idx, 'photoUrl', '')}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-lg"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors">
+                            <Upload className="w-5 h-5 text-gray-400 mr-2" />
+                            <span className="text-sm text-gray-600">Cliquer pour télécharger</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handlePhotoUpload(idx, e)}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">Format: JPG, PNG (max 5MB)</p>
+                      </div>
+
+                      {/* Signature */}
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Signature</label>
+                        
+                        <div className="flex items-center space-x-4 mb-3">
+                          <button
+                            type="button"
+                            onClick={() => setSignatureMethod('digital')}
+                            className={`flex items-center space-x-2 px-4 py-2 rounded-lg border-2 transition-colors ${
+                              signatureMethod === 'digital'
+                                ? 'bg-blue-50 border-blue-500 text-blue-700'
+                                : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
+                            }`}
+                          >
+                            <FileText className="w-4 h-4" />
+                            <span className="text-sm font-medium">Signature digitale</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSignatureMethod('upload')}
+                            className={`flex items-center space-x-2 px-4 py-2 rounded-lg border-2 transition-colors ${
+                              signatureMethod === 'upload'
+                                ? 'bg-blue-50 border-blue-500 text-blue-700'
+                                : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
+                            }`}
+                          >
+                            <Upload className="w-4 h-4" />
+                            <span className="text-sm font-medium">Télécharger</span>
+                          </button>
+                        </div>
+
+                        {signer.signature ? (
+                          <div className="relative inline-block">
+                            <img
+                              src={signer.signature}
+                              alt="Signature"
+                              className="w-48 h-24 object-contain bg-white rounded-lg border-2 border-gray-300 p-2"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => updateSigner(idx, 'signature', '')}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-lg"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            {signatureMethod === 'digital' ? (
+                              <button
+                                type="button"
+                                onClick={() => setShowSignatureCanvas(idx)}
+                                className="flex items-center justify-center w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-colors shadow-md"
+                              >
+                                <FileText className="w-5 h-5 mr-2" />
+                                <span className="font-medium">Capturer la signature</span>
+                              </button>
+                            ) : (
+                              <label className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors">
+                                <Upload className="w-5 h-5 text-gray-400 mr-2" />
+                                <span className="text-sm text-gray-600">Cliquer pour télécharger la signature</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => handleSignatureUpload(idx, e)}
+                                  className="hidden"
+                                />
+                              </label>
+                            )}
+                          </>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">
+                          {signatureMethod === 'digital'
+                            ? 'Utilisez le canvas pour capturer une signature manuscrite'
+                            : 'Format: JPG, PNG (max 2MB)'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={addSigner}
+                  className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  <UserPlus className="w-5 h-5" />
+                  <span>Ajouter un signataire autorisé</span>
+                </button>
+              </div>
+
               <div className="flex gap-4 pt-6 border-t border-gray-200 mt-6">
                 <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">Annuler</button>
                 <button type="submit" disabled={loading} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
@@ -3569,6 +3924,32 @@ function OpenCurrentAccountModal({ onClose, onSuccess, initialCustomer }: { onCl
                 </button>
               </div>
             </form>
+          )}
+
+          {/* Modal pour signature digitale */}
+          {showSignatureCanvas !== null && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-gray-900">
+                      Signature du signataire #{(showSignatureCanvas ?? 0) + 1}
+                    </h3>
+                    <button
+                      onClick={() => setShowSignatureCanvas(null)}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+                  
+                  <SignatureCanvas
+                    onSave={(signature) => handleSignatureSave(showSignatureCanvas, signature)}
+                    onCancel={() => setShowSignatureCanvas(null)}
+                  />
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>

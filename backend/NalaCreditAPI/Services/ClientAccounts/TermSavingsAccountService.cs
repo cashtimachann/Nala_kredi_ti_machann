@@ -859,6 +859,7 @@ namespace NalaCreditAPI.Services.ClientAccounts
                 AccountNumber = account.AccountNumber,
                 CustomerId = account.CustomerId,
                 CustomerName = customer != null ? $"{customer.FirstName} {customer.LastName}" : string.Empty,
+                CustomerCode = customer?.CustomerCode ?? string.Empty,
                 CustomerPhone = customer?.PrimaryPhone ?? string.Empty,
                 BranchId = account.BranchId,
                 BranchName = branch?.Name ?? string.Empty,

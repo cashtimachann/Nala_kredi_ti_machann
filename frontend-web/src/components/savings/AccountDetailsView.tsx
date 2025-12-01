@@ -14,7 +14,16 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Download,
-  Home
+  Home,
+  Users,
+  Phone,
+  Upload,
+  Image as ImageIcon,
+  PenTool,
+  AlertCircle,
+  CheckCircle2,
+  Trash2,
+  Plus
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiService } from '../../services/apiService';
@@ -34,6 +43,7 @@ interface AccountDetails {
   customerId: string;
   customerCode?: string;
   customerName: string;
+  customerPhone?: string;
   accountType: string;
   balance: number;
   availableBalance: number;
@@ -81,11 +91,22 @@ interface Transaction {
   processedByName?: string;
 }
 
+interface AuthorizedSigner {
+  fullName: string;
+  documentType: number;
+  documentNumber: string;
+  relationshipToCustomer: string;
+  phoneNumber: string;
+  authorizationLimit?: number;
+  photoUrl?: string;
+  signature?: string;
+}
+
 const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onClose, onUpdate }) => {
   const [account, setAccount] = useState<AccountDetails | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'info' | 'transactions' | 'history'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'transactions' | 'history' | 'signers'>('info');
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
@@ -94,6 +115,13 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
   const [calculatingInterest, setCalculatingInterest] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showAdvancedLimits, setShowAdvancedLimits] = useState(false);
+  const [authorizedSigners, setAuthorizedSigners] = useState<AuthorizedSigner[]>([]);
+  const [editSigners, setEditSigners] = useState<AuthorizedSigner[]>([]);
+  const [uploadingPhotoIdx, setUploadingPhotoIdx] = useState<number | null>(null);
+  const [uploadingSignIdx, setUploadingSignIdx] = useState<number | null>(null);
+  const [showStatementModal, setShowStatementModal] = useState(false);
+  const [statementFrom, setStatementFrom] = useState<string>('');
+  const [statementTo, setStatementTo] = useState<string>('');
 
   // Normalize currency values from backend (e.g., 0/1 -> HTG/USD)
   const displayCurrency = (c: any): 'HTG' | 'USD' | '' => {
@@ -210,10 +238,39 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
       // Enrich missing customer code if needed
       let enrichedAccount: AccountDetails = accountData as any;
       try {
-        if (!enrichedAccount.customerCode && enrichedAccount.customerId) {
+        if (enrichedAccount.customerId) {
           const cust = await savingsCustomerService.getCustomer?.(enrichedAccount.customerId);
-          if (cust?.customerCode) {
-            enrichedAccount = { ...enrichedAccount, customerCode: cust.customerCode } as AccountDetails;
+          if (cust) {
+            const next: Partial<AccountDetails> = {};
+            if (cust.customerCode && !enrichedAccount.customerCode) {
+              next.customerCode = cust.customerCode;
+            }
+            const contact = (cust.contact ?? {}) as any;
+            const phone = contact.primaryPhone
+              ?? contact.primary_phone
+              ?? contact.primaryPhoneNumber
+              ?? contact.PrimaryPhone
+              ?? contact.phone
+              ?? contact.Phone
+              ?? contact.secondaryPhone
+              ?? contact.SecondaryPhone
+              ?? undefined;
+            if (phone && !enrichedAccount.customerPhone) {
+              next.customerPhone = String(phone);
+            }
+            const custAny = cust as any;
+            const nameCandidate = cust.fullName
+              || custAny.FullName
+              || [cust.firstName ?? custAny.FirstName, cust.lastName ?? custAny.LastName]
+                .filter((part) => part && String(part).trim().length > 0)
+                .join(' ')
+                .trim();
+            if (nameCandidate && !enrichedAccount.customerName) {
+              next.customerName = nameCandidate;
+            }
+            if (Object.keys(next).length > 0) {
+              enrichedAccount = { ...enrichedAccount, ...next } as AccountDetails;
+            }
           }
         }
       } catch {
@@ -222,6 +279,34 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
 
       setAccount(enrichedAccount);
       setTransactions(transactionsData || []);
+
+      // Normalize authorized signers if provided by backend
+      try {
+        const rawSigners = (enrichedAccount as any)?.authorizedSigners ?? (enrichedAccount as any)?.AuthorizedSigners ?? [];
+        if (Array.isArray(rawSigners)) {
+          const normalized: AuthorizedSigner[] = rawSigners.map((s: any) => {
+            const docTypeRaw = s.documentType ?? s.DocumentType ?? 0;
+            const limitRaw = s.authorizationLimit ?? s.AuthorizationLimit;
+            const docType = typeof docTypeRaw === 'number' ? docTypeRaw : Number(docTypeRaw) || 0;
+            const authorizationLimit = typeof limitRaw === 'number' ? limitRaw : (limitRaw !== undefined && limitRaw !== null && limitRaw !== '' ? Number(limitRaw) : undefined);
+            return {
+              fullName: s.fullName || s.FullName || '',
+              documentType: docType,
+              documentNumber: s.documentNumber || s.DocumentNumber || '',
+              relationshipToCustomer: s.relationshipToCustomer || s.RelationshipToCustomer || '',
+              phoneNumber: s.phoneNumber || s.phone || s.Phone || '',
+              authorizationLimit,
+              photoUrl: s.photoUrl || s.PhotoUrl || s.photo || undefined,
+              signature: s.signature || s.Signature || undefined,
+            } as AuthorizedSigner;
+          });
+          setAuthorizedSigners(normalized);
+        } else {
+          setAuthorizedSigners([]);
+        }
+      } catch {
+        setAuthorizedSigners([]);
+      }
 
       // Prefill edit form
       const limits = (enrichedAccount as any).accountLimits || {};
@@ -334,6 +419,16 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
     try {
       // Build payload compatible with backend expectations
       const payload: any = {};
+      // Basic validation for signers
+      for (let i = 0; i < editSigners.length; i++) {
+        const s = editSigners[i];
+        const nameOk = !!(s.fullName && s.fullName.trim().length >= 2);
+        const dtOk = [0,1,2].includes(Number(s.documentType));
+        const numOk = !!(s.documentNumber && s.documentNumber.trim().length >= 3);
+        if (!nameOk) { toast.error(`Signataire #${i+1}: Nom complet requis`); return; }
+        if (!dtOk) { toast.error(`Signataire #${i+1}: Type de document invalide`); return; }
+        if (!numOk) { toast.error(`Signataire #${i+1}: Numéro de document requis`); return; }
+      }
       if (editForm.interestRate !== undefined) payload.interestRate = Number(editForm.interestRate);
       if (editForm.minimumBalance !== undefined) payload.minimumBalance = Number(editForm.minimumBalance);
       if (editForm.withdrawalLimit !== undefined && editForm.withdrawalLimit !== null && editForm.withdrawalLimit !== '') {
@@ -364,6 +459,20 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
       if (Object.keys(limitPayload).length) {
         payload.AccountLimits = limitPayload;
       }
+      // Attach AuthorizedSigners if any edited
+      const cleanedSigners = (editSigners || []).filter(s => (s.fullName || '').trim().length > 0);
+      if (cleanedSigners.length) {
+        payload.AuthorizedSigners = cleanedSigners.map(s => ({
+          FullName: s.fullName?.trim() || '',
+          DocumentType: Number(s.documentType || 0),
+          DocumentNumber: s.documentNumber?.trim() || '',
+          RelationshipToCustomer: s.relationshipToCustomer?.trim() || '',
+          Phone: s.phoneNumber?.trim() || '',
+          AuthorizationLimit: (s.authorizationLimit !== undefined && s.authorizationLimit !== null && String(s.authorizationLimit) !== '') ? Number(s.authorizationLimit) : undefined,
+          PhotoUrl: (s.photoUrl && String(s.photoUrl).trim()) ? String(s.photoUrl).trim() : undefined,
+          Signature: (s.signature && String(s.signature).trim()) ? String(s.signature).trim() : undefined,
+        }));
+      }
       await apiService.updateSavingsAccount(accountId, payload);
       toast.success('Compte mis à jour avec succès');
       setShowEditModal(false);
@@ -376,7 +485,71 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
 
   const handleGenerateStatement = async () => {
     try {
-      toast.success('Relevé généré (fonctionnalité à venir)');
+      const parseDate = (s: string) => {
+        if (!s) return null;
+        const d = new Date(`${s}T00:00:00`);
+        return Number.isNaN(d.getTime()) ? null : d;
+      };
+      const fromD = parseDate(statementFrom);
+      const toD = parseDate(statementTo);
+      if (fromD && toD && fromD.getTime() > toD.getTime()) {
+        toast.error('La date de début doit précéder la date de fin');
+        return;
+      }
+      // Compute inclusive end-of-day for the 'to' date
+      const toInclusive = toD ? new Date(toD.getTime() + (24 * 60 * 60 * 1000) - 1) : null;
+      const getTxDate = (tx: Transaction) => new Date((tx as any).processedAt || (tx as any).transactionDate || (tx as any).date || 0);
+      const inRange = (tx: Transaction) => {
+        const dt = getTxDate(tx);
+        if (Number.isNaN(dt.getTime())) return false;
+        if (fromD && dt < fromD) return false;
+        if (toInclusive && dt > toInclusive) return false;
+        return true;
+      };
+      const source = (fromD || toD) ? transactions.filter(inRange) : transactions;
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) { toast.error('Veuillez autoriser les pop-ups pour exporter le relevé'); return; }
+      const rows = source.map(tx => {
+        const amt = (tx.amount === undefined || tx.amount === null || tx.amount === 0)
+          ? Math.abs((Number(tx.balanceAfter ?? 0) - Number(tx.balanceBefore ?? 0)))
+          : Math.abs(Number(tx.amount));
+        const currency = tx.currency || (account ? account.currency : '');
+        const operator = tx.processedByName || (tx as any).processedByFullName || (tx as any).receivedBy || tx.processedBy || '';
+        const dateStr = new Date((tx as any).processedAt || (tx as any).transactionDate || (tx as any).date || 0).toLocaleString('fr-FR');
+        const ref = (tx.reference !== undefined && tx.reference !== null && String(tx.reference).trim() !== '' && String(tx.reference) !== '0') ? (tx.reference as any) : (tx.id as any);
+        return `
+                <div className="pt-2">
+            <td style="padding:8px;border:1px solid #ddd">${ref || ''}</td>
+            <td style="padding:8px;border:1px solid #ddd">${dateStr}</td>
+            <td style="padding:8px;border:1px solid #ddd">${tx.type || ''}</td>
+            <td style="padding:8px;border:1px solid #ddd">${operator}</td>
+            <td style="padding:8px;border:1px solid #ddd">${formatCurrency(amt, displayCurrency(currency))}</td>
+            <td style="padding:8px;border:1px solid #ddd">${formatCurrency(Number(tx.balanceAfter ?? 0), displayCurrency(currency))}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const accNum = account?.accountNumber || '';
+      const html = `
+        <html><head><meta charset="utf-8"><title>Relevé ${accNum}</title>
+        <style>body{font-family:Arial,Helvetica,sans-serif;margin:24px}h2{margin:0 0 6px 0}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px}th{background:#f3f4f6;text-align:left}</style>
+        </head><body>
+        <h2>Relevé du compte ${accNum}</h2>
+        <p>Client: ${account?.customerName || '—'}</p>
+        ${(fromD || toD) ? `<p>Période: ${fromD ? fromD.toLocaleDateString('fr-FR') : '—'} — ${toD ? toD.toLocaleDateString('fr-FR') : '—'}</p>` : ''}
+        <p>Généré le ${new Date().toLocaleString('fr-FR')}</p>
+        <table>
+          <thead><tr><th>Réf</th><th>Date</th><th>Type</th><th>Opérateur</th><th>Montant</th><th>Solde</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <script>window.onload=()=>{ setTimeout(()=>{ window.print(); }, 300); };</script>
+        </body></html>
+      `;
+      printWindow.document.write(html);
+      printWindow.document.close();
+      toast.success("Fenêtre d'export ouverte — utilisez Imprimer pour PDF");
+      setShowStatementModal(false);
     } catch (error) {
       toast.error('Erreur lors de la génération du relevé');
     }
@@ -394,6 +567,87 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
 
   return (
     <>
+      {/* Statement Date Range Modal */}
+      {showStatementModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="mb-4">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Relevé de compte</h2>
+              <p className="text-gray-600 text-sm">Sélectionnez la période à inclure dans le relevé.</p>
+            </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Du</label>
+                  <input
+                    type="date"
+                    value={statementFrom}
+                    onChange={e => setStatementFrom(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Au</label>
+                  <input
+                    type="date"
+                    value={statementTo}
+                    onChange={e => setStatementTo(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-2">Raccourcis</div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="px-2.5 py-1.5 text-xs border rounded" onClick={() => {
+                    const now = new Date();
+                    const yyyy = now.getFullYear();
+                    const mm = String(now.getMonth()+1).padStart(2,'0');
+                    const dd = String(now.getDate()).padStart(2,'0');
+                    const s = `${yyyy}-${mm}-${dd}`;
+                    setStatementFrom(s); setStatementTo(s);
+                  }}>Aujourd'hui</button>
+                  <button type="button" className="px-2.5 py-1.5 text-xs border rounded" onClick={() => {
+                    const now = new Date();
+                    const from = new Date(now.getTime() - 29*24*60*60*1000);
+                    const f = `${from.getFullYear()}-${String(from.getMonth()+1).padStart(2,'0')}-${String(from.getDate()).padStart(2,'0')}`;
+                    const t = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+                    setStatementFrom(f); setStatementTo(t);
+                  }}>30 jours</button>
+                  <button type="button" className="px-2.5 py-1.5 text-xs border rounded" onClick={() => {
+                    const now = new Date();
+                    const from = new Date(now.getFullYear(), now.getMonth(), 1);
+                    const f = `${from.getFullYear()}-${String(from.getMonth()+1).padStart(2,'0')}-${String(from.getDate()).padStart(2,'0')}`;
+                    const t = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+                    setStatementFrom(f); setStatementTo(t);
+                  }}>Ce mois</button>
+                  <button type="button" className="px-2.5 py-1.5 text-xs border rounded" onClick={() => {
+                    const now = new Date();
+                    const from = new Date(now.getTime() - 90*24*60*60*1000);
+                    const f = `${from.getFullYear()}-${String(from.getMonth()+1).padStart(2,'0')}-${String(from.getDate()).padStart(2,'0')}`;
+                    const t = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+                    setStatementFrom(f); setStatementTo(t);
+                  }}>3 mois</button>
+                  <button type="button" className="px-2.5 py-1.5 text-xs border rounded" onClick={() => {
+                    const now = new Date();
+                    const from = new Date(now.getTime() - 365*24*60*60*1000);
+                    const f = `${from.getFullYear()}-${String(from.getMonth()+1).padStart(2,'0')}-${String(from.getDate()).padStart(2,'0')}`;
+                    const t = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+                    setStatementFrom(f); setStatementTo(t);
+                  }}>12 mois</button>
+                  <button type="button" className="px-2.5 py-1.5 text-xs border rounded" onClick={() => {
+                    setStatementFrom(''); setStatementTo('');
+                  }}>Tout</button>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 pt-5">
+              <button type="button" onClick={() => setShowStatementModal(false)} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Annuler</button>
+              <button type="button" onClick={handleGenerateStatement} className="flex-1 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900">Générer</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Calculate Interest Modal */}
       {showInterestModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
@@ -570,6 +824,10 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
                 onClick={() => setActiveTab('history')}
                 className={`py-2 px-3 text-sm font-medium transition-colors ${activeTab === 'history' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900'}`}
               >Historique</button>
+              <button
+                onClick={() => setActiveTab('signers')}
+                className={`py-2 px-3 text-sm font-medium transition-colors ${activeTab === 'signers' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900'}`}
+              >Signataires{authorizedSigners.length > 0 ? ` (${authorizedSigners.length})` : ''}</button>
             </div>
           </div>
 
@@ -826,6 +1084,85 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
                 </div>
               );
             })()}
+            {activeTab === 'signers' && (
+              <div className="space-y-4">
+                {authorizedSigners.length === 0 ? (
+                  <div className="bg-gray-50 border border-dashed border-gray-300 rounded-lg p-6 text-center text-sm text-gray-600">
+                    Aucun signataire autorisé enregistré pour ce compte.
+                  </div>
+                ) : (
+                  authorizedSigners.map((signer, idx) => (
+                    <div key={`${signer.fullName || 'signer'}-${idx}`} className="bg-white border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-blue-600" />
+                          <span className="text-sm font-semibold text-gray-900">Signataire #{idx + 1}</span>
+                        </div>
+                        {signer.authorizationLimit !== undefined && signer.authorizationLimit !== null && (
+                          <span className="text-xs text-gray-600">
+                            Limite: {formatCurrency(Number(signer.authorizationLimit), displayCurrency(account.currency))}
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <div className="text-xs text-gray-500">Nom complet</div>
+                          <div className="text-gray-900">{signer.fullName || '—'}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500">Relation</div>
+                          <div className="text-gray-900">{signer.relationshipToCustomer || '—'}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500">Type de document</div>
+                          <div className="text-gray-900">
+                            {signer.documentType === 0
+                              ? 'CIN'
+                              : signer.documentType === 1
+                                ? 'Passeport'
+                                : signer.documentType === 2
+                                  ? 'Permis de conduire'
+                                  : (signer.documentType as any) ?? '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500">Numéro de document</div>
+                          <div className="text-gray-900">{signer.documentNumber || '—'}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500">Téléphone</div>
+                          <div className="text-gray-900">{signer.phoneNumber || '—'}</div>
+                        </div>
+                      </div>
+                      {(signer.photoUrl || signer.signature) && (
+                        <div className="mt-4 flex flex-wrap gap-6">
+                          {signer.photoUrl && (
+                            <div>
+                              <div className="text-xs text-gray-500 mb-1">Photo</div>
+                              <img
+                                src={signer.photoUrl}
+                                alt={`Photo signataire ${idx + 1}`}
+                                className="w-24 h-24 object-cover rounded border"
+                              />
+                            </div>
+                          )}
+                          {signer.signature && (
+                            <div>
+                              <div className="text-xs text-gray-500 mb-1">Signature</div>
+                              <img
+                                src={signer.signature}
+                                alt={`Signature signataire ${idx + 1}`}
+                                className="w-40 h-20 object-contain bg-white border rounded p-2"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
           {/* Actions Footer */}
@@ -840,7 +1177,7 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
                 const isInactive = statusStr === 'Inactive';
                 return (
                   <>
-                    <button onClick={() => setShowEditModal(true)} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors flex items-center gap-2 text-sm">
+                    <button onClick={() => { setEditSigners(authorizedSigners.map(s => ({...s}))); setShowEditModal(true); }} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors flex items-center gap-2 text-sm">
                       <Edit className="h-4 w-4" />
                       Modifier
                     </button>
@@ -855,7 +1192,7 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
                         </button>
                       );
                     })()}
-                    <button onClick={handleGenerateStatement} className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors flex items-center gap-2 text-sm">
+                    <button onClick={() => setShowStatementModal(true)} className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors flex items-center gap-2 text-sm">
                       <Download className="h-4 w-4" />
                       Relevé
                     </button>
@@ -989,6 +1326,379 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     rows={3}
                   />
+                </div>
+                
+                {/* Signataires autorisés Section */}
+                <div className="pt-4 border-t border-gray-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-5 w-5 text-blue-600" />
+                      <label className="text-base font-semibold text-gray-900">Signataires autorisés</label>
+                    </div>
+                    <button 
+                      type="button" 
+                      className="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-1.5 shadow-sm" 
+                      onClick={() => setEditSigners(prev => ([...prev, { fullName: '', documentType: 0, documentNumber: '', relationshipToCustomer: '', phoneNumber: '', authorizationLimit: undefined, photoUrl: '', signature: '' }]))}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Ajouter
+                    </button>
+                  </div>
+                  
+                  {editSigners.length === 0 ? (
+                    <div className="text-sm text-gray-600 bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                      <Users className="h-10 w-10 text-gray-400 mx-auto mb-2" />
+                      <p className="font-medium text-gray-700 mb-1">Aucun signataire</p>
+                      <p className="text-xs text-gray-500">Cliquez sur "Ajouter" pour créer un nouveau signataire</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {editSigners.map((s, idx) => {
+                        const hasName = s.fullName?.trim();
+                        const hasDocNum = s.documentNumber?.trim();
+                        const isValid = hasName && hasDocNum;
+                        
+                        return (
+                          <div key={idx} className="bg-gradient-to-br from-white to-gray-50 border-2 border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
+                              <div className="flex items-center gap-3">
+                                <div className="bg-blue-100 rounded-full p-2">
+                                  <User className="h-5 w-5 text-blue-600" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-semibold text-gray-900">Signataire #{idx + 1}</div>
+                                  {isValid ? (
+                                    <div className="flex items-center gap-1 text-xs text-green-600 mt-0.5">
+                                      <CheckCircle2 className="h-3 w-3" />
+                                      <span>Valide</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1 text-xs text-amber-600 mt-0.5">
+                                      <AlertCircle className="h-3 w-3" />
+                                      <span>Incomplet</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <button 
+                                type="button" 
+                                className="px-3 py-1.5 text-xs text-red-600 hover:text-white hover:bg-red-600 border border-red-200 hover:border-red-600 rounded-lg transition-colors flex items-center gap-1.5" 
+                                onClick={() => setEditSigners(prev => prev.filter((_, i) => i !== idx))}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Supprimer
+                              </button>
+                            </div>
+                            
+                            {/* Identity Section */}
+                            <div className="mb-4">
+                              <div className="flex items-center gap-2 mb-3">
+                                <User className="h-4 w-4 text-gray-600" />
+                                <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Identité</h4>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-1.5">
+                                    <User className="h-3.5 w-3.5 text-gray-500" />
+                                    Nom complet <span className="text-red-500">*</span>
+                                  </label>
+                                  <input 
+                                    type="text" 
+                                    value={s.fullName} 
+                                    onChange={e => setEditSigners(prev => prev.map((v,i) => i===idx ? { ...v, fullName: e.target.value } : v))} 
+                                    className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${!hasName ? 'border-amber-300 bg-amber-50' : 'border-gray-300'}`}
+                                    placeholder="Ex: Jean Dupont"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-1.5">
+                                    <Users className="h-3.5 w-3.5 text-gray-500" />
+                                    Relation au client
+                                  </label>
+                                  <input 
+                                    type="text" 
+                                    value={s.relationshipToCustomer} 
+                                    onChange={e => setEditSigners(prev => prev.map((v,i) => i===idx ? { ...v, relationshipToCustomer: e.target.value } : v))} 
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                                    placeholder="Ex: Conjoint, Fils, etc."
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Document Section */}
+                            <div className="mb-4">
+                              <div className="flex items-center gap-2 mb-3">
+                                <CreditCard className="h-4 w-4 text-gray-600" />
+                                <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Document d'identité</h4>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-1.5">
+                                    <CreditCard className="h-3.5 w-3.5 text-gray-500" />
+                                    Type de document <span className="text-red-500">*</span>
+                                  </label>
+                                  <select 
+                                    value={s.documentType} 
+                                    onChange={e => setEditSigners(prev => prev.map((v,i) => i===idx ? { ...v, documentType: Number(e.target.value) } : v))} 
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                                  >
+                                    <option value={0}>CIN</option>
+                                    <option value={1}>Passeport</option>
+                                    <option value={2}>Permis de conduire</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-1.5">
+                                    <CreditCard className="h-3.5 w-3.5 text-gray-500" />
+                                    Numéro de document <span className="text-red-500">*</span>
+                                  </label>
+                                  <input 
+                                    type="text" 
+                                    value={s.documentNumber} 
+                                    onChange={e => setEditSigners(prev => prev.map((v,i) => i===idx ? { ...v, documentNumber: e.target.value } : v))} 
+                                    className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${!hasDocNum ? 'border-amber-300 bg-amber-50' : 'border-gray-300'}`}
+                                    placeholder="Ex: 001-123456-7"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Contact & Authorization Section */}
+                            <div className="mb-4">
+                              <div className="flex items-center gap-2 mb-3">
+                                <Phone className="h-4 w-4 text-gray-600" />
+                                <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Contact & Autorisation</h4>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-1.5">
+                                    <Phone className="h-3.5 w-3.5 text-gray-500" />
+                                    Téléphone
+                                  </label>
+                                  <input 
+                                    type="text" 
+                                    value={s.phoneNumber} 
+                                    onChange={e => setEditSigners(prev => prev.map((v,i) => i===idx ? { ...v, phoneNumber: e.target.value } : v))} 
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                                    placeholder="Ex: +509 1234 5678"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-1.5">
+                                    <DollarSign className="h-3.5 w-3.5 text-gray-500" />
+                                    Limite d'autorisation
+                                  </label>
+                                  <input 
+                                    type="number" 
+                                    step="0.01" 
+                                    value={s.authorizationLimit ?? ''} 
+                                    onChange={e => setEditSigners(prev => prev.map((v,i) => i===idx ? { ...v, authorizationLimit: (e.target.value === '' ? undefined : Number(e.target.value)) } : v))} 
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                                    placeholder="Montant max. autorisé"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Images Section */}
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                              <div className="flex items-center gap-2 mb-3">
+                                <ImageIcon className="h-4 w-4 text-blue-600" />
+                                <h4 className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Documents visuels</h4>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Photo Upload */}
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-2">
+                                    <ImageIcon className="h-3.5 w-3.5 text-gray-500" />
+                                    Photo du signataire
+                                  </label>
+                                  <div className="space-y-2">
+                                    <label className="flex items-center justify-center gap-2 px-3 py-2 bg-white border-2 border-dashed border-blue-300 hover:border-blue-500 rounded-lg cursor-pointer transition-colors group">
+                                      <Upload className="h-4 w-4 text-blue-600 group-hover:text-blue-700" />
+                                      <span className="text-xs text-blue-600 group-hover:text-blue-700 font-medium">
+                                        {uploadingPhotoIdx === idx ? 'Téléversement...' : 'Téléverser photo'}
+                                      </span>
+                                      <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        className="hidden"
+                                        disabled={uploadingPhotoIdx === idx}
+                                        onChange={async (e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file) return;
+                                          const custId = (account as any)?.customerId || (account as any)?.clientId || (account as any)?.customerCode || account.id;
+                                          if (!custId) { 
+                                            toast.error('Identifiant client manquant pour upload'); 
+                                            return; 
+                                          }
+                                          try {
+                                            setUploadingPhotoIdx(idx);
+                                            const url = await savingsCustomerService.uploadFile(file, String(custId), 'photo');
+                                            setEditSigners(prev => prev.map((v,i) => i===idx ? { ...v, photoUrl: url } : v));
+                                            toast.success('Photo téléversée avec succès');
+                                          } catch (err) {
+                                            toast.error("Échec de l'upload de la photo");
+                                          } finally {
+                                            setUploadingPhotoIdx(null);
+                                          }
+                                        }}
+                                      />
+                                    </label>
+                                    {s.photoUrl && (
+                                      <div className="relative">
+                                        <img 
+                                          src={s.photoUrl} 
+                                          alt="Photo" 
+                                          className="w-full h-24 object-cover rounded-lg border-2 border-blue-200" 
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditSigners(prev => prev.map((v,i) => i===idx ? { ...v, photoUrl: '' } : v))}
+                                          className="absolute top-1 right-1 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-colors"
+                                          title="Supprimer la photo"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Signature Upload */}
+                                <div>
+                                  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-2">
+                                    <PenTool className="h-3.5 w-3.5 text-gray-500" />
+                                    Signature
+                                  </label>
+                                  <div className="space-y-3">
+                                    <label className="flex items-center justify-center gap-2 px-3 py-2 bg-white border-2 border-dashed border-blue-300 hover:border-blue-500 rounded-lg cursor-pointer transition-colors group">
+                                      <Upload className="h-4 w-4 text-blue-600 group-hover:text-blue-700" />
+                                      <span className="text-xs text-blue-600 group-hover:text-blue-700 font-medium">
+                                        {uploadingSignIdx === idx ? 'Téléversement...' : 'Téléverser signature'}
+                                      </span>
+                                      <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        className="hidden"
+                                        disabled={uploadingSignIdx === idx}
+                                        onChange={async (e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file) return;
+                                          const custId2 = (account as any)?.customerId || (account as any)?.clientId || (account as any)?.customerCode || account.id;
+                                          if (!custId2) { 
+                                            toast.error('Identifiant client manquant pour upload'); 
+                                            return; 
+                                          }
+                                          try {
+                                            setUploadingSignIdx(idx);
+                                            const url = await savingsCustomerService.uploadFile(file, String(custId2), 'signature');
+                                            setEditSigners(prev => prev.map((v,i) => i===idx ? { ...v, signature: url } : v));
+                                            toast.success('Signature téléversée avec succès');
+                                          } catch (err) {
+                                            toast.error("Échec de l'upload de la signature");
+                                          } finally {
+                                            setUploadingSignIdx(null);
+                                          }
+                                        }}
+                                      />
+                                    </label>
+                                    {/* Signature Canvas */}
+                                    <div className="space-y-2">
+                                      <div className="flex items-center gap-2">
+                                        <PenTool className="h-3.5 w-3.5 text-gray-500" />
+                                        <span className="text-xs text-gray-700">Signer ci-dessous</span>
+                                      </div>
+                                      <canvas
+                                        ref={(el) => {
+                                          if (!el) return;
+                                          const ctx = el.getContext('2d');
+                                          if (!ctx) return;
+                                          el.width = el.offsetWidth;
+                                          el.height = 120;
+                                          let drawing = false;
+                                          const start = (x: number, y: number) => { drawing = true; ctx.beginPath(); ctx.moveTo(x, y); };
+                                          const move = (x: number, y: number) => { if (!drawing) return; ctx.lineTo(x, y); ctx.strokeStyle = '#111827'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke(); };
+                                          const end = () => { drawing = false; };
+                                          const getPos = (ev: MouseEvent | TouchEvent) => {
+                                            const rect = el.getBoundingClientRect();
+                                            if (ev instanceof TouchEvent) {
+                                              const t = ev.touches[0] || ev.changedTouches[0];
+                                              return { x: (t.clientX - rect.left), y: (t.clientY - rect.top) };
+                                            }
+                                            const m = ev as MouseEvent;
+                                            return { x: (m.clientX - rect.left), y: (m.clientY - rect.top) };
+                                          };
+                                          const onMouseDown = (ev: MouseEvent) => { const p = getPos(ev); start(p.x, p.y); };
+                                          const onMouseMove = (ev: MouseEvent) => { const p = getPos(ev); move(p.x, p.y); };
+                                          const onMouseUp = () => end();
+                                          const onTouchStart = (ev: TouchEvent) => { ev.preventDefault(); const p = getPos(ev); start(p.x, p.y); };
+                                          const onTouchMove = (ev: TouchEvent) => { ev.preventDefault(); const p = getPos(ev); move(p.x, p.y); };
+                                          const onTouchEnd = () => end();
+                                          el.addEventListener('mousedown', onMouseDown);
+                                          el.addEventListener('mousemove', onMouseMove);
+                                          window.addEventListener('mouseup', onMouseUp);
+                                          el.addEventListener('touchstart', onTouchStart, { passive: false });
+                                          el.addEventListener('touchmove', onTouchMove, { passive: false });
+                                          window.addEventListener('touchend', onTouchEnd);
+                                          (el as any)._cleanup = () => {
+                                            el.removeEventListener('mousedown', onMouseDown);
+                                            el.removeEventListener('mousemove', onMouseMove);
+                                            window.removeEventListener('mouseup', onMouseUp);
+                                            el.removeEventListener('touchstart', onTouchStart);
+                                            el.removeEventListener('touchmove', onTouchMove);
+                                            window.removeEventListener('touchend', onTouchEnd);
+                                          };
+                                        }}
+                                        className="w-full h-28 bg-white border rounded-lg"
+                                      />
+                                      <div className="flex gap-2">
+                                        <button type="button" className="px-2 py-1 text-xs bg-gray-100 border rounded" onClick={() => {
+                                          const c = document.querySelectorAll('canvas');
+                                          const canvas = c[c.length - 1] as HTMLCanvasElement | undefined;
+                                          if (!canvas) return;
+                                          const ctx = canvas.getContext('2d');
+                                          if (!ctx) return;
+                                          ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                        }}>Effacer</button>
+                                        <button type="button" className="px-2 py-1 text-xs bg-blue-600 text-white rounded" onClick={() => {
+                                          const c = document.querySelectorAll('canvas');
+                                          const canvas = c[c.length - 1] as HTMLCanvasElement | undefined;
+                                          if (!canvas) return;
+                                          const data = canvas.toDataURL('image/png');
+                                          setEditSigners(prev => prev.map((v,i) => i===idx ? { ...v, signature: data } : v));
+                                          toast.success('Signature enregistrée');
+                                        }}>Enregistrer</button>
+                                      </div>
+                                    </div>
+                                    {s.signature && (
+                                      <div className="relative">
+                                        <img 
+                                          src={s.signature} 
+                                          alt="Signature" 
+                                          className="w-full h-24 object-contain bg-white rounded-lg border-2 border-blue-200 p-2" 
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditSigners(prev => prev.map((v,i) => i===idx ? { ...v, signature: '' } : v))}
+                                          className="absolute top-1 right-1 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-colors"
+                                          title="Supprimer la signature"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-3 pt-4">
                   <button

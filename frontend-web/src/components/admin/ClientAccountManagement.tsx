@@ -14,7 +14,7 @@ import {
   X,
   CheckCircle,
   AlertTriangle,
-  
+  Upload,
   UserPlus,
   Download,
   ChevronDown,
@@ -27,6 +27,7 @@ import toast from 'react-hot-toast';
 import ClientCreationForm from './ClientCreationForm';
 import ClientEditForm from './ClientEditForm';
 import DocumentUploadModal from './DocumentUploadModal';
+import SignatureCanvas from '../savings/SignatureCanvas';
 import { IdentityDocumentType as SavingsIdentityDocType } from '../../types/savings';
 import savingsCustomerService, { 
   SavingsCustomerCreateDto,
@@ -658,6 +659,12 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
+
+          {/* Signataires autorisés (optionnel) */}
+          <div className="mt-4">
+            <h4 className="text-md font-semibold text-gray-900 mb-2">Personnes autorisées à signer (optionnel)</h4>
+            <AuthorizedSignersEditor value={formData.authorizedSigners || []} onChange={(v: any) => updateFormData('authorizedSigners', v)} />
+          </div>
         </div>
       )}
 
@@ -842,6 +849,12 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
               </div>
             </div>
           </div>
+
+          {/* Signataires autorisés (optionnel) */}
+          <div className="mt-4">
+            <h4 className="text-md font-semibold text-gray-900 mb-2">Personnes autorisées à signer (optionnel)</h4>
+            <AuthorizedSignersEditor value={formData.authorizedSigners || []} onChange={(v: any) => updateFormData('authorizedSigners', v)} />
+          </div>
         </div>
       )}
 
@@ -877,64 +890,343 @@ const AuthorizedSignersEditor: React.FC<{
     relationshipToCustomer: string;
     phoneNumber: string;
     authorizationLimit?: number;
+    photoUrl?: string;
+    signature?: string;
   }>;
   onChange: (val: any[]) => void;
 }> = ({ value, onChange }) => {
+  const [showSignatureCanvas, setShowSignatureCanvas] = useState<number | null>(null);
+  const [signatureMethod, setSignatureMethod] = useState<'digital' | 'upload'>('digital');
+  
   const addSigner = () => {
-    onChange([...(value || []), { fullName: '', documentType: SavingsIdentityDocType.CIN, documentNumber: '', relationshipToCustomer: '', phoneNumber: '', authorizationLimit: undefined }]);
+    onChange([...(value || []), { 
+      fullName: '', 
+      documentType: SavingsIdentityDocType.CIN, 
+      documentNumber: '', 
+      relationshipToCustomer: '', 
+      phoneNumber: '', 
+      authorizationLimit: undefined,
+      photoUrl: '',
+      signature: ''
+    }]);
   };
+  
   const update = (idx: number, field: string, v: any) => {
     const next = [...(value || [])];
     (next[idx] as any)[field] = v;
     onChange(next);
   };
+  
   const remove = (idx: number) => {
     const next = [...(value || [])];
     next.splice(idx, 1);
     onChange(next);
   };
 
+  const handlePhotoUpload = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Le fichier est trop volumineux (max 5MB)');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        update(idx, 'photoUrl', reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSignatureUpload = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error('Le fichier est trop volumineux (max 2MB)');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        update(idx, 'signature', reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSignatureSave = (idx: number, signature: string) => {
+    update(idx, 'signature', signature);
+    setShowSignatureCanvas(null);
+  };
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {(value || []).length === 0 && (
-        <div className="text-sm text-gray-500">Aucun signataire ajouté.</div>
+        <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+          <UserPlus className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-600 mb-1">Aucun signataire autorisé</p>
+          <p className="text-xs text-gray-500">Cliquez sur le bouton ci-dessous pour ajouter une personne autorisée</p>
+        </div>
       )}
       {(value || []).map((s, i) => (
-        <div key={i} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Nom complet</label>
-            <input type="text" value={s.fullName} onChange={(e) => update(i, 'fullName', e.target.value)} className="w-full px-2 py-2 border border-gray-300 rounded" />
+        <div key={i} className="bg-white border-2 border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                <User className="w-5 h-5 text-blue-600" />
+              </div>
+              <span className="font-semibold text-gray-900">Signataire #{i + 1}</span>
+            </div>
+            <button 
+              type="button" 
+              onClick={() => remove(i)} 
+              className="flex items-center space-x-1 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+              <span>Retirer</span>
+            </button>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Type de pièce</label>
-            <select value={s.documentType} onChange={(e) => update(i, 'documentType', e.target.value)} className="w-full px-2 py-2 border border-gray-300 rounded">
-              <option value={SavingsIdentityDocType.CIN}>CIN</option>
-              <option value={SavingsIdentityDocType.PASSPORT}>Passeport</option>
-              <option value={SavingsIdentityDocType.DRIVING_LICENSE}>Permis</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Numéro</label>
-            <input type="text" value={s.documentNumber} onChange={(e) => update(i, 'documentNumber', e.target.value)} className="w-full px-2 py-2 border border-gray-300 rounded" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Relation</label>
-            <input type="text" value={s.relationshipToCustomer} onChange={(e) => update(i, 'relationshipToCustomer', e.target.value)} className="w-full px-2 py-2 border border-gray-300 rounded" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Téléphone</label>
-            <input type="tel" value={s.phoneNumber} onChange={(e) => update(i, 'phoneNumber', e.target.value)} className="w-full px-2 py-2 border border-gray-300 rounded" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Limite (HTG)</label>
-            <input type="number" min={0} value={s.authorizationLimit ?? ''} onChange={(e) => update(i, 'authorizationLimit', e.target.value ? parseFloat(e.target.value) : undefined)} className="w-full px-2 py-2 border border-gray-300 rounded" />
-          </div>
-          <div className="md:col-span-6 flex justify-end">
-            <button type="button" onClick={() => remove(i)} className="text-xs text-red-600 hover:text-red-800">Retirer</button>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Nom complet <span className="text-red-500">*</span>
+              </label>
+              <input 
+                type="text" 
+                value={s.fullName} 
+                onChange={(e) => update(i, 'fullName', e.target.value)} 
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Prénom et nom"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Type de pièce <span className="text-red-500">*</span>
+              </label>
+              <select 
+                value={s.documentType} 
+                onChange={(e) => update(i, 'documentType', e.target.value)} 
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value={SavingsIdentityDocType.CIN}>CIN (Carte d'Identité)</option>
+                <option value={SavingsIdentityDocType.PASSPORT}>Passeport</option>
+                <option value={SavingsIdentityDocType.DRIVING_LICENSE}>Permis de Conduire</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Numéro de pièce <span className="text-red-500">*</span>
+              </label>
+              <input 
+                type="text" 
+                value={s.documentNumber} 
+                onChange={(e) => update(i, 'documentNumber', e.target.value)} 
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Ex: 001-123-456-7"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Relation avec le client <span className="text-red-500">*</span>
+              </label>
+              <input 
+                type="text" 
+                value={s.relationshipToCustomer} 
+                onChange={(e) => update(i, 'relationshipToCustomer', e.target.value)} 
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Ex: Conjoint(e), Directeur"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Numéro de téléphone <span className="text-red-500">*</span>
+              </label>
+              <input 
+                type="tel" 
+                value={s.phoneNumber} 
+                onChange={(e) => update(i, 'phoneNumber', e.target.value)} 
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="+509 3712 3456"
+              />
+            </div>
+            
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Limite d'autorisation (HTG) <span className="text-xs text-gray-500">(Optionnel)</span>
+              </label>
+              <input 
+                type="number" 
+                min={0} 
+                value={s.authorizationLimit ?? ''} 
+                onChange={(e) => update(i, 'authorizationLimit', e.target.value ? parseFloat(e.target.value) : undefined)} 
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Ex: 50000"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Montant maximum que cette personne peut autoriser par transaction
+              </p>
+            </div>
+
+            {/* Document d'identité */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Pièce d'identité (Photo) <span className="text-xs text-gray-500">(Optionnel)</span>
+              </label>
+              {s.photoUrl ? (
+                <div className="relative inline-block">
+                  <img 
+                    src={s.photoUrl} 
+                    alt="Pièce d'identité" 
+                    className="w-32 h-32 object-cover rounded-lg border-2 border-gray-300"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => update(i, 'photoUrl', '')}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-lg"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors">
+                  <Upload className="w-5 h-5 text-gray-400 mr-2" />
+                  <span className="text-sm text-gray-600">Cliquer pour télécharger</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handlePhotoUpload(i, e)}
+                    className="hidden"
+                  />
+                </label>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                Format accepté: JPG, PNG (max 5MB)
+              </p>
+            </div>
+
+            {/* Signature */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Signature <span className="text-xs text-gray-500">(Optionnel)</span>
+              </label>
+              
+              {/* Méthode de signature */}
+              <div className="flex items-center space-x-4 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setSignatureMethod('digital')}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg border-2 transition-colors ${
+                    signatureMethod === 'digital' 
+                      ? 'bg-blue-50 border-blue-500 text-blue-700' 
+                      : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  <span className="text-sm font-medium">Signature digitale</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSignatureMethod('upload')}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg border-2 transition-colors ${
+                    signatureMethod === 'upload' 
+                      ? 'bg-blue-50 border-blue-500 text-blue-700' 
+                      : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
+                  }`}
+                >
+                  <Upload className="w-4 h-4" />
+                  <span className="text-sm font-medium">Télécharger</span>
+                </button>
+              </div>
+
+              {/* Affichage ou capture de signature */}
+              {s.signature ? (
+                <div className="relative inline-block">
+                  <img 
+                    src={s.signature} 
+                    alt="Signature" 
+                    className="w-48 h-24 object-contain bg-white rounded-lg border-2 border-gray-300 p-2"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => update(i, 'signature', '')}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-lg"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {signatureMethod === 'digital' ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowSignatureCanvas(i)}
+                      className="flex items-center justify-center w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-colors shadow-md"
+                    >
+                      <FileText className="w-5 h-5 mr-2" />
+                      <span className="font-medium">Capturer la signature</span>
+                    </button>
+                  ) : (
+                    <label className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors">
+                      <Upload className="w-5 h-5 text-gray-400 mr-2" />
+                      <span className="text-sm text-gray-600">Cliquer pour télécharger la signature</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleSignatureUpload(i, e)}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                {signatureMethod === 'digital' 
+                  ? 'Utilisez le canvas pour capturer une signature manuscrite' 
+                  : 'Format accepté: JPG, PNG (max 2MB)'}
+              </p>
+            </div>
           </div>
         </div>
       ))}
-      <button type="button" onClick={addSigner} className="px-3 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200 text-sm">+ Ajouter un signataire</button>
+      
+      <button 
+        type="button" 
+        onClick={addSigner} 
+        className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+      >
+        <UserPlus className="w-5 h-5" />
+        <span>Ajouter un signataire autorisé</span>
+      </button>
+
+      {/* Modal pour signature digitale */}
+      {showSignatureCanvas !== null && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-gray-900">
+                  Signature du signataire #{(showSignatureCanvas ?? 0) + 1}
+                </h3>
+                <button
+                  onClick={() => setShowSignatureCanvas(null)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <SignatureCanvas
+                onSave={(signature) => handleSignatureSave(showSignatureCanvas, signature)}
+                onCancel={() => setShowSignatureCanvas(null)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -4088,6 +4380,36 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
                       alt="Signature" 
                       className="max-h-32 mx-auto"
                     />
+                  </div>
+                </div>
+              )}
+
+              {/* Section 6.5: Signataires autorisés */}
+              {Array.isArray((selectedCustomer as any)?.authorizedSigners) && (selectedCustomer as any).authorizedSigners.length > 0 && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <Users className="h-5 w-5 mr-2 text-blue-600" />
+                    Signataires Autorisés
+                  </h3>
+                  <div className="space-y-3">
+                    {((selectedCustomer as any).authorizedSigners as any[]).map((s: any, idx: number) => (
+                      <div key={s.id || idx} className="bg-white rounded-lg p-3 border border-gray-200">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-gray-900 truncate">{s.fullName || s.name || '—'}</p>
+                            <p className="text-sm text-gray-600">
+                              {(s.relationshipToCustomer || s.relation || '—')} • {(s.phoneNumber || s.phone || '—')}
+                            </p>
+                            {s.authorizationLimit !== undefined && s.authorizationLimit !== null && (
+                              <p className="text-xs text-gray-500">Limite d'autorisation: {Number(s.authorizationLimit).toLocaleString()} HTG</p>
+                            )}
+                          </div>
+                          {s.signature && (
+                            <img src={s.signature} alt="Signature" className="h-12 border border-gray-200 rounded bg-white" />
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

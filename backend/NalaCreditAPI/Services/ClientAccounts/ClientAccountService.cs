@@ -72,7 +72,9 @@ namespace NalaCreditAPI.Services.ClientAccounts
                         Id = account.Id,
                         AccountNumber = account.AccountNumber,
                         AccountType = ClientAccountType.Savings,
+                        CustomerId = account.CustomerId,
                         CustomerName = account.Customer?.FullName ?? string.Empty,
+                        CustomerCode = account.Customer?.CustomerCode ?? string.Empty,
                         CustomerPhone = account.Customer?.Contact.PrimaryPhone ?? string.Empty,
                         BranchId = account.BranchId,
                         BranchName = account.BranchName ?? string.Empty,
@@ -110,7 +112,9 @@ namespace NalaCreditAPI.Services.ClientAccounts
                         Id = account.Id,
                         AccountNumber = account.AccountNumber,
                         AccountType = ClientAccountType.Current,
+                        CustomerId = account.CustomerId,
                         CustomerName = account.CustomerName,
+                        CustomerCode = account.CustomerCode ?? string.Empty,
                         CustomerPhone = account.CustomerPhone,
                         BranchId = account.BranchId,
                         BranchName = account.BranchName,
@@ -156,7 +160,9 @@ namespace NalaCreditAPI.Services.ClientAccounts
                             Id = account.Id,
                             AccountNumber = account.AccountNumber,
                             AccountType = ClientAccountType.TermSavings,
+                            CustomerId = account.CustomerId,
                             CustomerName = account.CustomerName,
+                            CustomerCode = account.CustomerCode ?? string.Empty,
                             CustomerPhone = account.CustomerPhone,
                             BranchId = account.BranchId,
                             BranchName = account.BranchName,
@@ -205,7 +211,9 @@ namespace NalaCreditAPI.Services.ClientAccounts
                     Id = savingsAccount.Id,
                     AccountNumber = savingsAccount.AccountNumber,
                     AccountType = ClientAccountType.Savings,
+                    CustomerId = savingsAccount.CustomerId,
                     CustomerName = savingsAccount.Customer?.FullName ?? string.Empty,
+                    CustomerCode = savingsAccount.Customer?.CustomerCode ?? string.Empty,
                     CustomerPhone = savingsAccount.Customer?.Contact.PrimaryPhone ?? string.Empty,
                     BranchId = savingsAccount.BranchId,
                     BranchName = savingsAccount.BranchName ?? string.Empty,
@@ -226,7 +234,9 @@ namespace NalaCreditAPI.Services.ClientAccounts
                     Id = currentAccount.Id,
                     AccountNumber = currentAccount.AccountNumber,
                     AccountType = ClientAccountType.Current,
+                    CustomerId = currentAccount.CustomerId,
                     CustomerName = currentAccount.CustomerName,
+                    CustomerCode = currentAccount.CustomerCode ?? string.Empty,
                     CustomerPhone = currentAccount.CustomerPhone,
                     BranchId = currentAccount.BranchId,
                     BranchName = currentAccount.BranchName,
@@ -253,7 +263,9 @@ namespace NalaCreditAPI.Services.ClientAccounts
                     Id = savingsAccount.Id,
                     AccountNumber = savingsAccount.AccountNumber,
                     AccountType = ClientAccountType.Savings,
+                    CustomerId = savingsAccount.CustomerId,
                     CustomerName = savingsAccount.Customer?.FullName ?? string.Empty,
+                    CustomerCode = savingsAccount.Customer?.CustomerCode ?? string.Empty,
                     CustomerPhone = savingsAccount.Customer?.Contact.PrimaryPhone ?? string.Empty,
                     BranchId = savingsAccount.BranchId,
                     BranchName = savingsAccount.BranchName ?? string.Empty,
@@ -274,7 +286,9 @@ namespace NalaCreditAPI.Services.ClientAccounts
                     Id = currentAccount.Id,
                     AccountNumber = currentAccount.AccountNumber,
                     AccountType = ClientAccountType.Current,
+                    CustomerId = currentAccount.CustomerId,
                     CustomerName = currentAccount.CustomerName,
+                    CustomerCode = currentAccount.CustomerCode ?? string.Empty,
                     CustomerPhone = currentAccount.CustomerPhone,
                     BranchId = currentAccount.BranchId,
                     BranchName = currentAccount.BranchName,
@@ -402,7 +416,15 @@ namespace NalaCreditAPI.Services.ClientAccounts
                         AccountLimits = new NalaCreditAPI.DTOs.Savings.SavingsAccountLimitsDto
                         {
                             DailyWithdrawalLimit = dto.DailyWithdrawalLimit ?? 0
-                        }
+                        },
+                        AuthorizedSigners = dto.AuthorizedSigners?.Select(s => new NalaCreditAPI.DTOs.Savings.SavingsAccountAuthorizedSignerDto
+                        {
+                            FullName = s.FullName,
+                            Role = s.Role,
+                            DocumentType = s.DocumentNumber != null ? NalaCreditAPI.Models.SavingsIdentityDocumentType.CIN : (NalaCreditAPI.Models.SavingsIdentityDocumentType?)null,
+                            DocumentNumber = s.DocumentNumber,
+                            Phone = s.Phone
+                        }).ToList()
                     };
                     
                     Console.WriteLine($"[DEBUG] SavingsAccountOpeningDto - ExistingCustomerId: '{savingsDto.ExistingCustomerId}'");
@@ -413,7 +435,9 @@ namespace NalaCreditAPI.Services.ClientAccounts
                         Id = savingsAccount.Id,
                         AccountNumber = savingsAccount.AccountNumber,
                         AccountType = ClientAccountType.Savings,
+                        CustomerId = savingsAccount.CustomerId,
                         CustomerName = savingsAccount.Customer?.FullName ?? string.Empty,
+                        CustomerCode = savingsAccount.Customer?.CustomerCode ?? string.Empty,
                         CustomerPhone = savingsAccount.Customer?.Contact.PrimaryPhone ?? string.Empty,
                         BranchId = savingsAccount.BranchId,
                         BranchName = savingsAccount.BranchName ?? string.Empty,
@@ -434,8 +458,15 @@ namespace NalaCreditAPI.Services.ClientAccounts
                         DailyWithdrawalLimit = dto.DailyWithdrawalLimit,
                         MonthlyWithdrawalLimit = dto.MonthlyWithdrawalLimit,
                         DailyDepositLimit = dto.DailyDepositLimit,
-                        OverdraftLimit = dto.OverdraftLimit
-                        // Security/KYC fields (Pin, SecurityQuestion/Answer, etc.) can be added to ClientAccountCreationDto later if needed
+                        OverdraftLimit = dto.OverdraftLimit,
+                        Pin = dto.Pin,
+                        SecurityQuestion = dto.SecurityQuestion,
+                        SecurityAnswer = dto.SecurityAnswer,
+                        DepositMethod = dto.DepositMethod,
+                        OriginOfFunds = dto.OriginOfFunds,
+                        TransactionFrequency = dto.TransactionFrequency,
+                        AccountPurpose = dto.AccountPurpose,
+                        AuthorizedSigners = dto.AuthorizedSigners
                     };
 
                     var currentAccount = await _currentAccountService.OpenAccountAsync(currentDto, userId);
@@ -444,7 +475,9 @@ namespace NalaCreditAPI.Services.ClientAccounts
                         Id = currentAccount.Id,
                         AccountNumber = currentAccount.AccountNumber,
                         AccountType = ClientAccountType.Current,
+                        CustomerId = currentAccount.CustomerId,
                         CustomerName = currentAccount.CustomerName,
+                        CustomerCode = currentAccount.CustomerCode ?? string.Empty,
                         CustomerPhone = currentAccount.CustomerPhone,
                         BranchId = currentAccount.BranchId,
                         BranchName = currentAccount.BranchName,
@@ -467,7 +500,8 @@ namespace NalaCreditAPI.Services.ClientAccounts
                         BranchId = dto.BranchId,
                         TermType = dto.TermType.Value,
                         InterestRate = dto.InterestRate,
-                        InterestRateMonthly = dto.InterestRateMonthly
+                        InterestRateMonthly = dto.InterestRateMonthly,
+                        AuthorizedSigners = dto.AuthorizedSigners
                     };
 
                     var termAccount = await _termSavingsAccountService.OpenAccountAsync(termDto, userId);
@@ -476,7 +510,9 @@ namespace NalaCreditAPI.Services.ClientAccounts
                         Id = termAccount.Id,
                         AccountNumber = termAccount.AccountNumber,
                         AccountType = ClientAccountType.TermSavings,
+                        CustomerId = termAccount.CustomerId,
                         CustomerName = termAccount.CustomerName,
+                        CustomerCode = termAccount.CustomerCode ?? string.Empty,
                         CustomerPhone = termAccount.CustomerPhone,
                         BranchId = termAccount.BranchId,
                         BranchName = termAccount.BranchName,
@@ -576,7 +612,9 @@ namespace NalaCreditAPI.Services.ClientAccounts
                 Id = updatedAccount.Id,
                 AccountNumber = updatedAccount.AccountNumber,
                 AccountType = ClientAccountType.Savings,
+                CustomerId = updatedAccount.CustomerId,
                 CustomerName = updatedAccount.Customer?.FullName ?? string.Empty,
+                CustomerCode = updatedAccount.Customer?.CustomerCode ?? string.Empty,
                 CustomerPhone = updatedAccount.Customer?.Contact.PrimaryPhone ?? string.Empty,
                 BranchId = updatedAccount.BranchId,
                 BranchName = updatedAccount.BranchName ?? string.Empty,

@@ -9,10 +9,9 @@ import {
   IdentityDocumentType,
   HAITI_DEPARTMENTS,
   COMMUNES_BY_DEPARTMENT,
-  HaitiDepartment,
-  AuthorizedSigner
+  HaitiDepartment
 } from '../../types/savings';
-import { Upload, X, Check, FileText, UserPlus, RotateCcw, Plus } from 'lucide-react';
+import { Upload, X, Check, FileText, RotateCcw, Plus } from 'lucide-react';
 import SignatureCanvas from '../savings/SignatureCanvas';
 import savingsCustomerService, { 
   SavingsCustomerDocumentType,
@@ -37,6 +36,8 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
   const [currentStep, setCurrentStep] = useState(1);
   const [showSignatureCanvas, setShowSignatureCanvas] = useState(false);
   const [customerSignature, setCustomerSignature] = useState<string>('');
+  const [customerSignatureMethod, setCustomerSignatureMethod] = useState<'digital' | 'upload'>('digital');
+  const [customerSignatureFile, setCustomerSignatureFile] = useState<File | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<{
     photo?: File;
     idDocument?: File;
@@ -46,12 +47,21 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
     fundsOriginDeclaration?: File; // Déclaration origine des fonds
     otherDocuments?: File[]; // Autres documents
   }>({});
-  const [authorizedSigners, setAuthorizedSigners] = useState<AuthorizedSigner[]>([]);
-  const [showSignerForm, setShowSignerForm] = useState(false);
   const [isBusiness, setIsBusiness] = useState<boolean>(false);
-  const [currentSignerEdit, setCurrentSignerEdit] = useState<AuthorizedSigner | null>(null);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const withGlobalLoading = useUIStore(s => s.withGlobalLoading);
+
+  const handleCustomerSignatureFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (file) {
+      setCustomerSignatureFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCustomerSignature(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Créer un schéma de validation réactif qui change avec isBusiness
   const validationSchema = React.useMemo(() => createClientSchema(isBusiness), [isBusiness]);
@@ -183,8 +193,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
       setValue('legalRepresentativeName', '');
       setValue('legalRepresentativeTitle', '');
       setValue('legalRepresentativeDocumentNumber', '');
-      // Réinitialiser les signataires
-      setAuthorizedSigners([]);
     }
   }, [isBusiness, setValue]);
 
@@ -528,29 +536,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
     if (canProceed) {
       setCurrentStep(currentStep + 1);
     }
-  };
-
-  const handleAddSigner = (signer: AuthorizedSigner) => {
-    if (currentSignerEdit) {
-      // Modifier un signataire existant
-      setAuthorizedSigners(authorizedSigners.map(s => 
-        s.id === currentSignerEdit.id ? signer : s
-      ));
-    } else {
-      // Ajouter un nouveau signataire
-      setAuthorizedSigners([...authorizedSigners, { ...signer, id: Date.now().toString() }]);
-    }
-    setShowSignerForm(false);
-    setCurrentSignerEdit(null);
-  };
-
-  const handleEditSigner = (signer: AuthorizedSigner) => {
-    setCurrentSignerEdit(signer);
-    setShowSignerForm(true);
-  };
-
-  const handleDeleteSigner = (id: string) => {
-    setAuthorizedSigners(authorizedSigners.filter(s => s.id !== id));
   };
 
   const totalSteps = 5;
@@ -1603,57 +1588,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                 {/* Signature déplacée à l'étape 5 (Confirmation) */}
               </div>
             </div>
-
-            {/* Signataires autorisés - Personne morale uniquement */}
-            {isBusiness && (
-              <div className="bg-blue-50 p-6 rounded-lg border-2 border-blue-200">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-semibold text-gray-900">Personnes autorisées à gérer le compte</h4>
-                  <button
-                    type="button"
-                    onClick={() => { setCurrentSignerEdit(null); setShowSignerForm(true); }}
-                    className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                  >
-                    <UserPlus className="w-4 h-4 mr-1" />
-                    Ajouter signataire
-                  </button>
-                </div>
-
-                {authorizedSigners.length > 0 ? (
-                  <div className="space-y-3">
-                    {authorizedSigners.map((signer) => (
-                      <div key={signer.id} className="bg-white p-4 rounded-lg border border-gray-200 flex items-center justify-between">
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">{signer.fullName}</p>
-                          <p className="text-sm text-gray-600">
-                            {signer.relationshipToCustomer} | {signer.documentType}: {signer.documentNumber}
-                          </p>
-                          <p className="text-sm text-gray-500">{signer.phoneNumber}</p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEditSigner(signer)}
-                            className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200"
-                          >
-                            Modifier
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteSigner(signer.id!)}
-                            className="px-3 py-1 bg-red-100 text-red-700 text-sm rounded hover:bg-red-200"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-500 text-center py-4">Aucun signataire autorisé ajouté</p>
-                )}
-              </div>
-            )}
           </div>
         )}
 
@@ -2023,23 +1957,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                 </div>
               </div>
 
-              {/* Signataires autorisés - Affichage */}
-              {isBusiness && authorizedSigners.length > 0 && (
-                <div className="border-t pt-4">
-                  <h4 className="font-semibold text-gray-900 mb-2">Signataires autorisés</h4>
-                  <div className="space-y-2 text-sm">
-                    {authorizedSigners.map((signer, index) => (
-                      <div key={signer.id} className="flex items-start">
-                        <span className="font-medium text-gray-700 mr-2">{index + 1}.</span>
-                        <div>
-                          <p className="font-medium">{signer.fullName}</p>
-                          <p className="text-gray-600">{signer.relationshipToCustomer} - {signer.phoneNumber}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Déclaration et Acceptation */}
@@ -2130,32 +2047,104 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Signature du {isBusiness ? 'représentant légal' : 'client'} *
                     </label>
-                    {customerSignature ? (
-                      <div className="flex items-center space-x-3">
-                        <img src={customerSignature} alt="Signature" className="h-20 border border-gray-300 rounded p-2 bg-white" />
-                        <button
-                          type="button"
-                          className="inline-flex items-center px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
-                          onClick={() => setShowSignatureCanvas(true)}
-                        >
-                          <RotateCcw className="w-3 h-3 mr-1" />
-                          Modifier la signature
-                        </button>
-                      </div>
+
+                    {/* Méthode de signature */}
+                    <div className="flex space-x-4 mb-3">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="digital"
+                          checked={customerSignatureMethod === 'digital'}
+                          onChange={(e) => setCustomerSignatureMethod(e.target.value as 'digital' | 'upload')}
+                          className="mr-2"
+                        />
+                        <span className="text-sm text-gray-700">Signature digitale</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="upload"
+                          checked={customerSignatureMethod === 'upload'}
+                          onChange={(e) => setCustomerSignatureMethod(e.target.value as 'digital' | 'upload')}
+                          className="mr-2"
+                        />
+                        <span className="text-sm text-gray-700">Upload signature</span>
+                      </label>
+                    </div>
+
+                    {customerSignatureMethod === 'digital' ? (
+                      customerSignature ? (
+                        <div className="flex items-center space-x-3">
+                          <img src={customerSignature} alt="Signature" className="h-20 border border-gray-300 rounded p-2 bg-white" />
+                          <div className="flex items-center space-x-2">
+                            <button
+                              type="button"
+                              className="inline-flex items-center px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
+                              onClick={() => setShowSignatureCanvas(true)}
+                            >
+                              <RotateCcw className="w-3 h-3 mr-1" />
+                              Modifier la signature
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                              onClick={() => { setCustomerSignature(''); setCustomerSignatureFile(null); }}
+                            >
+                              <X className="w-3 h-3 mr-1" />
+                              Supprimer
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <button
+                            type="button"
+                            className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                            onClick={() => setShowSignatureCanvas(true)}
+                          >
+                            <Plus className="w-4 h-4 mr-1" />
+                            Signer maintenant
+                          </button>
+                          {!customerSignature && (
+                            <p className="mt-2 text-sm text-red-600">La signature est obligatoire</p>
+                          )}
+                        </div>
+                      )
                     ) : (
-                      <div>
-                        <button
-                          type="button"
-                          className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                          onClick={() => setShowSignatureCanvas(true)}
-                        >
-                          <Plus className="w-4 h-4 mr-1" />
-                          Signer maintenant
-                        </button>
-                        {!customerSignature && (
-                          <p className="mt-2 text-sm text-red-600">La signature est obligatoire</p>
-                        )}
-                      </div>
+                      !customerSignatureFile ? (
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                          <label className="flex flex-col items-center cursor-pointer">
+                            <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                            <span className="text-sm text-gray-600">Cliquer pour télécharger la signature</span>
+                            <span className="text-xs text-gray-500 mt-1">JPG ou PNG (Max 2MB)</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleCustomerSignatureFileUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      ) : (
+                        <div className="border border-gray-300 rounded-lg p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <img src={customerSignature} alt="Signature" className="h-16 border border-gray-200 rounded bg-white" />
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{customerSignatureFile.name}</p>
+                                <p className="text-xs text-gray-500">{((customerSignatureFile.size || 0) / 1024).toFixed(2)} KB</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => { setCustomerSignatureFile(null); setCustomerSignature(''); }}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+                        </div>
+                      )
                     )}
                   </div>
 
@@ -2207,167 +2196,6 @@ const ClientCreationForm: React.FC<ClientCreationFormProps> = ({
           onCancel={() => setShowSignatureCanvas(false)}
         />
       )}
-
-      {/* Authorized Signer Form Modal */}
-      {showSignerForm && (
-        <AuthorizedSignerForm
-          signer={currentSignerEdit}
-          onSave={handleAddSigner}
-          onCancel={() => { setShowSignerForm(false); setCurrentSignerEdit(null); }}
-        />
-      )}
-    </div>
-  );
-};
-
-// Composant pour le formulaire de signataire autorisé
-interface AuthorizedSignerFormProps {
-  signer: AuthorizedSigner | null;
-  onSave: (signer: AuthorizedSigner) => void;
-  onCancel: () => void;
-}
-
-const AuthorizedSignerForm: React.FC<AuthorizedSignerFormProps> = ({ signer, onSave, onCancel }) => {
-  const [formData, setFormData] = React.useState<AuthorizedSigner>(
-    signer || {
-      fullName: '',
-      documentType: IdentityDocumentType.CIN,
-      documentNumber: '',
-      relationshipToCustomer: '',
-      address: '',
-      phoneNumber: '',
-      authorizationLimit: undefined,
-    }
-  );
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave(formData);
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-xl font-semibold text-gray-900">
-            {signer ? 'Modifier le signataire' : 'Ajouter un signataire autorisé'}
-          </h3>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Nom complet *</label>
-              <input
-                type="text"
-                required
-                value={formData.fullName}
-                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="Prénom et nom"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Fonction/Relation *</label>
-              <select
-                required
-                value={formData.relationshipToCustomer}
-                onChange={(e) => setFormData({ ...formData, relationshipToCustomer: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Sélectionner...</option>
-                <option value="Directeur Général">Directeur Général</option>
-                <option value="Directeur Financier">Directeur Financier</option>
-                <option value="Administrateur">Administrateur</option>
-                <option value="Co-gérant">Co-gérant</option>
-                <option value="Mandataire">Mandataire</option>
-                <option value="Autre">Autre</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Numéro de téléphone *</label>
-              <input
-                type="tel"
-                required
-                value={formData.phoneNumber}
-                onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="+509 3712 3456"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Type de pièce *</label>
-              <select
-                required
-                value={formData.documentType}
-                onChange={(e) => setFormData({ ...formData, documentType: e.target.value as IdentityDocumentType })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value={IdentityDocumentType.CIN}>CIN</option>
-                <option value={IdentityDocumentType.PASSPORT}>Passeport</option>
-                <option value={IdentityDocumentType.DRIVING_LICENSE}>Permis de conduire</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Numéro de pièce *</label>
-              <input
-                type="text"
-                required
-                value={formData.documentNumber}
-                onChange={(e) => setFormData({ ...formData, documentNumber: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="Numéro du document"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Adresse *</label>
-              <input
-                type="text"
-                required
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="Adresse complète"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Limite d'autorisation (HTG) <span className="text-xs text-gray-500">(Optionnel)</span>
-              </label>
-              <input
-                type="number"
-                min="0"
-                value={formData.authorizationLimit || ''}
-                onChange={(e) => setFormData({ ...formData, authorizationLimit: e.target.value ? Number(e.target.value) : undefined })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="Montant maximum autorisé par transaction"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-3 mt-6 pt-6 border-t">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              {signer ? 'Mettre à jour' : 'Ajouter'}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 };

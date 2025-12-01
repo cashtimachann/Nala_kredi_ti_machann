@@ -10,6 +10,8 @@ using NalaCreditAPI.Services.Savings;
 using NalaCreditAPI.Services.ClientAccounts;
 using StackExchange.Redis;
 using System.Text;
+using Microsoft.Extensions.FileProviders;
+using System.IO;
 
 // Enable legacy timestamp behavior to avoid exceptions when DateTime Kind is Unspecified
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
@@ -224,6 +226,18 @@ app.UseCors("AllowFrontend");
 
 // Serve static files from wwwroot/uploads
 app.UseStaticFiles();
+
+// Also serve files from content-root "uploads" directory at the same /uploads path
+// This covers services that write to ContentRoot/uploads instead of wwwroot/uploads
+var uploadsPath = Path.Combine(app.Environment.ContentRootPath, "uploads");
+if (Directory.Exists(uploadsPath))
+{
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(uploadsPath),
+        RequestPath = "/uploads"
+    });
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

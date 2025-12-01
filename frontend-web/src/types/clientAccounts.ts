@@ -13,6 +13,32 @@ export enum TermSavingsType {
   TWENTY_FOUR_MONTHS = 'TWENTY_FOUR_MONTHS'
 }
 
+export interface AccountLimits {
+  dailyDepositLimit?: number;
+  dailyWithdrawalLimit?: number;
+  monthlyWithdrawalLimit?: number;
+  maxBalance?: number;
+  minWithdrawalAmount?: number;
+  maxWithdrawalAmount?: number;
+}
+
+export interface AuthorizedSignerInfo {
+  id?: string;
+  fullName: string;
+  role?: string;
+  documentType?: number;
+  documentNumber?: string;
+  phoneNumber?: string;
+  relationshipToCustomer?: string;
+  address?: string;
+  authorizationLimit?: number;
+  photoUrl?: string;
+  signature?: string;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface ClientAccount {
   id: string;
   accountNumber: string;
@@ -20,11 +46,13 @@ export interface ClientAccount {
   customerId: string;
   customerName: string;
   customerPhone: string;
+  customerCode?: string;
   branchId: number;
   branchName: string;
   currency: 'HTG' | 'USD';
   balance: number;
   availableBalance: number;
+  blockedBalance?: number;
   status: 'ACTIVE' | 'INACTIVE' | 'CLOSED' | 'SUSPENDED';
   openingDate: string;
   lastTransactionDate?: string;
@@ -33,6 +61,8 @@ export interface ClientAccount {
   interestRateMonthly?: number;
   termType?: TermSavingsType;
   maturityDate?: string;
+  lastInterestCalculation?: string;
+  accruedInterest?: number;
   minimumBalance?: number;
   dailyWithdrawalLimit?: number;
   monthlyWithdrawalLimit?: number;
@@ -41,6 +71,13 @@ export interface ClientAccount {
   dailyDepositLimit?: number;
   allowOverdraft?: boolean;
   currentOverdraft?: number;
+  withdrawalLimit?: number;
+  accountLimits?: AccountLimits;
+  notes?: string;
+  authorizedSigners?: AuthorizedSignerInfo[];
+  closedAt?: string;
+  closedBy?: string;
+  closureReason?: string;
   createdAt: string;
   updatedAt: string;
 }

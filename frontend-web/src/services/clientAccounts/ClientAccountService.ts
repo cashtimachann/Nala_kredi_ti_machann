@@ -13,7 +13,9 @@ import {
   CreateTermSavingsAccountRequest,
   getAccountTypeLabel,
   getTermTypeLabel,
-  TermSavingsType
+  TermSavingsType,
+  AccountLimits,
+  AuthorizedSignerInfo
 } from '../../types/clientAccounts';
 
 export class ClientAccountService extends BaseApiService {
@@ -614,14 +616,84 @@ export class ClientAccountService extends BaseApiService {
   }
 
   async getAccountDetails(accountId: string | number): Promise<ClientAccount> {
+    const id = encodeURIComponent(String(accountId));
+    let summary: any = null;
+    let base: ClientAccount | null = null;
+
     try {
-      const id = encodeURIComponent(String(accountId));
-      const response = await this.get(`/ClientAccount/${id}`);
-      return this.mapClientAccountSummary(response);
-    } catch (error) {
-      console.error('Error fetching account details:', error);
-      throw error;
+      summary = await this.get<any>(`/ClientAccount/${id}`);
+      base = this.mapClientAccountSummary(summary);
+    } catch (error: any) {
+      const status = error?.response?.status;
+      if (status && status !== 404) {
+        console.error('Error fetching account summary:', error);
+        throw error;
+      }
     }
+
+    if (base) {
+      return this.enrichAccountDetails(base, id, summary);
+    }
+
+    const strategies: Array<() => Promise<ClientAccount>> = [
+      async () => {
+        const detail = await this.get<any>(`/SavingsAccount/${id}`);
+        const detailSummary = this.mapClientAccountSummary(detail);
+        return this.mergeSavingsAccountDetails(detailSummary, detail);
+      },
+      async () => {
+        const detail = await this.get<any>(`/CurrentAccount/${id}`);
+        const detailSummary = this.mapClientAccountSummary(detail);
+        return this.mergeCurrentAccountDetails(detailSummary, detail);
+      },
+      async () => {
+        const detail = await this.get<any>(`/TermSavingsAccount/${id}`);
+        const detailSummary = this.mapClientAccountSummary(detail);
+        return this.mergeTermSavingsAccountDetails(detailSummary, detail);
+      }
+    ];
+
+    for (const load of strategies) {
+      try {
+        return await load();
+      } catch (error: any) {
+        const status = error?.response?.status;
+        if (status && status !== 404) {
+          console.warn('Account detail strategy failed:', error);
+        }
+      }
+    }
+
+    throw new Error('Compte introuvable');
+  }
+
+  private async enrichAccountDetails(base: ClientAccount, id: string, summary: any): Promise<ClientAccount> {
+    let enriched = this.mergeCommonAccountDetails(base, summary);
+
+    if (base.accountType === AccountType.SAVINGS) {
+      try {
+        const detail = await this.get<any>(`/SavingsAccount/${id}`);
+        enriched = this.mergeSavingsAccountDetails(enriched, detail);
+      } catch (error) {
+        console.warn('Unable to enrich savings account with detailed data:', error);
+      }
+    } else if (base.accountType === AccountType.CURRENT) {
+      try {
+        const detail = await this.get<any>(`/CurrentAccount/${id}`);
+        enriched = this.mergeCurrentAccountDetails(enriched, detail);
+      } catch (error) {
+        console.warn('Unable to enrich current account with detailed data:', error);
+      }
+    } else if (base.accountType === AccountType.TERM_SAVINGS) {
+      try {
+        const detail = await this.get<any>(`/TermSavingsAccount/${id}`);
+        enriched = this.mergeTermSavingsAccountDetails(enriched, detail);
+      } catch (error) {
+        console.warn('Unable to enrich term savings account with detailed data:', error);
+      }
+    }
+
+    return enriched;
   }
 
   /**
@@ -693,6 +765,175 @@ export class ClientAccountService extends BaseApiService {
       console.error('Error fetching all term savings transactions:', error);
       throw error;
     }
+  }
+
+  private mergeCommonAccountDetails(base: ClientAccount, dto: any): ClientAccount {
+    if (!dto) return base;
+    const mapped = this.mapClientAccountSummary(dto);
+    return this.mergeAccountData(base, mapped);
+  }
+
+  private mergeSavingsAccountDetails(base: ClientAccount, dto: any): ClientAccount {
+    if (!dto) return base;
+    const mapped = this.mapClientAccountSummary(dto);
+    const updates: Partial<ClientAccount> = {
+      accountType: AccountType.SAVINGS,
+      customerName: mapped.customerName,
+      customerPhone: mapped.customerPhone,
+      customerCode: mapped.customerCode,
+      balance: mapped.balance,
+      availableBalance: mapped.availableBalance,
+      blockedBalance: mapped.blockedBalance,
+      minimumBalance: mapped.minimumBalance,
+      dailyWithdrawalLimit: mapped.dailyWithdrawalLimit,
+      monthlyWithdrawalLimit: mapped.monthlyWithdrawalLimit,
+      dailyDepositLimit: mapped.dailyDepositLimit,
+      withdrawalLimit: mapped.withdrawalLimit,
+      interestRate: mapped.interestRate,
+      interestRateMonthly: mapped.interestRateMonthly,
+      lastInterestCalculation: mapped.lastInterestCalculation,
+      accruedInterest: mapped.accruedInterest,
+      accountLimits: mapped.accountLimits,
+      authorizedSigners: mapped.authorizedSigners,
+      branchId: mapped.branchId,
+      branchName: mapped.branchName,
+      status: mapped.status,
+      closedAt: mapped.closedAt,
+      closedBy: mapped.closedBy,
+      closureReason: mapped.closureReason,
+      notes: mapped.notes,
+    };
+    return this.mergeAccountData(base, updates);
+  }
+
+  private mergeTermSavingsAccountDetails(base: ClientAccount, dto: any): ClientAccount {
+    if (!dto) return base;
+    const mapped = this.mapClientAccountSummary(dto);
+    const updates: Partial<ClientAccount> = {
+      accountType: AccountType.TERM_SAVINGS,
+      customerName: mapped.customerName,
+      customerPhone: mapped.customerPhone,
+      customerCode: mapped.customerCode,
+      balance: mapped.balance,
+      availableBalance: mapped.availableBalance,
+      termType: mapped.termType,
+      maturityDate: mapped.maturityDate,
+      interestRate: mapped.interestRate,
+      interestRateMonthly: mapped.interestRateMonthly,
+      lastInterestCalculation: mapped.lastInterestCalculation,
+      accruedInterest: mapped.accruedInterest,
+      authorizedSigners: mapped.authorizedSigners,
+      branchId: mapped.branchId,
+      branchName: mapped.branchName,
+      status: mapped.status,
+      closedAt: mapped.closedAt,
+      closedBy: mapped.closedBy,
+      closureReason: mapped.closureReason,
+      notes: mapped.notes,
+    };
+    return this.mergeAccountData(base, updates);
+  }
+
+  private mergeCurrentAccountDetails(base: ClientAccount, dto: any): ClientAccount {
+    if (!dto) return base;
+    const mapped = this.mapClientAccountSummary(dto);
+    const updates: Partial<ClientAccount> = {
+      accountType: AccountType.CURRENT,
+      customerName: mapped.customerName,
+      customerPhone: mapped.customerPhone,
+      customerCode: mapped.customerCode,
+      balance: mapped.balance,
+      availableBalance: mapped.availableBalance,
+      minimumBalance: mapped.minimumBalance,
+      dailyWithdrawalLimit: mapped.dailyWithdrawalLimit,
+      monthlyWithdrawalLimit: mapped.monthlyWithdrawalLimit,
+      dailyDepositLimit: mapped.dailyDepositLimit,
+      overdraftLimit: mapped.overdraftLimit,
+      allowOverdraft: mapped.allowOverdraft,
+      withdrawalLimit: mapped.withdrawalLimit,
+      accountLimits: mapped.accountLimits,
+      authorizedSigners: mapped.authorizedSigners,
+      branchId: mapped.branchId,
+      branchName: mapped.branchName,
+      status: mapped.status,
+      closedAt: mapped.closedAt,
+      closedBy: mapped.closedBy,
+      closureReason: mapped.closureReason,
+      notes: mapped.notes,
+    };
+    return this.mergeAccountData(base, updates);
+  }
+
+  private mergeAccountData(base: ClientAccount, updates: Partial<ClientAccount>): ClientAccount {
+    const result: ClientAccount = { ...base };
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+      if (typeof value === 'string') {
+        if (!value.trim()) return;
+        (result as any)[key] = value;
+        return;
+      }
+      if (Array.isArray(value)) {
+        (result as any)[key] = value.slice();
+        return;
+      }
+      if (value && typeof value === 'object') {
+        (result as any)[key] = { ...(result as any)[key], ...value };
+        return;
+      }
+      (result as any)[key] = value;
+    });
+    return result;
+  }
+
+  private normalizeAccountLimits(source: any): AccountLimits | undefined {
+    if (!source || typeof source !== 'object') return undefined;
+    const limits: AccountLimits = {
+      dailyDepositLimit: this.toNumber(source.dailyDepositLimit ?? source.DailyDepositLimit),
+      dailyWithdrawalLimit: this.toNumber(source.dailyWithdrawalLimit ?? source.DailyWithdrawalLimit),
+      monthlyWithdrawalLimit: this.toNumber(source.monthlyWithdrawalLimit ?? source.MonthlyWithdrawalLimit),
+      maxBalance: this.toNumber(source.maxBalance ?? source.MaxBalance),
+      minWithdrawalAmount: this.toNumber(source.minWithdrawalAmount ?? source.MinWithdrawalAmount),
+      maxWithdrawalAmount: this.toNumber(source.maxWithdrawalAmount ?? source.MaxWithdrawalAmount),
+    };
+    return Object.values(limits).some((val) => val !== undefined) ? limits : undefined;
+  }
+
+  private mapAuthorizedSigners(source: any): AuthorizedSignerInfo[] {
+    if (!Array.isArray(source)) return [];
+    return source
+      .map((s: any) => {
+        const docTypeRaw = s?.documentType ?? s?.DocumentType;
+        const docType = typeof docTypeRaw === 'number' ? docTypeRaw : this.toNumber(docTypeRaw);
+        const limit = this.toNumber(s?.authorizationLimit ?? s?.AuthorizationLimit);
+        const fullName = s?.fullName ?? s?.FullName ?? '';
+        if (!fullName || !String(fullName).trim().length) {
+          return null;
+        }
+        return {
+          id: s?.id ?? s?.Id ?? undefined,
+          fullName: String(fullName),
+          role: s?.role ?? s?.Role ?? undefined,
+          documentType: docType !== undefined ? Number(docType) : undefined,
+          documentNumber: s?.documentNumber ?? s?.DocumentNumber ?? undefined,
+          phoneNumber: s?.phoneNumber ?? s?.phone ?? s?.Phone ?? undefined,
+          relationshipToCustomer: s?.relationshipToCustomer ?? s?.RelationshipToCustomer ?? undefined,
+          address: s?.address ?? s?.Address ?? undefined,
+          authorizationLimit: limit,
+          photoUrl: s?.photoUrl ?? s?.PhotoUrl ?? undefined,
+          signature: s?.signature ?? s?.Signature ?? undefined,
+          isActive: typeof s?.isActive === 'boolean' ? s.isActive : (typeof s?.IsActive === 'boolean' ? s.IsActive : undefined),
+          createdAt: s?.createdAt ?? s?.CreatedAt ?? undefined,
+          updatedAt: s?.updatedAt ?? s?.UpdatedAt ?? undefined,
+        } as AuthorizedSignerInfo;
+      })
+      .filter((s): s is AuthorizedSignerInfo => !!s);
+  }
+
+  private toNumber(value: any): number | undefined {
+    if (value === null || value === undefined || value === '') return undefined;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : undefined;
   }
 
   // =============================
@@ -769,50 +1010,130 @@ export class ClientAccountService extends BaseApiService {
   }
 
   private mapClientAccountSummary(dto: any): ClientAccount {
-    // Compatible with both detailed response and summary
     const accountType = this.mapAccountType(dto?.accountType ?? dto?.AccountType);
     const currency = this.mapCurrency(dto?.currency ?? dto?.Currency);
     const status = this.mapStatus(dto?.status ?? dto?.Status);
-    const openingDate = (dto?.openingDate ?? dto?.OpeningDate) || new Date().toISOString();
-    const lastTx = dto?.lastTransactionDate ?? dto?.LastTransactionDate ?? undefined;
-    const id = dto?.id ?? dto?.Id ?? '';
-    const branchId = Number(dto?.branchId ?? dto?.BranchId ?? 0);
 
-    return {
-      id,
+    const customer = dto?.customer ?? dto?.Customer ?? {};
+    const contact = customer?.contact ?? customer?.Contact ?? {};
+    const nameCandidate = [
+      dto?.customerName,
+      dto?.CustomerName,
+      dto?.clientName,
+      dto?.ClientName,
+      customer?.fullName,
+      customer?.FullName,
+      [customer?.firstName, customer?.lastName].filter(Boolean).join(' ').trim()
+    ].find((v) => v && String(v).trim().length > 0) as string | undefined;
+    const phoneCandidate = [
+      dto?.customerPhone,
+      dto?.CustomerPhone,
+      dto?.customerPhoneNumber,
+      dto?.CustomerPhoneNumber,
+      dto?.phone,
+      dto?.Phone,
+      contact?.primaryPhone,
+      contact?.PrimaryPhone,
+      contact?.phone,
+      contact?.Phone,
+      contact?.primaryPhoneNumber,
+      contact?.PrimaryPhoneNumber,
+      contact?.phoneNumber,
+      contact?.PhoneNumber
+    ].find((v) => v && String(v).trim().length > 0) as string | undefined;
+    const codeCandidate = [
+      dto?.customerCode,
+      dto?.CustomerCode,
+      dto?.clientCode,
+      dto?.ClientCode,
+      customer?.customerCode,
+      customer?.CustomerCode,
+      customer?.clientCode,
+      customer?.ClientCode
+    ].find((v) => v && String(v).trim().length > 0) as string | undefined;
+
+    const openingDateRaw = dto?.openingDate ?? dto?.OpeningDate ?? dto?.createdAt ?? dto?.CreatedAt ?? new Date().toISOString();
+    const openingDate = typeof openingDateRaw === 'string' ? openingDateRaw : new Date(openingDateRaw).toISOString();
+    const lastTxRaw = dto?.lastTransactionDate ?? dto?.LastTransactionDate;
+    const lastTransactionDate = lastTxRaw ? (typeof lastTxRaw === 'string' ? lastTxRaw : new Date(lastTxRaw).toISOString()) : undefined;
+    const createdAtRaw = dto?.createdAt ?? dto?.CreatedAt ?? openingDateRaw;
+    const updatedAtRaw = dto?.updatedAt ?? dto?.UpdatedAt ?? lastTxRaw ?? createdAtRaw;
+
+    const accountLimits = this.normalizeAccountLimits(dto?.accountLimits ?? dto?.AccountLimits);
+    const dailyWithdrawalLimit = this.toNumber(dto?.dailyWithdrawalLimit ?? dto?.DailyWithdrawalLimit ?? accountLimits?.dailyWithdrawalLimit);
+    const monthlyWithdrawalLimit = this.toNumber(dto?.monthlyWithdrawalLimit ?? dto?.MonthlyWithdrawalLimit ?? accountLimits?.monthlyWithdrawalLimit);
+    const dailyDepositLimit = this.toNumber(dto?.dailyDepositLimit ?? dto?.DailyDepositLimit ?? accountLimits?.dailyDepositLimit);
+    const withdrawalLimit = this.toNumber(dto?.withdrawalLimit ?? dto?.WithdrawalLimit ?? dailyWithdrawalLimit);
+
+    const customerId = dto?.customerId ?? dto?.CustomerId ?? customer?.id ?? customer?.Id ?? '';
+    const branchIdRaw = dto?.branchId ?? dto?.BranchId ?? customer?.branchId ?? customer?.BranchId;
+    const branchId = this.toNumber(branchIdRaw) ?? 0;
+
+    const account: ClientAccount = {
+      id: dto?.id ?? dto?.Id ?? '',
       accountNumber: dto?.accountNumber ?? dto?.AccountNumber ?? '',
       accountType,
-      customerId: dto?.customerId ?? dto?.CustomerId ?? '',
-      customerName: dto?.customerName ?? dto?.CustomerName ?? '',
-      customerPhone: dto?.customerPhone ?? dto?.CustomerPhone ?? '',
+      customerId: customerId ? String(customerId) : '',
+      customerName: nameCandidate ? String(nameCandidate) : '',
+      customerPhone: phoneCandidate ? String(phoneCandidate) : '',
+      customerCode: codeCandidate ? String(codeCandidate) : undefined,
       branchId,
       branchName: dto?.branchName ?? dto?.BranchName ?? '',
       currency,
-      balance: Number(dto?.balance ?? dto?.Balance ?? 0),
-      availableBalance: Number(dto?.availableBalance ?? dto?.AvailableBalance ?? dto?.balance ?? dto?.Balance ?? 0),
+      balance: this.toNumber(dto?.balance ?? dto?.Balance) ?? 0,
+      availableBalance: this.toNumber(dto?.availableBalance ?? dto?.AvailableBalance ?? dto?.balance ?? dto?.Balance) ?? 0,
+      blockedBalance: this.toNumber(dto?.blockedBalance ?? dto?.BlockedBalance) ?? 0,
       status,
-      openingDate: typeof openingDate === 'string' ? openingDate : new Date(openingDate).toISOString(),
-      lastTransactionDate: lastTx ? (typeof lastTx === 'string' ? lastTx : new Date(lastTx).toISOString()) : undefined,
-      interestRate: dto?.interestRate ?? dto?.InterestRate ?? undefined,
-      interestRateMonthly: dto?.interestRateMonthly ?? dto?.InterestRateMonthly ?? undefined,
+      openingDate,
+      lastTransactionDate,
+      interestRate: this.toNumber(dto?.interestRate ?? dto?.InterestRate),
+      interestRateMonthly: this.toNumber(dto?.interestRateMonthly ?? dto?.InterestRateMonthly),
       termType: this.mapTermType(dto?.termType ?? dto?.TermType),
       maturityDate: dto?.maturityDate ?? dto?.MaturityDate ?? undefined,
-      minimumBalance: dto?.minimumBalance ?? dto?.MinimumBalance ?? undefined,
-      dailyWithdrawalLimit: dto?.dailyWithdrawalLimit ?? dto?.DailyWithdrawalLimit ?? undefined,
-      monthlyWithdrawalLimit: dto?.monthlyWithdrawalLimit ?? dto?.MonthlyWithdrawalLimit ?? undefined,
-      // Additional current account fields (if provided by backend)
-      overdraftLimit: dto?.overdraftLimit ?? dto?.OverdraftLimit ?? undefined,
-      dailyDepositLimit: dto?.dailyDepositLimit ?? dto?.DailyDepositLimit ?? undefined,
-      // Derive allowOverdraft when possible
+      lastInterestCalculation: dto?.lastInterestCalculation ?? dto?.LastInterestCalculation ?? undefined,
+      accruedInterest: this.toNumber(dto?.accruedInterest ?? dto?.AccruedInterest),
+      minimumBalance: this.toNumber(dto?.minimumBalance ?? dto?.MinimumBalance),
+      dailyWithdrawalLimit,
+      monthlyWithdrawalLimit,
+      overdraftLimit: this.toNumber(dto?.overdraftLimit ?? dto?.OverdraftLimit),
+      dailyDepositLimit,
       allowOverdraft: (() => {
         const raw = dto?.allowOverdraft ?? dto?.AllowOverdraft;
         if (typeof raw === 'boolean') return raw;
-        const limit = dto?.overdraftLimit ?? dto?.OverdraftLimit ?? 0;
-        return Number(limit) > 0;
+        const limit = this.toNumber(dto?.overdraftLimit ?? dto?.OverdraftLimit);
+        return !!(limit && limit > 0);
       })(),
-      createdAt: dto?.createdAt ?? dto?.CreatedAt ?? (typeof openingDate === 'string' ? openingDate : new Date(openingDate).toISOString()),
-      updatedAt: dto?.updatedAt ?? dto?.UpdatedAt ?? (lastTx ? (typeof lastTx === 'string' ? lastTx : new Date(lastTx).toISOString()) : (typeof openingDate === 'string' ? openingDate : new Date(openingDate).toISOString())),
+      currentOverdraft: this.toNumber(dto?.currentOverdraft ?? dto?.CurrentOverdraft),
+      withdrawalLimit,
+      accountLimits,
+      notes: dto?.notes ?? dto?.Notes ?? dto?.closureReason ?? dto?.ClosureReason ?? undefined,
+      authorizedSigners: this.mapAuthorizedSigners(dto?.authorizedSigners ?? dto?.AuthorizedSigners),
+      closedAt: dto?.closedAt ?? dto?.ClosedAt ?? undefined,
+      closedBy: dto?.closedBy ?? dto?.ClosedBy ?? undefined,
+      closureReason: dto?.closureReason ?? dto?.ClosureReason ?? undefined,
+      createdAt: typeof createdAtRaw === 'string' ? createdAtRaw : new Date(createdAtRaw).toISOString(),
+      updatedAt: typeof updatedAtRaw === 'string' ? updatedAtRaw : new Date(updatedAtRaw).toISOString(),
     };
+
+    if (!account.accountLimits) {
+      const syntheticLimits: AccountLimits = {};
+      if (account.dailyDepositLimit !== undefined) syntheticLimits.dailyDepositLimit = account.dailyDepositLimit;
+      if (account.dailyWithdrawalLimit !== undefined) syntheticLimits.dailyWithdrawalLimit = account.dailyWithdrawalLimit;
+      if (account.monthlyWithdrawalLimit !== undefined) syntheticLimits.monthlyWithdrawalLimit = account.monthlyWithdrawalLimit;
+      if (Object.keys(syntheticLimits).length > 0) {
+        account.accountLimits = syntheticLimits;
+      }
+    }
+
+    if (account.withdrawalLimit === undefined && account.dailyWithdrawalLimit !== undefined) {
+      account.withdrawalLimit = account.dailyWithdrawalLimit;
+    }
+
+    if (!Array.isArray(account.authorizedSigners)) {
+      account.authorizedSigners = [];
+    }
+
+    return account;
   }
 
   private mapClientAccountTransaction(dto: any): AccountTransaction {

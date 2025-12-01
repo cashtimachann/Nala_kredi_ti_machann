@@ -82,6 +82,9 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
 
         [StringLength(500)]
         public string? Notes { get; set; }
+
+        // Signataires autorisés (optional update)
+        public List<AuthorizedSignerDto>? AuthorizedSigners { get; set; }
     }
 
     public class CurrentAccountResponseDto
@@ -90,6 +93,7 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         public string AccountNumber { get; set; } = string.Empty;
         public string CustomerId { get; set; } = string.Empty;
         public string CustomerName { get; set; } = string.Empty;
+        public string CustomerCode { get; set; } = string.Empty;
         public string CustomerPhone { get; set; } = string.Empty;
         public int BranchId { get; set; }
         public string BranchName { get; set; } = string.Empty;
@@ -132,11 +136,27 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         [StringLength(50)]
         public string? Role { get; set; }
 
+        public SavingsIdentityDocumentType? DocumentType { get; set; }
+
         [StringLength(50)]
         public string? DocumentNumber { get; set; }
 
         [StringLength(20)]
         public string? Phone { get; set; }
+
+        [StringLength(100)]
+        public string? RelationshipToCustomer { get; set; }
+
+        [StringLength(300)]
+        public string? Address { get; set; }
+
+        [Range(0, double.MaxValue)]
+        public decimal? AuthorizationLimit { get; set; }
+
+        public string? Signature { get; set; } // Base64 signature image
+
+        [StringLength(500)]
+        public string? PhotoUrl { get; set; } // Base64 photo or URL
     }
 
     public class AuthorizedSignerResponseDto : AuthorizedSignerDto
@@ -144,6 +164,7 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         public string Id { get; set; } = string.Empty;
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
     }
 
     // DTOs pour TermSavingsAccount
@@ -171,6 +192,9 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         // Nouveau: prise en charge du taux mensuel (fraction, ex: 0.01 = 1% / mois)
         // Si fourni, le service convertira vers un taux annuel (mensuel * 12) pour le stockage
         public decimal? InterestRateMonthly { get; set; }
+
+        // Signataires autorisés
+        public List<AuthorizedSignerDto>? AuthorizedSigners { get; set; }
     }
 
     public class TermSavingsAccountUpdateDto
@@ -193,6 +217,7 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         public string AccountNumber { get; set; } = string.Empty;
         public string CustomerId { get; set; } = string.Empty;
         public string CustomerName { get; set; } = string.Empty;
+        public string CustomerCode { get; set; } = string.Empty;
         public string CustomerPhone { get; set; } = string.Empty;
         public int BranchId { get; set; }
         public string BranchName { get; set; } = string.Empty;
@@ -215,6 +240,7 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         public DateTime? ClosedAt { get; set; }
         public string? ClosedBy { get; set; }
         public string? ClosureReason { get; set; }
+        public List<AuthorizedSignerResponseDto> AuthorizedSigners { get; set; } = new();
     }
 
     // DTOs pour les transactions
@@ -514,6 +540,31 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
 
         // Pour les épargnes à terme
         public TermSavingsType? TermType { get; set; }
+
+        // Champs de sécurité/KYC pour comptes courants
+        [StringLength(10, MinimumLength = 4)]
+        public string? Pin { get; set; }
+
+        [StringLength(200)]
+        public string? SecurityQuestion { get; set; }
+
+        [StringLength(200)]
+        public string? SecurityAnswer { get; set; }
+
+        [StringLength(50)]
+        public string? DepositMethod { get; set; }
+
+        [StringLength(100)]
+        public string? OriginOfFunds { get; set; }
+
+        [StringLength(50)]
+        public string? TransactionFrequency { get; set; }
+
+        [StringLength(200)]
+        public string? AccountPurpose { get; set; }
+
+        // Signataires autorisés (pour tous les types de comptes)
+        public List<AuthorizedSignerDto>? AuthorizedSigners { get; set; }
     }
 
     public class ClientAccountUpdateDto
@@ -582,7 +633,9 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         public string Id { get; set; } = string.Empty;
         public string AccountNumber { get; set; } = string.Empty;
         public ClientAccountType AccountType { get; set; }
+        public string CustomerId { get; set; } = string.Empty;
         public string CustomerName { get; set; } = string.Empty;
+        public string CustomerCode { get; set; } = string.Empty;
         public string CustomerPhone { get; set; } = string.Empty;
         public ClientCurrency Currency { get; set; }
         public decimal Balance { get; set; }

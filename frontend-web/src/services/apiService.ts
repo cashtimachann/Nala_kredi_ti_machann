@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import { extractApiErrorMessage } from '../utils/errorHandling';
 import { Branch, CreateBranchRequest, UpdateBranchRequest, BranchHistory } from '../types/branch';
 import {
   Employee, CreateEmployeeDto, UpdateEmployeeDto, EmployeeSearchDto,
@@ -42,6 +43,7 @@ import { LoginRequest, LoginResponse, UserInfo, CashierDashboard, CreditAgentDas
 
 class ApiService {
   private api: AxiosInstance;
+  private assetBaseOrigin: string;
 
   constructor() {
     this.api = axios.create({
@@ -51,6 +53,18 @@ class ApiService {
         'Content-Type': 'application/json',
       },
     });
+
+    // Derive the asset origin (scheme://host:port) from API base, stripping trailing /api
+    try {
+      const raw = this.api.defaults.baseURL || '';
+      const url = new URL(raw);
+      // If path ends with /api, drop it for asset base
+      const path = url.pathname?.replace(/\/?api\/?$/, '') || '';
+      this.assetBaseOrigin = `${url.protocol}//${url.host}${path}`.replace(/\/$/, '');
+    } catch {
+      // Fallbacks aligned with typical dev ports
+      this.assetBaseOrigin = (process.env.REACT_APP_API_URL?.startsWith('http') ? process.env.REACT_APP_API_URL : 'http://localhost:5000').replace(/\/?api\/?$/, '');
+    }
 
     console.log('🔧 ApiService initialized:', {
       baseURL: this.api.defaults.baseURL,
@@ -86,6 +100,10 @@ class ApiService {
     this.api.interceptors.response.use(
       (response) => {
         console.log('✅ Response received:', response.status, response.config.url);
+        // Normalize any file/photo URLs in the payload so images resolve reliably in dev
+        if (response && response.data) {
+          response.data = this.normalizePayloadFileUrls(response.data);
+        }
         return response;
       },
       (error) => {
@@ -99,9 +117,89 @@ class ApiService {
           console.warn('🚨 401 Unauthorized - Clearing tokens and redirecting');
           authService?.logout?.();
         }
+        // Attach parsed message for downstream consumers (centralized handling)
+        (error as any).parsedMessage = extractApiErrorMessage(error);
         return Promise.reject(error);
       }
     );
+  }
+
+  // --- URL normalization helpers -------------------------------------------------
+  private normalizePayloadFileUrls(data: any): any {
+    const seen = new WeakSet<object>();
+
+    const normalizeString = (val: string): string => {
+      if (!val) return val;
+      // Fix stale dev URLs pointing to port 7001
+      if (val.startsWith('http://localhost:7001/')) {
+        const rest = val.replace('http://localhost:7001', '');
+        return `${this.assetBaseOrigin}${rest}`;
+      }
+      // Standardize any absolute URL that still points to a different localhost port
+      if (/^https?:\/\/localhost:\d+\//.test(val) && !val.startsWith(this.assetBaseOrigin)) {
+        try {
+          const u = new URL(val);
+          return `${this.assetBaseOrigin}${u.pathname}${u.search}${u.hash}`;
+        } catch {
+          // ignore
+        }
+      }
+      // Prefix relative /uploads paths with the asset base origin
+      if (val.startsWith('/uploads/')) {
+        return `${this.assetBaseOrigin}${val}`;
+      }
+      return val;
+    };
+
+    const shouldNormalizeKey = (key: string) => {
+      const k = key.toLowerCase();
+      return (
+        k === 'photourl' ||
+        k === 'photo_url' ||
+        k === 'fileurl' ||
+        k === 'file_url' ||
+        k === 'signature' ||
+        k === 'image' ||
+        k.endsWith('photourl') ||
+        k.endsWith('fileurl')
+      );
+    };
+
+    const walk = (node: any): any => {
+      if (node == null) return node;
+      const t = typeof node;
+      if (t === 'string') return normalizeString(node as string);
+      if (t !== 'object') return node;
+      if (seen.has(node)) return node;
+      seen.add(node);
+
+      if (Array.isArray(node)) {
+        for (let i = 0; i < node.length; i++) {
+          node[i] = walk(node[i]);
+        }
+        return node;
+      }
+
+      // Object: normalize targeted keys and recurse
+      for (const key of Object.keys(node)) {
+        const val = (node as any)[key];
+        if (typeof val === 'string') {
+          if (shouldNormalizeKey(key) || val.startsWith('/uploads/') || /localhost:7001\//.test(val)) {
+            (node as any)[key] = normalizeString(val);
+            continue;
+          }
+        }
+        (node as any)[key] = walk(val);
+      }
+      return node;
+    };
+
+    try {
+      return walk(data);
+    } catch (e) {
+      console.warn('URL normalization skipped due to error:', e);
+      return data;
+    }
   }
 
   // Debug methods
@@ -1321,7 +1419,47 @@ class ApiService {
   }
 
   async openSavingsAccount(accountData: any): Promise<any> {
-    const response = await this.api.post('/SavingsAccount/open', accountData);
+    // Sanitize PhotoUrl fields to respect backend validation (max length 500, no base64 data URLs)
+    const sanitizePhotoUrl = (val: any): string | undefined => {
+      if (!val || typeof val !== 'string') return undefined;
+      const trimmed = val.trim();
+      if (!trimmed) return undefined;
+      // Reject base64/data URLs and overly long strings
+      if (trimmed.startsWith('data:')) return undefined;
+      if (trimmed.length > 500) return undefined;
+      return trimmed;
+    };
+
+    const sanitizePayload = (payload: any): any => {
+      if (!payload || typeof payload !== 'object') return payload;
+
+      // Authorized signers
+      if (Array.isArray(payload.AuthorizedSigners)) {
+        payload.AuthorizedSigners = payload.AuthorizedSigners.map((s: any) => {
+          const copy = { ...s };
+          const p = sanitizePhotoUrl(copy.PhotoUrl);
+          if (!p) delete copy.PhotoUrl; else copy.PhotoUrl = p;
+          return copy;
+        });
+      }
+
+      // Customer object (when creating client + account in one go)
+      if (payload.Customer && typeof payload.Customer === 'object') {
+        const p = sanitizePhotoUrl(payload.Customer.PhotoUrl);
+        if (!p) delete payload.Customer.PhotoUrl; else payload.Customer.PhotoUrl = p;
+      }
+
+      // Any top-level PhotoUrl (just in case)
+      if ('PhotoUrl' in payload) {
+        const p = sanitizePhotoUrl(payload.PhotoUrl);
+        if (!p) delete payload.PhotoUrl; else payload.PhotoUrl = p;
+      }
+
+      return payload;
+    };
+
+    const safePayload = sanitizePayload({ ...accountData });
+    const response = await this.api.post('/SavingsAccount/open', safePayload);
     return response.data;
   }
 
@@ -1362,7 +1500,15 @@ class ApiService {
     if (filters?.pageSize) params.append('pageSize', filters.pageSize.toString());
 
     const response = await this.api.get(`/SavingsAccount/${accountId}/transactions?${params}`);
-    return response.data.transactions || response.data;
+    const payload = response.data;
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.transactions)) return payload.transactions;
+    if (Array.isArray(payload?.Transactions)) return payload.Transactions;
+    return Array.isArray(payload?.items)
+      ? payload.items
+      : Array.isArray(payload?.Items)
+        ? payload.Items
+        : [];
   }
 
   async getSavingsAccountStatistics(): Promise<any> {

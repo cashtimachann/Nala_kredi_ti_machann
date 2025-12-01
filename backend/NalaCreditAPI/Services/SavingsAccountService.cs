@@ -105,6 +105,34 @@ namespace NalaCreditAPI.Services.Savings
                 _context.SavingsAccounts.Add(account);
                 await _context.SaveChangesAsync();
 
+                // Ajouter les signataires autorisés si fournis
+                if (dto.AuthorizedSigners != null && dto.AuthorizedSigners.Any())
+                {
+                    foreach (var signerDto in dto.AuthorizedSigners)
+                    {
+                        var signer = new SavingsAccountAuthorizedSigner
+                        {
+                            Id = Guid.NewGuid().ToString(),
+                            AccountId = account.Id,
+                            FullName = signerDto.FullName,
+                            Role = signerDto.Role,
+                            DocumentType = signerDto.DocumentType,
+                            DocumentNumber = signerDto.DocumentNumber,
+                            Phone = signerDto.Phone,
+                            RelationshipToCustomer = signerDto.RelationshipToCustomer,
+                            Address = signerDto.Address,
+                            AuthorizationLimit = signerDto.AuthorizationLimit,
+                            Signature = signerDto.Signature,
+                            PhotoUrl = signerDto.PhotoUrl,
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
+                        };
+                        _context.Set<SavingsAccountAuthorizedSigner>().Add(signer);
+                    }
+                    await _context.SaveChangesAsync();
+                }
+
                 // 3. Effectuer le dépôt initial (dans la même transaction, sans appeler ProcessTransactionAsync qui démarre sa propre transaction)
                 var initialDepositTransaction = new SavingsTransaction
                 {
@@ -152,6 +180,7 @@ namespace NalaCreditAPI.Services.Savings
             var account = await _context.SavingsAccounts
                 .Include(a => a.Customer)
                 .Include(a => a.Branch)
+                .Include(a => a.AuthorizedSigners)
                 .FirstOrDefaultAsync(a => a.Id == accountId);
 
             if (account == null) return null;
@@ -164,6 +193,7 @@ namespace NalaCreditAPI.Services.Savings
             var account = await _context.SavingsAccounts
                 .Include(a => a.Customer)
                 .Include(a => a.Branch)
+                .Include(a => a.AuthorizedSigners)
                 .FirstOrDefaultAsync(a => a.AccountNumber == accountNumber);
 
             if (account == null) return null;
@@ -265,6 +295,40 @@ namespace NalaCreditAPI.Services.Savings
                 account.MaxBalance = dto.AccountLimits.MaxBalance;
                 account.MinWithdrawalAmount = dto.AccountLimits.MinWithdrawalAmount;
                 account.MaxWithdrawalAmount = dto.AccountLimits.MaxWithdrawalAmount;
+            }
+
+            // Update authorized signers if provided
+            if (dto.AuthorizedSigners != null)
+            {
+                // Remove existing signers
+                var existingSigners = await _context.Set<SavingsAccountAuthorizedSigner>()
+                    .Where(s => s.AccountId == accountId)
+                    .ToListAsync();
+                _context.Set<SavingsAccountAuthorizedSigner>().RemoveRange(existingSigners);
+
+                // Add new signers
+                foreach (var signerDto in dto.AuthorizedSigners)
+                {
+                    var signer = new SavingsAccountAuthorizedSigner
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        AccountId = account.Id,
+                        FullName = signerDto.FullName,
+                        Role = signerDto.Role,
+                        DocumentType = signerDto.DocumentType,
+                        DocumentNumber = signerDto.DocumentNumber,
+                        Phone = signerDto.Phone,
+                        RelationshipToCustomer = signerDto.RelationshipToCustomer,
+                        Address = signerDto.Address,
+                        AuthorizationLimit = signerDto.AuthorizationLimit,
+                        Signature = signerDto.Signature,
+                        PhotoUrl = signerDto.PhotoUrl,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    _context.Set<SavingsAccountAuthorizedSigner>().Add(signer);
+                }
             }
 
             account.UpdatedAt = DateTime.UtcNow;
@@ -617,7 +681,24 @@ namespace NalaCreditAPI.Services.Savings
                 UpdatedAt = account.UpdatedAt,
                 ClosedAt = account.ClosedAt,
                 ClosedBy = account.ClosedBy,
-                ClosureReason = account.ClosureReason
+                ClosureReason = account.ClosureReason,
+                AuthorizedSigners = account.AuthorizedSigners?.Select(s => new SavingsAccountAuthorizedSignerResponseDto
+                {
+                    Id = s.Id,
+                    FullName = s.FullName,
+                    Role = s.Role,
+                    DocumentType = s.DocumentType,
+                    DocumentNumber = s.DocumentNumber,
+                    Phone = s.Phone,
+                    RelationshipToCustomer = s.RelationshipToCustomer,
+                    Address = s.Address,
+                    AuthorizationLimit = s.AuthorizationLimit,
+                    Signature = s.Signature,
+                    PhotoUrl = s.PhotoUrl,
+                    IsActive = s.IsActive,
+                    CreatedAt = s.CreatedAt,
+                    UpdatedAt = s.UpdatedAt
+                }).ToList() ?? new List<SavingsAccountAuthorizedSignerResponseDto>()
             };
         }
     }
