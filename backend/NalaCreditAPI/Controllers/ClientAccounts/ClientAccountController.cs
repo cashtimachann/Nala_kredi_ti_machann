@@ -55,11 +55,62 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         [HttpGet("{id}")]
         public async Task<ActionResult<ClientAccountResponseDto>> GetAccount(string id)
         {
-            var account = await _accountService.GetAccountAsync(id);
-            if (account == null)
-                return NotFound(new { message = "Compte client introuvable" });
+            try
+            {
+                var account = await _accountService.GetAccountAsync(id);
+                if (account == null)
+                    return NotFound(new { message = "Compte client introuvable" });
 
-            return Ok(account);
+                // Adapter le résumé vers un DTO détaillé minimal pour cohérence frontend
+                var dto = new ClientAccountResponseDto
+                {
+                    Id = account.Id,
+                    AccountNumber = account.AccountNumber,
+                    AccountType = account.AccountType,
+                    CustomerId = account.CustomerId,
+                    CustomerName = account.CustomerName,
+                    CustomerPhone = account.CustomerPhone,
+                    BranchId = account.BranchId,
+                    BranchName = account.BranchName,
+                    Currency = account.Currency,
+                    Balance = account.Balance,
+                    AvailableBalance = account.Balance,
+                    OpeningDate = account.OpeningDate,
+                    LastTransactionDate = account.LastTransactionDate,
+                    Status = account.Status,
+                    CreatedAt = account.OpeningDate,
+                    UpdatedAt = account.LastTransactionDate ?? account.OpeningDate,
+                    ClosedAt = null,
+                    ClosedBy = null,
+                    ClosureReason = null,
+                    // Propriétés spécifiques non disponibles dans le résumé laissées null
+                    MinimumBalance = null,
+                    DailyWithdrawalLimit = null,
+                    MonthlyWithdrawalLimit = null,
+                    DailyDepositLimit = null,
+                    OverdraftLimit = null,
+                    InterestRate = null,
+                    InterestRateMonthly = null,
+                    TermType = null,
+                    MaturityDate = null,
+                    AccruedInterest = null
+                };
+
+                return Ok(dto);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ERROR] GetAccount failed for id={id}: {ex.Message}\n{ex.StackTrace}");
+                if (ex.InnerException != null)
+                {
+                    Console.Error.WriteLine($"[ERROR] Inner: {ex.InnerException.Message}\n{ex.InnerException.StackTrace}");
+                }
+                return StatusCode(500, new { message = "Erreur lors du chargement du compte", error = ex.Message, inner = ex.InnerException?.Message });
+            }
         }
 
         /// <summary>
