@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NalaCreditAPI.DTOs;
 using NalaCreditAPI.Services;
+using System.Security.Claims;
 
 namespace NalaCreditAPI.Controllers;
 
@@ -29,12 +30,16 @@ public class InterBranchTransferController : ControllerBase
         {
             // Get current user branch ID (this would come from claims or user context)
             var userBranchId = GetCurrentUserBranchId();
-            var userId = User.Identity?.Name ?? "system";
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "system";
 
             var result = await _transferService.CreateTransferAsync(dto, userBranchId, userId);
             return CreatedAtAction(nameof(GetTransfer), new { transferId = result.Id }, result);
         }
         catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (InvalidOperationException ex)
         {
             return BadRequest(ex.Message);
         }
@@ -85,7 +90,7 @@ public class InterBranchTransferController : ControllerBase
     {
         try
         {
-            var userId = User.Identity?.Name ?? "system";
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "system";
             var result = await _transferService.ApproveTransferAsync(transferId, userId);
             return Ok(result);
         }
@@ -110,7 +115,7 @@ public class InterBranchTransferController : ControllerBase
     {
         try
         {
-            var userId = User.Identity?.Name ?? "system";
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "system";
             var result = await _transferService.RejectTransferAsync(transferId, userId, dto.Reason);
             return Ok(result);
         }
@@ -135,7 +140,7 @@ public class InterBranchTransferController : ControllerBase
     {
         try
         {
-            var userId = User.Identity?.Name ?? "system";
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "system";
             var result = await _transferService.ProcessTransferAsync(transferId, dto, userId);
             return Ok(result);
         }
@@ -160,7 +165,7 @@ public class InterBranchTransferController : ControllerBase
     {
         try
         {
-            var userId = User.Identity?.Name ?? "system";
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "system";
             var result = await _transferService.CancelTransferAsync(transferId, userId, dto.Reason);
             return Ok(result);
         }
@@ -216,8 +221,36 @@ public class InterBranchTransferController : ControllerBase
 
     private int GetCurrentUserBranchId()
     {
-        // This is a placeholder - in a real implementation, you would get this from user claims or database
-        // For now, return a default branch ID
-        return 1;
+        var branchClaim = User.FindFirst("BranchId")?.Value;
+        if (int.TryParse(branchClaim, out var branchId) && branchId > 0)
+        {
+            return branchId;
+        }
+        throw new InvalidOperationException("BranchId manke nan claims itilizatè a");
+    }
+
+    [HttpPut("{transferId}/dispatch")]
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<ActionResult<InterBranchTransferDto>> DispatchTransfer(Guid transferId, [FromBody] DispatchInterBranchTransferDto dto)
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "system";
+            var result = await _transferService.DispatchTransferAsync(transferId, dto, userId);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound("Transfer not found");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error dispatching transfer {TransferId}", transferId);
+            return StatusCode(500, "Une erreur interne s'est produite");
+        }
     }
 }

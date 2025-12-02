@@ -12,6 +12,7 @@ public interface IInterBranchTransferService
     Task<List<InterBranchTransferDto>> GetTransfersAsync(InterBranchTransferSearchDto searchDto);
     Task<InterBranchTransferDto> ApproveTransferAsync(Guid transferId, string approvedBy);
     Task<InterBranchTransferDto> RejectTransferAsync(Guid transferId, string rejectedBy, string reason);
+    Task<InterBranchTransferDto> DispatchTransferAsync(Guid transferId, DispatchInterBranchTransferDto dto, string dispatchedBy);
     Task<InterBranchTransferDto> ProcessTransferAsync(Guid transferId, ProcessInterBranchTransferDto dto, string processedBy);
     Task<InterBranchTransferDto> CancelTransferAsync(Guid transferId, string cancelledBy, string reason);
     Task<ConsolidatedTransferReportDto> GetConsolidatedTransferReportAsync(DateTime? startDate = null, DateTime? endDate = null);
@@ -51,14 +52,37 @@ public class InterBranchTransferService : IInterBranchTransferService
                 throw new ArgumentException("Les succursales doivent être actives");
             }
 
+            if (dto.ToBranchId == fromBranchId)
+            {
+                throw new ArgumentException("La succursale source et destination doivent être différentes");
+            }
+
+            // Validate currency acceptance at both branches
+            var currency = (ClientCurrency)dto.Currency;
+            if (currency == ClientCurrency.USD)
+            {
+                if (!(fromBranch.AcceptsUSD && toBranch.AcceptsUSD))
+                    throw new ArgumentException("Les succursales doivent accepter USD pour ce transfert");
+            }
+            else if (currency == ClientCurrency.HTG)
+            {
+                if (!(fromBranch.AcceptsHTG && toBranch.AcceptsHTG))
+                    throw new ArgumentException("Les succursales doivent accepter HTG pour ce transfert");
+            }
+
             // Generate transfer number
             var transferNumber = await GenerateTransferNumberAsync();
 
             // Calculate converted amount if exchange rate provided
             decimal convertedAmount = dto.Amount;
-            if (dto.ExchangeRate.HasValue && dto.ExchangeRate.Value != 1.0m)
+            if (dto.ExchangeRate.HasValue)
             {
-                convertedAmount = dto.Amount * dto.ExchangeRate.Value;
+                if (dto.ExchangeRate.Value <= 0)
+                    throw new ArgumentException("Le taux de change doit être supérieur à 0");
+                if (dto.ExchangeRate.Value != 1.0m)
+                {
+                    convertedAmount = dto.Amount * dto.ExchangeRate.Value;
+                }
             }
 
             var transfer = new InterBranchTransfer
@@ -248,7 +272,7 @@ public class InterBranchTransferService : IInterBranchTransferService
         }
     }
 
-    public async Task<InterBranchTransferDto> ProcessTransferAsync(Guid transferId, ProcessInterBranchTransferDto dto, string processedBy)
+    public async Task<InterBranchTransferDto> DispatchTransferAsync(Guid transferId, DispatchInterBranchTransferDto dto, string dispatchedBy)
     {
         using var transaction = await _context.Database.BeginTransactionAsync();
 
@@ -262,7 +286,45 @@ public class InterBranchTransferService : IInterBranchTransferService
 
             if (transfer.Status != TransferStatus.Approved)
             {
-                throw new InvalidOperationException("Only approved transfers can be processed");
+                throw new InvalidOperationException("Only approved transfers can be dispatched");
+            }
+
+            transfer.Status = TransferStatus.InTransit;
+            transfer.ReferenceNumber = dto.ReferenceNumber ?? transfer.ReferenceNumber;
+            transfer.TrackingNumber = dto.TrackingNumber ?? transfer.TrackingNumber;
+            transfer.Notes = dto.Notes ?? transfer.Notes;
+            transfer.UpdatedAt = DateTime.UtcNow;
+
+            await LogTransferActionAsync(transferId, "Dispatched", $"Transfer dispatched by {dispatchedBy}", dispatchedBy);
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return await MapToDtoAsync(transfer);
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "Error dispatching transfer {TransferId}", transferId);
+            throw;
+        }
+    }
+
+    public async Task<InterBranchTransferDto> ProcessTransferAsync(Guid transferId, ProcessInterBranchTransferDto dto, string processedBy)
+    {
+        using var transaction = await _context.Database.BeginTransactionAsync();
+
+        try
+        {
+            var transfer = await _context.InterBranchTransfers.FindAsync(transferId);
+            if (transfer == null)
+            {
+                throw new KeyNotFoundException("Transfer not found");
+            }
+
+            if (transfer.Status != TransferStatus.Approved && transfer.Status != TransferStatus.InTransit)
+            {
+                throw new InvalidOperationException("Only approved or in-transit transfers can be processed");
             }
 
             transfer.Status = TransferStatus.Completed;

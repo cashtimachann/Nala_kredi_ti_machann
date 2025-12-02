@@ -93,6 +93,19 @@ namespace NalaCreditAPI.DTOs
         public string Reason { get; set; } = string.Empty;
     }
 
+    public class DispatchInterBranchTransferDto
+    {
+        public Guid Id { get; set; }
+
+        [MaxLength(100)]
+        public string? ReferenceNumber { get; set; }
+
+        [MaxLength(100)]
+        public string? TrackingNumber { get; set; }
+
+        public string? Notes { get; set; }
+    }
+
     public class ProcessInterBranchTransferDto
     {
         public Guid Id { get; set; }
