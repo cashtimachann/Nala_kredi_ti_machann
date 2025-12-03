@@ -190,7 +190,7 @@ public class DashboardController : ControllerBase
         var branches = await _context.Branches.Where(b => b.IsActive).ToListAsync();
         var today = DateTime.Today;
 
-        var branchPerformance = new List<BranchPerformanceDto>();
+        var branchPerformance = new List<RegionalBranchPerformanceDto>();
 
         foreach (var branch in branches)
         {
@@ -203,7 +203,7 @@ public class DashboardController : ControllerBase
                 .Where(c => c.Account.BranchId == branch.Id && c.Status == CreditStatus.Active)
                 .ToListAsync();
 
-            branchPerformance.Add(new BranchPerformanceDto
+            branchPerformance.Add(new RegionalBranchPerformanceDto
             {
                 BranchName = branch.Name,
                 BranchId = branch.Id,

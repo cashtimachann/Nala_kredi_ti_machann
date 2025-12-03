@@ -12,10 +12,15 @@ import AccountingDashboard from './components/dashboards/AccountingDashboard';
 import SuperAdminDashboard from './components/dashboards/SuperAdminDashboard';
 import Layout from './components/layout/Layout';
 import EmployeeManagement from './components/payroll/EmployeeManagement';
+import BranchReportDashboard from './components/reports/BranchReportDashboard';
+import SuperAdminReportDashboard from './components/reports/SuperAdminDashboard';
+import TransactionAudit from './components/reports/TransactionAudit';
+import BranchPerformanceComparison from './components/reports/BranchPerformanceComparison';
 import PayrollManagement from './components/payroll/PayrollManagement';
 import ExchangeRateManagement from './components/currency-exchange/ExchangeRateManagement';
 import BranchManagement from './components/branches/BranchManagement';
 import InterBranchTransferList from './components/branches/InterBranchTransferList';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import ConsolidatedTransferReport from './components/branches/ConsolidatedTransferReport';
 import SavingsManagement from './components/savings/SavingsManagement';
 import ClientAccountManagement from './components/admin/ClientAccountManagement';
@@ -211,7 +216,9 @@ function App() {
             element={
               user ? (
                 <Layout user={user} onLogout={handleLogout}>
-                  <InterBranchTransferList />
+                  <ErrorBoundary>
+                    <InterBranchTransferList />
+                  </ErrorBoundary>
                 </Layout>
               ) : (
                 <Navigate to="/login" replace />
@@ -224,7 +231,9 @@ function App() {
             element={
               user ? (
                 <Layout user={user} onLogout={handleLogout}>
-                  <ConsolidatedTransferReport />
+                  <ErrorBoundary>
+                    <ConsolidatedTransferReport />
+                  </ErrorBoundary>
                 </Layout>
               ) : (
                 <Navigate to="/login" replace />
@@ -338,6 +347,68 @@ function App() {
                 <Layout user={user} onLogout={handleLogout}>
                   <CurrentAccountReports />
                 </Layout>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+
+          {/* Branch Reports Routes */}
+          <Route
+            path="/reports/branch"
+            element={
+              user && ['Manager', 'BranchSupervisor', 'SuperAdmin', 'Director', 'Cashier'].includes(user.role) ? (
+                <Layout user={user} onLogout={handleLogout}>
+                  <BranchReportDashboard userRole={user.role} branchId={user.branchId} />
+                </Layout>
+              ) : user ? (
+                <Navigate to="/dashboard" replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+
+          {/* SuperAdmin Reports Routes */}
+          <Route
+            path="/admin/reports/dashboard"
+            element={
+              user && ['SuperAdmin', 'Director'].includes(user.role) ? (
+                <Layout user={user} onLogout={handleLogout}>
+                  <SuperAdminReportDashboard />
+                </Layout>
+              ) : user ? (
+                <Navigate to="/dashboard" replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+
+          <Route
+            path="/admin/reports/audit"
+            element={
+              user && ['SuperAdmin', 'Director'].includes(user.role) ? (
+                <Layout user={user} onLogout={handleLogout}>
+                  <TransactionAudit />
+                </Layout>
+              ) : user ? (
+                <Navigate to="/dashboard" replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+
+          <Route
+            path="/admin/reports/performance"
+            element={
+              user && ['SuperAdmin', 'Director'].includes(user.role) ? (
+                <Layout user={user} onLogout={handleLogout}>
+                  <BranchPerformanceComparison />
+                </Layout>
+              ) : user ? (
+                <Navigate to="/dashboard" replace />
               ) : (
                 <Navigate to="/login" replace />
               )

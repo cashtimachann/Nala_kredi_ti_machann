@@ -16,6 +16,7 @@ public interface IInterBranchTransferService
     Task<InterBranchTransferDto> ProcessTransferAsync(Guid transferId, ProcessInterBranchTransferDto dto, string processedBy);
     Task<InterBranchTransferDto> CancelTransferAsync(Guid transferId, string cancelledBy, string reason);
     Task<ConsolidatedTransferReportDto> GetConsolidatedTransferReportAsync(DateTime? startDate = null, DateTime? endDate = null);
+    Task<BranchTransferSummaryDto> GetBranchTransferSummaryAsync(int branchId, DateTime? startDate = null, DateTime? endDate = null);
     Task<List<InterBranchTransferLogDto>> GetTransferLogsAsync(Guid transferId);
 }
 
@@ -41,7 +42,6 @@ public class InterBranchTransferService : IInterBranchTransferService
             // Validate branches
             var fromBranch = await _context.Branches.FindAsync(fromBranchId);
             var toBranch = await _context.Branches.FindAsync(dto.ToBranchId);
-
             if (fromBranch == null || toBranch == null)
             {
                 throw new ArgumentException("Une ou plusieurs succursales n'existent pas");
@@ -405,6 +405,11 @@ public class InterBranchTransferService : IInterBranchTransferService
                 TotalReceived = transfers
                     .Where(t => t.ToBranchId == g.Key)
                     .Sum(t => t.ConvertedAmount),
+                // per-currency totals
+                TotalSentHTG = g.Where(t => t.Currency == ClientCurrency.HTG).Sum(t => t.Amount),
+                TotalSentUSD = g.Where(t => t.Currency == ClientCurrency.USD).Sum(t => t.Amount),
+                TotalReceivedHTG = transfers.Where(t => t.ToBranchId == g.Key && t.Currency == ClientCurrency.HTG).Sum(t => t.Amount),
+                TotalReceivedUSD = transfers.Where(t => t.ToBranchId == g.Key && t.Currency == ClientCurrency.USD).Sum(t => t.Amount),
                 PendingTransfers = g.Count(t => t.Status == TransferStatus.Pending),
                 CompletedTransfers = g.Count(t => t.Status == TransferStatus.Completed),
                 LastTransferDate = g.Max(t => t.CreatedAt)
@@ -417,6 +422,68 @@ public class InterBranchTransferService : IInterBranchTransferService
             TotalSystemTransfers = transfers.Sum(t => t.ConvertedAmount),
             TotalActiveTransfers = transfers.Count(t => t.Status == TransferStatus.Pending || t.Status == TransferStatus.Approved || t.Status == TransferStatus.InTransit),
             ReportGeneratedAt = DateTime.UtcNow
+        };
+    }
+
+    public async Task<BranchTransferSummaryDto> GetBranchTransferSummaryAsync(int branchId, DateTime? startDate = null, DateTime? endDate = null)
+    {
+        var start = startDate ?? DateTime.MinValue;
+        var end = endDate ?? DateTime.UtcNow;
+
+        var transfers = await _context.InterBranchTransfers
+            .Where(t => t.CreatedAt >= start && t.CreatedAt <= end)
+            .Include(t => t.FromBranch)
+            .Include(t => t.ToBranch)
+            .ToListAsync();
+
+        var sent = transfers.Where(t => t.FromBranchId == branchId).ToList();
+        var received = transfers.Where(t => t.ToBranchId == branchId).ToList();
+
+        if (!sent.Any() && !received.Any())
+        {
+            // No transfers found for branch within period - return empty summary with BranchName if possible
+            var branch = await _context.Branches.FindAsync(branchId);
+            if (branch == null)
+                throw new KeyNotFoundException("Branch not found");
+
+            return new BranchTransferSummaryDto
+            {
+                BranchId = branchId,
+                BranchName = branch.Name,
+                TotalSent = 0m,
+                TotalReceived = 0m,
+                PendingTransfers = 0,
+                CompletedTransfers = 0,
+                LastTransferDate = DateTime.MinValue
+            };
+        }
+
+        var totalSent = sent.Sum(t => t.ConvertedAmount);
+        var totalReceived = received.Sum(t => t.ConvertedAmount);
+        // Per-currency totals
+        var totalSentHTG = sent.Where(t => t.Currency == ClientCurrency.HTG).Sum(t => t.Amount);
+        var totalSentUSD = sent.Where(t => t.Currency == ClientCurrency.USD).Sum(t => t.Amount);
+        var totalReceivedHTG = received.Where(t => t.Currency == ClientCurrency.HTG).Sum(t => t.Amount);
+        var totalReceivedUSD = received.Where(t => t.Currency == ClientCurrency.USD).Sum(t => t.Amount);
+        var pending = sent.Count(t => t.Status == TransferStatus.Pending) + received.Count(t => t.Status == TransferStatus.Pending);
+        var completed = sent.Count(t => t.Status == TransferStatus.Completed) + received.Count(t => t.Status == TransferStatus.Completed);
+        var lastDate = (sent.Concat(received)).Max(t => t.CreatedAt);
+
+        var name = sent.FirstOrDefault()?.FromBranchName ?? received.FirstOrDefault()?.ToBranchName ?? (await _context.Branches.FindAsync(branchId))?.Name ?? string.Empty;
+
+        return new BranchTransferSummaryDto
+        {
+            BranchId = branchId,
+            BranchName = name,
+            TotalSent = totalSent,
+            TotalReceived = totalReceived,
+            TotalSentHTG = totalSentHTG,
+            TotalSentUSD = totalSentUSD,
+            TotalReceivedHTG = totalReceivedHTG,
+            TotalReceivedUSD = totalReceivedUSD,
+            PendingTransfers = pending,
+            CompletedTransfers = completed,
+            LastTransferDate = lastDate
         };
     }
 
@@ -465,8 +532,38 @@ public class InterBranchTransferService : IInterBranchTransferService
         await _context.SaveChangesAsync();
     }
 
-    private Task<InterBranchTransferDto> MapToDtoAsync(InterBranchTransfer transfer)
+    private async Task<InterBranchTransferDto> MapToDtoAsync(InterBranchTransfer transfer)
     {
+        // Get user names from database
+        string? requestedByName = null;
+        string? approvedByName = null;
+        string? rejectedByName = null;
+        string? processedByName = null;
+
+        if (!string.IsNullOrEmpty(transfer.RequestedBy))
+        {
+            var requestedUser = await _context.Users.FindAsync(transfer.RequestedBy);
+            requestedByName = requestedUser != null ? $"{requestedUser.FirstName} {requestedUser.LastName}" : transfer.RequestedBy;
+        }
+
+        if (!string.IsNullOrEmpty(transfer.ApprovedBy))
+        {
+            var approvedUser = await _context.Users.FindAsync(transfer.ApprovedBy);
+            approvedByName = approvedUser != null ? $"{approvedUser.FirstName} {approvedUser.LastName}" : transfer.ApprovedBy;
+        }
+
+        if (!string.IsNullOrEmpty(transfer.RejectedBy))
+        {
+            var rejectedUser = await _context.Users.FindAsync(transfer.RejectedBy);
+            rejectedByName = rejectedUser != null ? $"{rejectedUser.FirstName} {rejectedUser.LastName}" : transfer.RejectedBy;
+        }
+
+        if (!string.IsNullOrEmpty(transfer.ProcessedBy))
+        {
+            var processedUser = await _context.Users.FindAsync(transfer.ProcessedBy);
+            processedByName = processedUser != null ? $"{processedUser.FirstName} {processedUser.LastName}" : transfer.ProcessedBy;
+        }
+
         var dto = new InterBranchTransferDto
         {
             Id = transfer.Id,
@@ -485,23 +582,23 @@ public class InterBranchTransferService : IInterBranchTransferService
             Status = (int)transfer.Status,
             StatusName = transfer.Status.ToString(),
             RequestedBy = transfer.RequestedBy,
-            RequestedByName = transfer.RequestedBy,
+            RequestedByName = requestedByName,
             RequestedAt = transfer.RequestedAt?.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             ApprovedBy = transfer.ApprovedBy,
-            ApprovedByName = transfer.ApprovedBy,
+            ApprovedByName = approvedByName,
             ApprovedAt = transfer.ApprovedAt?.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             RejectedBy = transfer.RejectedBy,
-            RejectedByName = transfer.RejectedBy,
+            RejectedByName = rejectedByName,
             RejectionReason = transfer.RejectionReason,
             RejectedAt = transfer.RejectedAt?.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             ProcessedBy = transfer.ProcessedBy,
-            ProcessedByName = transfer.ProcessedBy,
+            ProcessedByName = processedByName,
             ProcessedAt = transfer.ProcessedAt?.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             ReferenceNumber = transfer.ReferenceNumber,
             TrackingNumber = transfer.TrackingNumber,
             CreatedAt = transfer.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             UpdatedAt = transfer.UpdatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ")
         };
-        return Task.FromResult(dto);
+        return dto;
     }
 }

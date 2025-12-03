@@ -119,6 +119,7 @@ builder.Services.AddScoped<ICurrencyExchangeService, CurrencyExchangeService>();
 // Branch Management Module Services
 builder.Services.AddScoped<IBranchService, BranchService>();
 builder.Services.AddScoped<IInterBranchTransferService, InterBranchTransferService>();
+builder.Services.AddScoped<IBranchReportService, BranchReportService>();
 
 // Redis Configuration
 builder.Services.AddSingleton<IConnectionMultiplexer>(provider =>

@@ -23,9 +23,13 @@ import {
   TransferStatus,
   Currency,
   InterBranchTransferSearchDto,
+  ProcessInterBranchTransferDto,
+  DispatchInterBranchTransferDto,
   getTransferStatusInfo,
   getCurrencyInfo
 } from '../../types/interBranchTransfer';
+import ConfirmDialog from '../common/ConfirmDialog';
+import InterBranchTransferForm from './InterBranchTransferForm';
 import apiService from '../../services/apiService';
 
 interface InterBranchTransferListProps {}
@@ -39,6 +43,10 @@ const InterBranchTransferList: React.FC<InterBranchTransferListProps> = () => {
   const [fromBranchFilter, setFromBranchFilter] = useState<number | 'all'>('all');
   const [toBranchFilter, setToBranchFilter] = useState<number | 'all'>('all');
   const [showDetails, setShowDetails] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState<{ action: 'approve'|'reject'|'dispatch'|'process'; transfer: InterBranchTransfer|null }>({ action: 'approve', transfer: null });
+  const [loadingActionId, setLoadingActionId] = useState<string | null>(null);
+  const [showTransferForm, setShowTransferForm] = useState(false);
 
   useEffect(() => {
     loadTransfers();
@@ -52,228 +60,86 @@ const InterBranchTransferList: React.FC<InterBranchTransferListProps> = () => {
       setTransfers(transferData);
     } catch (error) {
       console.error('Error loading transfers:', error);
-      // Use demo data as fallback when backend is unavailable
-      const demoTransfers: InterBranchTransfer[] = [
-        {
-          id: '1',
-          transferNumber: 'TRF-2024-001',
-          fromBranchId: 1,
-          fromBranchName: 'Port-au-Prince - Centre',
-          toBranchId: 2,
-          toBranchName: 'Cap-Haïtien',
-          amount: 50000,
-          currency: Currency.HTG,
-          currencyName: 'Gourde Haïtienne',
-          exchangeRate: 1,
-          convertedAmount: 50000,
-          status: TransferStatus.Pending,
-          statusName: 'En attente',
-          reason: 'Réapprovisionnement caisse',
-          requestedBy: 'user-1',
-          requestedByName: 'Jean Pierre',
-          requestedAt: '2024-01-15T09:00:00Z',
-          referenceNumber: 'REF-001',
-          createdAt: '2024-01-15T09:00:00Z',
-          updatedAt: '2024-01-15T09:00:00Z'
-        },
-        {
-          id: '2',
-          transferNumber: 'TRF-2024-002',
-          fromBranchId: 3,
-          fromBranchName: 'Gonaïves',
-          toBranchId: 1,
-          toBranchName: 'Port-au-Prince - Centre',
-          amount: 1200,
-          currency: Currency.USD,
-          currencyName: 'Dollar Américain',
-          exchangeRate: 1,
-          convertedAmount: 1200,
-          status: TransferStatus.InTransit,
-          statusName: 'En transit',
-          reason: 'Transfert excédent',
-          requestedBy: 'user-2',
-          requestedByName: 'Marie Claudette',
-          requestedAt: '2024-01-14T14:30:00Z',
-          approvedAt: '2024-01-14T15:00:00Z',
-          approvedBy: 'user-5',
-          approvedByName: 'Paul Jacques',
-          trackingNumber: 'TRK-2024-002',
-          referenceNumber: 'REF-002',
-          notes: 'Transport sécurisé requis',
-          createdAt: '2024-01-14T14:30:00Z',
-          updatedAt: '2024-01-14T15:30:00Z'
-        },
-        {
-          id: '3',
-          transferNumber: 'TRF-2024-003',
-          fromBranchId: 2,
-          fromBranchName: 'Cap-Haïtien',
-          toBranchId: 4,
-          toBranchName: 'Les Cayes',
-          amount: 75000,
-          currency: Currency.HTG,
-          currencyName: 'Gourde Haïtienne',
-          exchangeRate: 1,
-          convertedAmount: 75000,
-          status: TransferStatus.Completed,
-          statusName: 'Terminé',
-          reason: 'Ouverture nouvelle succursale',
-          requestedBy: 'user-3',
-          requestedByName: 'Pierre Louis',
-          requestedAt: '2024-01-13T10:00:00Z',
-          approvedAt: '2024-01-13T10:30:00Z',
-          approvedBy: 'user-5',
-          approvedByName: 'Paul Jacques',
-          processedAt: '2024-01-13T16:00:00Z',
-          processedBy: 'user-6',
-          processedByName: 'Sophie Durand',
-          trackingNumber: 'TRK-2024-003',
-          referenceNumber: 'REF-003',
-          notes: 'Transfert initial pour nouvelle succursale',
-          createdAt: '2024-01-13T10:00:00Z',
-          updatedAt: '2024-01-13T16:15:00Z'
-        },
-        {
-          id: '4',
-          transferNumber: 'TRF-2024-004',
-          fromBranchId: 1,
-          fromBranchName: 'Port-au-Prince - Centre',
-          toBranchId: 3,
-          toBranchName: 'Gonaïves',
-          amount: 2500,
-          currency: Currency.USD,
-          currencyName: 'Dollar Américain',
-          exchangeRate: 1,
-          convertedAmount: 2500,
-          status: TransferStatus.Approved,
-          statusName: 'Approuvé',
-          reason: 'Fonds de roulement',
-          requestedBy: 'user-4',
-          requestedByName: 'Lucie Martin',
-          requestedAt: '2024-01-15T08:00:00Z',
-          approvedAt: '2024-01-15T08:30:00Z',
-          approvedBy: 'user-5',
-          approvedByName: 'Paul Jacques',
-          referenceNumber: 'REF-004',
-          notes: 'Urgent - fin de semaine',
-          createdAt: '2024-01-15T08:00:00Z',
-          updatedAt: '2024-01-15T08:30:00Z'
-        },
-        {
-          id: '5',
-          transferNumber: 'TRF-2024-005',
-          fromBranchId: 4,
-          fromBranchName: 'Les Cayes',
-          toBranchId: 2,
-          toBranchName: 'Cap-Haïtien',
-          amount: 30000,
-          currency: Currency.HTG,
-          currencyName: 'Gourde Haïtienne',
-          exchangeRate: 1,
-          convertedAmount: 30000,
-          status: TransferStatus.Rejected,
-          statusName: 'Rejeté',
-          reason: 'Demande non justifiée',
-          requestedBy: 'user-7',
-          requestedByName: 'André Joseph',
-          requestedAt: '2024-01-12T11:00:00Z',
-          approvedAt: '2024-01-12T13:00:00Z',
-          approvedBy: 'user-5',
-          approvedByName: 'Paul Jacques',
-          referenceNumber: 'REF-005',
-          notes: 'Rejeté - documentation insuffisante',
-          createdAt: '2024-01-12T11:00:00Z',
-          updatedAt: '2024-01-12T13:15:00Z'
-        },
-        {
-          id: '6',
-          transferNumber: 'TRF-2024-006',
-          fromBranchId: 2,
-          fromBranchName: 'Cap-Haïtien',
-          toBranchId: 1,
-          toBranchName: 'Port-au-Prince - Centre',
-          amount: 800,
-          currency: Currency.USD,
-          currencyName: 'Dollar Américain',
-          exchangeRate: 1,
-          convertedAmount: 800,
-          status: TransferStatus.Completed,
-          statusName: 'Terminé',
-          reason: 'Remboursement frais',
-          requestedBy: 'user-8',
-          requestedByName: 'Claire Beauvoir',
-          requestedAt: '2024-01-11T09:30:00Z',
-          approvedAt: '2024-01-11T10:00:00Z',
-          approvedBy: 'user-5',
-          approvedByName: 'Paul Jacques',
-          processedAt: '2024-01-11T15:30:00Z',
-          processedBy: 'user-6',
-          processedByName: 'Sophie Durand',
-          trackingNumber: 'TRK-2024-006',
-          referenceNumber: 'REF-006',
-          createdAt: '2024-01-11T09:30:00Z',
-          updatedAt: '2024-01-11T15:45:00Z'
-        },
-        {
-          id: '7',
-          transferNumber: 'TRF-2024-007',
-          fromBranchId: 3,
-          fromBranchName: 'Gonaïves',
-          toBranchId: 4,
-          toBranchName: 'Les Cayes',
-          amount: 100000,
-          currency: Currency.HTG,
-          currencyName: 'Gourde Haïtienne',
-          exchangeRate: 1,
-          convertedAmount: 100000,
-          status: TransferStatus.InTransit,
-          statusName: 'En transit',
-          reason: 'Expansion opérationnelle',
-          requestedBy: 'user-9',
-          requestedByName: 'Marc Antoine',
-          requestedAt: '2024-01-15T07:00:00Z',
-          approvedAt: '2024-01-15T07:30:00Z',
-          approvedBy: 'user-5',
-          approvedByName: 'Paul Jacques',
-          trackingNumber: 'TRK-2024-007',
-          referenceNumber: 'REF-007',
-          notes: 'Arrivée prévue demain matin',
-          createdAt: '2024-01-15T07:00:00Z',
-          updatedAt: '2024-01-15T08:00:00Z'
-        },
-        {
-          id: '8',
-          transferNumber: 'TRF-2024-008',
-          fromBranchId: 1,
-          fromBranchName: 'Port-au-Prince - Centre',
-          toBranchId: 4,
-          toBranchName: 'Les Cayes',
-          amount: 1500,
-          currency: Currency.USD,
-          currencyName: 'Dollar Américain',
-          exchangeRate: 1,
-          convertedAmount: 1500,
-          status: TransferStatus.Pending,
-          statusName: 'En attente',
-          reason: 'Besoin liquidités urgentes',
-          requestedBy: 'user-10',
-          requestedByName: 'Nadine Léger',
-          requestedAt: '2024-01-15T10:00:00Z',
-          referenceNumber: 'REF-008',
-          notes: 'À traiter en priorité',
-          createdAt: '2024-01-15T10:00:00Z',
-          updatedAt: '2024-01-15T10:00:00Z'
-        }
-      ];
-      setTransfers(demoTransfers);
-      toast.success('Données de démonstration chargées');
+      toast.error('Erreur chargement transferts. Réessayez plus tard.');
+      setTransfers([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const updateTransferInState = (updated: InterBranchTransfer) => {
+    setTransfers(prev => prev.map(t => t.id === updated.id ? updated : t));
+  };
+
+  const openDialog = (action: 'approve'|'reject'|'dispatch'|'process', transfer: InterBranchTransfer) => {
+    setDialogConfig({ action, transfer });
+    setDialogOpen(true);
+  };
+
+  const performAction = async () => {
+    if (!dialogConfig.transfer) return;
+    const transfer = dialogConfig.transfer;
+    setLoadingActionId(transfer.id);
+    setDialogOpen(false);
+    // Optimistic status update
+    const original = { ...transfer };
+    const optimisticStatusMap: Record<string, TransferStatus> = {
+      approve: TransferStatus.Approved,
+      reject: TransferStatus.Rejected,
+      dispatch: TransferStatus.InTransit,
+      process: TransferStatus.Completed
+    };
+    const targetStatus = optimisticStatusMap[dialogConfig.action];
+    updateTransferInState({ ...transfer, status: targetStatus, statusName: getTransferStatusInfo(targetStatus).label });
+    try {
+      let result: InterBranchTransfer;
+      switch (dialogConfig.action) {
+        case 'approve':
+          result = await apiService.approveInterBranchTransfer({ id: transfer.id });
+          toast.success('Transfert approuvé');
+          break;
+        case 'reject': {
+          const reason = prompt('Entrez la raison du rejet (temporaire)');
+          if (!reason) throw new Error('Raison requise');
+          result = await apiService.rejectInterBranchTransfer(transfer.id, { id: transfer.id, reason });
+          toast.success('Transfert rejeté');
+          break; }
+        case 'dispatch': {
+          const dto: DispatchInterBranchTransferDto = { id: transfer.id, referenceNumber: transfer.referenceNumber, trackingNumber: transfer.trackingNumber, notes: transfer.notes };
+          result = await apiService.dispatchInterBranchTransfer(dto);
+          toast.success('Transfert en transit');
+          break; }
+        case 'process': {
+          const dto: ProcessInterBranchTransferDto = { id: transfer.id, referenceNumber: transfer.referenceNumber, trackingNumber: transfer.trackingNumber, notes: transfer.notes };
+          result = await apiService.processInterBranchTransfer(dto);
+          toast.success('Transfert complété');
+          break; }
+        default:
+          throw new Error('Action inconnue');
+      }
+      updateTransferInState(result);
+    } catch (e) {
+      console.error(e);
+      // rollback
+      updateTransferInState(original);
+      toast.error('Action échouée');
+    } finally {
+      setLoadingActionId(null);
+    }
+  };
+
   const handleViewDetails = (transferId: string) => {
     setShowDetails(showDetails === transferId ? null : transferId);
+  };
+
+  const handleNewTransfer = () => {
+    setShowTransferForm(true);
+  };
+
+  const handleTransferSaved = (newTransfer: InterBranchTransfer) => {
+    setTransfers(prev => [newTransfer, ...prev]);
+    setShowTransferForm(false);
+    toast.success('Transfert créé avec succès!');
   };
 
   const filteredTransfers = transfers.filter(transfer => {
@@ -284,8 +150,8 @@ const InterBranchTransferList: React.FC<InterBranchTransferListProps> = () => {
       (transfer.requestedByName && transfer.requestedByName.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (transfer.reason && transfer.reason.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const matchesStatus = statusFilter === 'all' || transfer.status === statusFilter;
-    const matchesCurrency = currencyFilter === 'all' || transfer.currency === currencyFilter;
+    const matchesStatus = statusFilter === 'all' || transfer.status === Number(statusFilter);
+    const matchesCurrency = currencyFilter === 'all' || transfer.currency === Number(currencyFilter);
     const matchesFromBranch = fromBranchFilter === 'all' || transfer.fromBranchId === fromBranchFilter;
     const matchesToBranch = toBranchFilter === 'all' || transfer.toBranchId === toBranchFilter;
 
@@ -294,11 +160,20 @@ const InterBranchTransferList: React.FC<InterBranchTransferListProps> = () => {
 
   const formatCurrency = (amount: number, currency: Currency) => {
     const currencyInfo = getCurrencyInfo(currency);
+    if (currencyInfo.code === 'HTG') {
+      // For HTG, format without currency symbol and add HTG manually
+      return `${new Intl.NumberFormat('fr-FR', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+      }).format(amount)} ${currencyInfo.symbol}`;
+    }
+    // For USD and others, use standard currency formatting
     return new Intl.NumberFormat('fr-FR', {
       style: 'currency',
-      currency: currencyInfo.code === 'HTG' ? 'USD' : currencyInfo.code,
-      minimumFractionDigits: 0
-    }).format(amount).replace('$', currencyInfo.symbol);
+      currency: currencyInfo.code,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    }).format(amount);
   };
 
   const formatDate = (dateString: string) => {
@@ -339,6 +214,26 @@ const InterBranchTransferList: React.FC<InterBranchTransferListProps> = () => {
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog
+        open={dialogOpen}
+        title={
+          dialogConfig.action === 'approve' ? 'Confirmer approbation' :
+          dialogConfig.action === 'reject' ? 'Confirmer rejet' :
+          dialogConfig.action === 'dispatch' ? 'Confirmer mise en transit' :
+          'Confirmer traitement'
+        }
+        message={
+          dialogConfig.action === 'approve' ? 'Voulez-vous approuver ce transfert ?' :
+          dialogConfig.action === 'reject' ? 'Voulez-vous rejeter ce transfert ?' :
+          dialogConfig.action === 'dispatch' ? 'Marquer ce transfert comme en transit ?' :
+          'Marquer ce transfert comme terminé ?'
+        }
+        confirmLabel="Oui"
+        cancelLabel="Non"
+        onConfirm={performAction}
+        onCancel={() => setDialogOpen(false)}
+        loading={loadingActionId !== null}
+      />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -349,6 +244,7 @@ const InterBranchTransferList: React.FC<InterBranchTransferListProps> = () => {
         </div>
         <button
           className="mt-4 sm:mt-0 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+          onClick={handleNewTransfer}
         >
           <Plus className="h-5 w-5" />
           <span>Nouveau Transfert</span>
@@ -634,35 +530,43 @@ const InterBranchTransferList: React.FC<InterBranchTransferListProps> = () => {
                     {transfer.status === TransferStatus.Pending && (
                       <>
                         <button
+                          disabled={loadingActionId === transfer.id}
+                          onClick={() => openDialog('approve', transfer)}
                           className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors"
                           title="Approuver"
                         >
-                          <CheckCircle className="h-4 w-4" />
+                          {loadingActionId === transfer.id ? <span className="h-4 w-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" /> : <CheckCircle className="h-4 w-4" />}
                         </button>
                         <button
+                          disabled={loadingActionId === transfer.id}
+                          onClick={() => openDialog('reject', transfer)}
                           className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
                           title="Rejeter"
                         >
-                          <XCircle className="h-4 w-4" />
+                          {loadingActionId === transfer.id ? <span className="h-4 w-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" /> : <XCircle className="h-4 w-4" />}
                         </button>
                       </>
                     )}
 
                     {transfer.status === TransferStatus.Approved && (
                       <button
+                        disabled={loadingActionId === transfer.id}
+                        onClick={() => openDialog('dispatch', transfer)}
                         className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
                         title="Marquer comme en transit"
                       >
-                        <Truck className="h-4 w-4" />
+                        {loadingActionId === transfer.id ? <span className="h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /> : <Truck className="h-4 w-4" />}
                       </button>
                     )}
 
                     {transfer.status === TransferStatus.InTransit && (
                       <button
+                        disabled={loadingActionId === transfer.id}
+                        onClick={() => openDialog('process', transfer)}
                         className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors"
                         title="Marquer comme terminé"
                       >
-                        <CheckCircle2 className="h-4 w-4" />
+                        {loadingActionId === transfer.id ? <span className="h-4 w-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                       </button>
                     )}
                   </div>
@@ -672,6 +576,13 @@ const InterBranchTransferList: React.FC<InterBranchTransferListProps> = () => {
           </div>
         )}
       </div>
+
+      {/* Transfer Form Modal */}
+      <InterBranchTransferForm
+        isOpen={showTransferForm}
+        onClose={() => setShowTransferForm(false)}
+        onSave={handleTransferSaved}
+      />
     </div>
   );
 };

@@ -116,6 +116,8 @@ namespace NalaCreditAPI.DTOs
 
     public class CreateExchangeTransactionDto
     {
+        public string? BranchId { get; set; }
+
         [Required]
         public ExchangeType ExchangeType { get; set; }
 
@@ -139,6 +141,8 @@ namespace NalaCreditAPI.DTOs
 
     public class ExchangeCalculationDto
     {
+        public string? BranchId { get; set; }
+
         [Required]
         public ExchangeType ExchangeType { get; set; }
 
@@ -161,6 +165,7 @@ namespace NalaCreditAPI.DTOs
         public decimal CommissionRate { get; set; }
         public decimal CommissionAmount { get; set; }
         public decimal NetAmount { get; set; }
+        public decimal AvailableBalance { get; set; }
         public bool IsValid { get; set; }
         public string ErrorMessage { get; set; } = string.Empty;
     }

@@ -23,6 +23,7 @@ interface InterBranchTransferFormProps {
 }
 
 const transferSchema: yup.ObjectSchema<InterBranchTransferFormData> = yup.object({
+  fromBranchId: yup.number().optional(),
   toBranchId: yup.number().required('La succursale de destination est requise'),
   currency: yup.mixed<Currency>().oneOf([Currency.HTG, Currency.USD]).required('La devise est requise'),
   amount: yup.number().min(0.01, 'Le montant doit être positif').required('Le montant est requis'),
@@ -52,6 +53,7 @@ const InterBranchTransferForm: React.FC<InterBranchTransferFormProps> = ({
   } = useForm<InterBranchTransferFormData>({
     resolver: yupResolver(transferSchema),
     defaultValues: {
+      fromBranchId: 0,
       toBranchId: 0,
       currency: Currency.HTG,
       amount: 0,
@@ -79,6 +81,7 @@ const InterBranchTransferForm: React.FC<InterBranchTransferFormProps> = ({
         });
       } else {
         reset({
+          fromBranchId: 0,
           toBranchId: 0,
           currency: Currency.HTG,
           amount: 0,
@@ -116,7 +119,11 @@ const InterBranchTransferForm: React.FC<InterBranchTransferFormProps> = ({
     try {
       setIsLoading(true);
 
+      // Get current user to determine if we need to specify fromBranchId
+      const currentUser = apiService.getCurrentUser();
+      
       const transferData: CreateInterBranchTransferDto = {
+        fromBranchId: data.fromBranchId || currentUser?.branchId, // Use form value or user's branchId
         toBranchId: data.toBranchId,
         currency: data.currency,
         amount: data.amount,
@@ -175,6 +182,32 @@ const InterBranchTransferForm: React.FC<InterBranchTransferFormProps> = ({
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6">
+          {/* Source Branch - Only show for users without branchId (e.g., SuperAdmin) */}
+          {!apiService.getCurrentUser()?.branchId && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Succursale Source (De) *
+              </label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <select
+                  {...register('fromBranchId', { valueAsNumber: true })}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value={0}>Sélectionner la succursale source</option>
+                  {availableBranches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name} - {branch.commune}, {branch.department}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {errors.fromBranchId && (
+                <p className="mt-1 text-sm text-red-600">{errors.fromBranchId.message}</p>
+              )}
+            </div>
+          )}
+
           {/* Destination Branch */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">

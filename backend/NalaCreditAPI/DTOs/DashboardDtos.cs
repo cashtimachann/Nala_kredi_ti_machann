@@ -53,11 +53,11 @@ public class RegionalManagerDashboardDto
     public int TotalRegionalCredits { get; set; }
     public decimal TotalRegionalPortfolio { get; set; }
     public double AverageRepaymentRate { get; set; }
-    public List<BranchPerformanceDto> BranchPerformance { get; set; } = new();
+    public List<RegionalBranchPerformanceDto> BranchPerformance { get; set; } = new();
     public string TopPerformingBranch { get; set; } = string.Empty;
 }
 
-public class BranchPerformanceDto
+public class RegionalBranchPerformanceDto
 {
     public string BranchName { get; set; } = string.Empty;
     public int BranchId { get; set; }

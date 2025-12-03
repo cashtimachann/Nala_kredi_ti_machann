@@ -48,12 +48,20 @@ const BranchDetailsModal: React.FC<BranchDetailsModalProps> = ({
   const [activeTab, setActiveTab] = useState<'info' | 'limits' | 'employees' | 'history'>('info');
   const [admins, setAdmins] = useState<BranchAdmin[]>([]);
   const [loadingAdmins, setLoadingAdmins] = useState(false);
+  const [summary, setSummary] = useState<any | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
 
   useEffect(() => {
     if (isOpen && branch && activeTab === 'employees') {
       loadBranchAdmins();
     }
   }, [isOpen, branch, activeTab]);
+
+  useEffect(() => {
+    if (isOpen && branch) {
+      loadBranchSummary();
+    }
+  }, [isOpen, branch]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -119,6 +127,22 @@ const BranchDetailsModal: React.FC<BranchDetailsModalProps> = ({
       setAdmins([]);
     } finally {
       setLoadingAdmins(false);
+    }
+  };
+
+  const loadBranchSummary = async () => {
+    if (!branch) return;
+    try {
+      setLoadingSummary(true);
+      // Use the new financial summary endpoint that includes all deposits and withdrawals
+      const data = await apiService.getBranchFinancialSummary(branch.id);
+      setSummary(data);
+    } catch (error) {
+      console.error('Error loading branch summary:', error);
+      toast.error('Erreur lors du chargement du résumé financier');
+      setSummary(null);
+    } finally {
+      setLoadingSummary(false);
     }
   };
 
@@ -250,6 +274,72 @@ const BranchDetailsModal: React.FC<BranchDetailsModalProps> = ({
           {/* Info Tab */}
           {activeTab === 'info' && (
             <div className="space-y-6">
+              {/* Financial Summary */}
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <DollarSign className="h-5 w-5 mr-2 text-green-600" />
+                  Solde Total
+                </h3>
+                {loadingSummary ? (
+                  <div className="flex items-center gap-3 text-gray-600">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-600"></div>
+                    <span>Chargement du résumé financier...</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4">
+                    {/* HTG Row */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg">
+                        <label className="text-sm font-medium text-green-900">Total Entrées (HTG)</label>
+                        <p className="text-2xl font-bold text-green-700 mt-2">
+                          {formatCurrency(Number(summary?.totalDepositHTG ?? 0))}
+                        </p>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-lg">
+                        <label className="text-sm font-medium text-red-900">Total Sorties (HTG)</label>
+                        <p className="text-2xl font-bold text-red-700 mt-2">
+                          {formatCurrency(Number(summary?.totalWithdrawalHTG ?? 0))}
+                        </p>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 rounded-lg">
+                        <label className="text-sm font-medium text-indigo-900">Solde Total (HTG)</label>
+                        <p className="text-2xl font-bold text-indigo-700 mt-2">
+                          {formatCurrency(Number(summary?.balanceHTG ?? 0))}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* USD Row */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg">
+                        <label className="text-sm font-medium text-green-900">Total Entrées (USD)</label>
+                        <p className="text-2xl font-bold text-green-700 mt-2">
+                          {formatCurrency(Number(summary?.totalDepositUSD ?? 0), 'USD')}
+                        </p>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-lg">
+                        <label className="text-sm font-medium text-red-900">Total Sorties (USD)</label>
+                        <p className="text-2xl font-bold text-red-700 mt-2">
+                          {formatCurrency(Number(summary?.totalWithdrawalUSD ?? 0), 'USD')}
+                        </p>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 rounded-lg">
+                        <label className="text-sm font-medium text-indigo-900">Solde Total (USD)</label>
+                        <p className="text-2xl font-bold text-indigo-700 mt-2">
+                          {formatCurrency(Number(summary?.balanceUSD ?? 0), 'USD')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-3">
+                  Basé sur tous les dépôts et retraits effectués dans cette succursale.
+                </p>
+              </div>
               {/* Location */}
               <div className="bg-white border border-gray-200 rounded-lg p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">

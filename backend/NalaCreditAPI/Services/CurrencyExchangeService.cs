@@ -1,7 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using NalaCreditAPI.Data;
 using NalaCreditAPI.DTOs;
 using NalaCreditAPI.Models;
+using NalaCreditAPI.Utilities;
 
 namespace NalaCreditAPI.Services
 {
@@ -40,10 +45,19 @@ namespace NalaCreditAPI.Services
     {
         private readonly ApplicationDbContext _context;
         private const decimal DefaultCommissionRate = 0.005m; // 0.5%
+        private static readonly ConcurrentDictionary<Guid, (int LegacyId, string BranchName)> BranchContextCache = new();
+        private static readonly ConcurrentDictionary<Guid, BranchSummaryCacheEntry> BranchSummaryCache = new();
+        private static readonly TimeSpan BranchSummaryCacheDuration = TimeSpan.FromSeconds(30);
 
         public CurrencyExchangeService(ApplicationDbContext context)
         {
             _context = context;
+        }
+
+        private sealed class BranchSummaryCacheEntry
+        {
+            public BranchFinancialSummaryDto Summary { get; init; } = null!;
+            public DateTime CachedAt { get; init; }
         }
 
         public async Task<CurrencyExchangeRateDto> CreateExchangeRateAsync(CreateExchangeRateDto dto, string createdBy)
@@ -191,6 +205,15 @@ namespace NalaCreditAPI.Services
 
             try
             {
+                if (branchId == Guid.Empty)
+                {
+                    result.IsValid = false;
+                    result.ErrorMessage = "Succursale requise pour calculer la transaction.";
+                    return result;
+                }
+
+                var (legacyBranchId, branchName) = await ResolveBranchContextAsync(branchId);
+
                 // Determine currencies based on exchange type
                 if (dto.ExchangeType == ExchangeType.Purchase) // HTG → USD
                 {
@@ -209,7 +232,7 @@ namespace NalaCreditAPI.Services
 
                 // Get current exchange rate
                 var exchangeRate = await GetCurrentExchangeRateAsync(CurrencyType.HTG, CurrencyType.USD);
-                
+
                 if (dto.ExchangeType == ExchangeType.Purchase)
                 {
                     // Client wants to buy USD with HTG
@@ -227,24 +250,28 @@ namespace NalaCreditAPI.Services
                 result.CommissionAmount = result.ToAmount * DefaultCommissionRate;
                 result.NetAmount = result.ToAmount - result.CommissionAmount;
 
-                // Check currency reserves
-                var reserve = await GetCurrencyReserveAsync(branchId, result.ToCurrency);
-                if (reserve.CurrentBalance < result.NetAmount)
-                {
-                    result.IsValid = false;
-                    result.ErrorMessage = $"Insufficient {result.ToCurrencyName} reserves. Available: {reserve.CurrentBalance:F2}";
-                    return result;
-                }
+                var summary = await GetBranchFinancialSummaryCachedAsync(branchId, legacyBranchId, branchName);
 
-                // Check daily limits
-                if (reserve.DailyRemaining < result.NetAmount)
+                var availableBalance = result.ToCurrency == CurrencyType.USD
+                    ? summary.BalanceUSD
+                    : summary.BalanceHTG;
+
+                result.AvailableBalance = availableBalance;
+
+                if (availableBalance < result.NetAmount)
                 {
                     result.IsValid = false;
-                    result.ErrorMessage = $"Daily limit exceeded for {result.ToCurrencyName}. Remaining: {reserve.DailyRemaining:F2}";
+                    result.ErrorMessage =
+                        $"Solde total insuffisant en {result.ToCurrencyName} pour la succursale {branchName}. Disponible: {availableBalance:F2}";
                     return result;
                 }
 
                 result.IsValid = true;
+            }
+            catch (InvalidOperationException ex)
+            {
+                result.IsValid = false;
+                result.ErrorMessage = ex.Message;
             }
             catch (Exception ex)
             {
@@ -285,8 +312,7 @@ namespace NalaCreditAPI.Services
                 }
             }
 
-            var branch = await _context.Branches.FindAsync(branchId);
-            var branchName = branch?.Name ?? "Unknown Branch";
+            var branchName = await ResolveBranchNameAsync(branchId);
 
             var transaction = new ExchangeTransaction
             {
@@ -465,8 +491,7 @@ Thank you for your business!
             if (reserve == null)
             {
                 // Create default reserve if it doesn't exist
-                var branch = await _context.Branches.FindAsync(branchId);
-                var branchName = branch?.Name ?? "Unknown Branch";
+                var branchName = await ResolveBranchNameAsync(branchId);
 
                 reserve = new CurrencyReserve
                 {
@@ -630,9 +655,7 @@ Thank you for your business!
 
         public async Task<CurrencyExchangeSummaryDto> GetExchangeSummaryAsync(Guid branchId, DateTime date)
         {
-            var branch = await _context.Branches.FindAsync(branchId);
-            if (branch == null)
-                throw new InvalidOperationException($"Branch with ID {branchId} not found");
+            var branchName = await ResolveBranchNameAsync(branchId);
 
             var startOfDay = date.Date;
             var endOfDay = startOfDay.AddDays(1);
@@ -651,7 +674,7 @@ Thank you for your business!
             return new CurrencyExchangeSummaryDto
             {
                 BranchId = branchId,
-                BranchName = branch.Name,
+                BranchName = branchName,
                 ReportDate = date,
                 HTGBalance = htgReserve?.CurrentBalance ?? 0,
                 USDBalance = usdReserve?.CurrentBalance ?? 0,
@@ -680,6 +703,177 @@ Thank you for your business!
                 .ToListAsync();
 
             return transactions.Select(MapExchangeTransactionToDto).ToList();
+        }
+
+        private async Task<BranchFinancialSummaryDto> GetBranchFinancialSummaryCachedAsync(Guid branchIntegrationId, int legacyBranchId, string branchName)
+        {
+            if (BranchSummaryCache.TryGetValue(branchIntegrationId, out var cacheEntry))
+            {
+                if (DateTime.UtcNow - cacheEntry.CachedAt <= BranchSummaryCacheDuration)
+                {
+                    return cacheEntry.Summary;
+                }
+            }
+
+            var summary = await BuildBranchFinancialSummaryAsync(legacyBranchId, branchName);
+
+            BranchSummaryCache[branchIntegrationId] = new BranchSummaryCacheEntry
+            {
+                Summary = summary,
+                CachedAt = DateTime.UtcNow
+            };
+
+            return summary;
+        }
+
+        private async Task<BranchFinancialSummaryDto> BuildBranchFinancialSummaryAsync(int legacyBranchId, string branchName)
+        {
+            // Retrieve minimal projections to reduce memory footprint
+            var baseTx = await _context.Transactions
+                .AsNoTracking()
+                .Where(t => t.BranchId == legacyBranchId && t.Status == TransactionStatus.Completed)
+                .Select(t => new { t.Type, t.Currency, t.Amount, t.CreatedAt })
+                .ToListAsync();
+
+            var savingsTx = await _context.SavingsTransactions
+                .AsNoTracking()
+                .Where(t => t.BranchId == legacyBranchId && t.Status == SavingsTransactionStatus.Completed)
+                .Select(t => new { t.Type, t.Currency, t.Amount, t.ProcessedAt })
+                .ToListAsync();
+
+            var currentTx = await _context.CurrentAccountTransactions
+                .AsNoTracking()
+                .Where(t => t.BranchId == legacyBranchId && t.Status == SavingsTransactionStatus.Completed)
+                .Select(t => new { t.Type, t.Currency, t.Amount, t.ProcessedAt })
+                .ToListAsync();
+
+            var termTx = await _context.TermSavingsTransactions
+                .AsNoTracking()
+                .Where(t => t.BranchId == legacyBranchId && t.Status == SavingsTransactionStatus.Completed)
+                .Select(t => new { t.Type, t.Currency, t.Amount, t.ProcessedAt })
+                .ToListAsync();
+
+            var transfers = await _context.InterBranchTransfers
+                .AsNoTracking()
+                .Where(t => (t.FromBranchId == legacyBranchId || t.ToBranchId == legacyBranchId) && t.Status == TransferStatus.Completed)
+                .Select(t => new { t.FromBranchId, t.ToBranchId, t.Currency, t.Amount, t.CreatedAt })
+                .ToListAsync();
+
+            bool IsHTG(object currency) => currency switch
+            {
+                Currency c => c == Currency.HTG,
+                SavingsCurrency sc => sc == SavingsCurrency.HTG,
+                ClientCurrency cc => cc == ClientCurrency.HTG,
+                _ => false
+            };
+
+            bool IsUSD(object currency) => currency switch
+            {
+                Currency c => c == Currency.USD,
+                SavingsCurrency sc => sc == SavingsCurrency.USD,
+                ClientCurrency cc => cc == ClientCurrency.USD,
+                _ => false
+            };
+
+            var htgDeposits = 0m
+                + baseTx.Where(t => t.Type == TransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
+                + savingsTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
+                + currentTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
+                + termTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
+                + transfers.Where(t => t.ToBranchId == legacyBranchId && IsHTG(t.Currency)).Sum(t => t.Amount);
+
+            var htgWithdrawals = 0m
+                + baseTx.Where(t => t.Type == TransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
+                + savingsTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
+                + currentTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
+                + termTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
+                + transfers.Where(t => t.FromBranchId == legacyBranchId && IsHTG(t.Currency)).Sum(t => t.Amount);
+
+            var usdDeposits = 0m
+                + baseTx.Where(t => t.Type == TransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
+                + savingsTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
+                + currentTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
+                + termTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
+                + transfers.Where(t => t.ToBranchId == legacyBranchId && IsUSD(t.Currency)).Sum(t => t.Amount);
+
+            var usdWithdrawals = 0m
+                + baseTx.Where(t => t.Type == TransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)
+                + savingsTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)
+                + currentTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)
+                + termTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)
+                + transfers.Where(t => t.FromBranchId == legacyBranchId && IsUSD(t.Currency)).Sum(t => t.Amount);
+
+            var totalCount = baseTx.Count + savingsTx.Count + currentTx.Count + termTx.Count + transfers.Count;
+
+            var lastDateCandidates = new List<DateTime>();
+            if (baseTx.Any()) lastDateCandidates.Add(baseTx.Max(t => t.CreatedAt));
+            if (savingsTx.Any()) lastDateCandidates.Add(savingsTx.Max(t => t.ProcessedAt));
+            if (currentTx.Any()) lastDateCandidates.Add(currentTx.Max(t => t.ProcessedAt));
+            if (termTx.Any()) lastDateCandidates.Add(termTx.Max(t => t.ProcessedAt));
+            if (transfers.Any()) lastDateCandidates.Add(transfers.Max(t => t.CreatedAt));
+            var lastDate = lastDateCandidates.Any() ? lastDateCandidates.Max() : DateTime.MinValue;
+
+            return new BranchFinancialSummaryDto
+            {
+                BranchId = legacyBranchId,
+                BranchName = branchName,
+                TotalDepositHTG = htgDeposits,
+                TotalWithdrawalHTG = htgWithdrawals,
+                BalanceHTG = htgDeposits - htgWithdrawals,
+                TotalDepositUSD = usdDeposits,
+                TotalWithdrawalUSD = usdWithdrawals,
+                BalanceUSD = usdDeposits - usdWithdrawals,
+                TotalTransactions = totalCount,
+                LastTransactionDate = lastDate
+            };
+        }
+
+        private async Task<(int LegacyBranchId, string BranchName)> ResolveBranchContextAsync(Guid branchIntegrationId)
+        {
+            if (branchIntegrationId == Guid.Empty)
+            {
+                throw new InvalidOperationException("Succursale requise pour cette opération.");
+            }
+
+            if (BranchContextCache.TryGetValue(branchIntegrationId, out var cachedContext))
+            {
+                return cachedContext;
+            }
+
+            var branches = await _context.Branches
+                .AsNoTracking()
+                .Select(b => new { b.Id, b.Name })
+                .ToListAsync();
+
+            foreach (var branch in branches)
+            {
+                if (BranchIntegrationHelper.FromLegacyId(branch.Id) == branchIntegrationId)
+                {
+                    var context = (branch.Id, branch.Name);
+                    BranchContextCache[branchIntegrationId] = context;
+                    return context;
+                }
+            }
+
+            throw new InvalidOperationException("Succursale introuvable pour effectuer le calcul.");
+        }
+
+        private async Task<string> ResolveBranchNameAsync(Guid branchIntegrationId)
+        {
+            if (branchIntegrationId == Guid.Empty)
+            {
+                return "Unknown Branch";
+            }
+
+            try
+            {
+                var (_, branchName) = await ResolveBranchContextAsync(branchIntegrationId);
+                return branchName;
+            }
+            catch
+            {
+                return "Unknown Branch";
+            }
         }
 
         // Helper methods

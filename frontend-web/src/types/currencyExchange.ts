@@ -2,32 +2,30 @@
 
 // Enums
 export enum CurrencyType {
-  HTG = 0,
-  USD = 1,
-  EUR = 2,
-  CAD = 3,
-  DOP = 4,
-  JMD = 5
+  HTG = 1,
+  USD = 2,
+  EUR = 3,
+  CAD = 4,
+  DOP = 5,
+  JMD = 6
 }
 
 export enum ExchangeType {
-  Buy = 0,  // Achèt (Bank buys foreign currency from customer)
-  Sell = 1  // Vann (Bank sells foreign currency to customer)
+  Purchase = 1,  // Client achète des devises (Banque vend)
+  Sale = 2       // Client vend des devises (Banque achète)
 }
 
 export enum RateUpdateMethod {
-  Manual = 0,
-  Automatic = 1,
-  External = 2
+  Manual = 1,
+  Automatic = 2,
+  External = 3
 }
 
 export enum ExchangeTransactionStatus {
-  Draft = 0,
   Pending = 1,
-  Approved = 2,
-  Completed = 3,
-  Cancelled = 4,
-  Rejected = 5
+  Completed = 2,
+  Cancelled = 3,
+  Failed = 4
 }
 
 export enum CurrencyMovementType {
@@ -151,11 +149,9 @@ export interface UpdateExchangeRateDto extends Partial<CreateExchangeRateDto> {
 }
 
 export interface ExchangeCalculationDto {
-  fromCurrency: CurrencyType;
-  toCurrency: CurrencyType;
-  amount: number;
-  exchangeType: ExchangeType;
   branchId: string;
+  exchangeType: ExchangeType;
+  amount: number;
 }
 
 export interface ExchangeCalculationResult {
@@ -172,6 +168,8 @@ export interface ExchangeCalculationResult {
   rateId: string;
   isValid: boolean;
   message?: string;
+  errorMessage?: string;
+  availableBalance?: number;
 }
 
 export interface ProcessExchangeDto {
@@ -310,6 +308,8 @@ export interface ProfitabilityReport {
 
 // Helper functions for formatting
 export const formatCurrencyType = (currency: CurrencyType): string => {
+  // Some legacy payloads may send numeric 0 for HTG; normalize defensively
+  const normalized: CurrencyType = (currency as number) === 0 ? CurrencyType.HTG : currency;
   const currencies = {
     [CurrencyType.HTG]: 'Gourde Haïtienne (HTG)',
     [CurrencyType.USD]: 'Dollar Américain (USD)',
@@ -318,10 +318,11 @@ export const formatCurrencyType = (currency: CurrencyType): string => {
     [CurrencyType.DOP]: 'Peso Dominicain (DOP)',
     [CurrencyType.JMD]: 'Dollar Jamaïcain (JMD)'
   };
-  return currencies[currency] || 'Inconnu';
+  return currencies[normalized] || 'Inconnu';
 };
 
 export const formatCurrencySymbol = (currency: CurrencyType): string => {
+  const normalized: CurrencyType = (currency as number) === 0 ? CurrencyType.HTG : currency;
   const symbols = {
     [CurrencyType.HTG]: 'HTG',
     [CurrencyType.USD]: '$',
@@ -330,34 +331,34 @@ export const formatCurrencySymbol = (currency: CurrencyType): string => {
     [CurrencyType.DOP]: 'RD$',
     [CurrencyType.JMD]: 'J$'
   };
-  return symbols[currency] || '';
+  return symbols[normalized] || '';
 };
 
 export const formatExchangeType = (type: ExchangeType): string => {
   const types = {
-    [ExchangeType.Buy]: 'Achat',
-    [ExchangeType.Sell]: 'Vente'
+    [ExchangeType.Purchase]: 'Achat (client achète)',
+    [ExchangeType.Sale]: 'Vente (client vend)'
   };
   return types[type] || 'Inconnu';
 };
 
 export const formatRateUpdateMethod = (method: RateUpdateMethod): string => {
+  // Normalize legacy numeric 0 to Manual
+  const normalized: RateUpdateMethod = (method as number) === 0 ? RateUpdateMethod.Manual : method;
   const methods = {
     [RateUpdateMethod.Manual]: 'Manuel',
     [RateUpdateMethod.Automatic]: 'Automatique',
     [RateUpdateMethod.External]: 'Externe'
   };
-  return methods[method] || 'Inconnu';
+  return methods[normalized] || 'Inconnu';
 };
 
 export const formatTransactionStatus = (status: ExchangeTransactionStatus): string => {
   const statuses = {
-    [ExchangeTransactionStatus.Draft]: 'Brouillon',
     [ExchangeTransactionStatus.Pending]: 'En attente',
-    [ExchangeTransactionStatus.Approved]: 'Approuvé',
     [ExchangeTransactionStatus.Completed]: 'Complété',
     [ExchangeTransactionStatus.Cancelled]: 'Annulé',
-    [ExchangeTransactionStatus.Rejected]: 'Rejeté'
+    [ExchangeTransactionStatus.Failed]: 'Échoué'
   };
   return statuses[status] || 'Inconnu';
 };

@@ -24,10 +24,10 @@ import {
   getTermTypeLabel,
   TermSavingsType
 } from '../types/clientAccounts';
-import {
+import { 
   InterBranchTransfer, CreateInterBranchTransferDto, UpdateInterBranchTransferDto, InterBranchTransferSearchDto,
-  ApproveInterBranchTransferDto, RejectInterBranchTransferDto, ProcessInterBranchTransferDto, InterBranchTransferLogDto,
-  ConsolidatedTransferReportDto
+  ApproveInterBranchTransferDto, RejectInterBranchTransferDto, ProcessInterBranchTransferDto, DispatchInterBranchTransferDto, InterBranchTransferLogDto,
+  ConsolidatedTransferReportDto 
 } from '../types/interBranchTransfer';
 import {
   CurrencyExchangeRate, CreateExchangeRateDto, UpdateExchangeRateDto, ExchangeRateSearchDto,
@@ -525,58 +525,63 @@ class ApiService {
         }
       });
     }
-    const response: AxiosResponse<InterBranchTransfer[]> = await this.api.get(`/inter-branch-transfer?${params}`);
+    const response: AxiosResponse<InterBranchTransfer[]> = await this.api.get(`/InterBranchTransfer?${params}`);
     return response.data;
   }
 
   async getInterBranchTransfer(id: string): Promise<InterBranchTransfer> {
-    const response: AxiosResponse<InterBranchTransfer> = await this.api.get(`/inter-branch-transfer/${id}`);
+    const response: AxiosResponse<InterBranchTransfer> = await this.api.get(`/InterBranchTransfer/${id}`);
     return response.data;
   }
 
   async createInterBranchTransfer(transferData: CreateInterBranchTransferDto): Promise<InterBranchTransfer> {
-    const response: AxiosResponse<InterBranchTransfer> = await this.api.post('/inter-branch-transfer', transferData);
+    const response: AxiosResponse<InterBranchTransfer> = await this.api.post('/InterBranchTransfer', transferData);
     return response.data;
   }
 
   async updateInterBranchTransfer(transferData: UpdateInterBranchTransferDto): Promise<InterBranchTransfer> {
-    const response: AxiosResponse<InterBranchTransfer> = await this.api.put(`/inter-branch-transfer/${transferData.id}`, transferData);
+    const response: AxiosResponse<InterBranchTransfer> = await this.api.put(`/InterBranchTransfer/${transferData.id}`, transferData);
     return response.data;
   }
 
   async deleteInterBranchTransfer(id: string): Promise<void> {
-    await this.api.delete(`/inter-branch-transfer/${id}`);
+    await this.api.delete(`/InterBranchTransfer/${id}`);
   }
 
   // Transfer workflow operations
   async approveInterBranchTransfer(approvalData: ApproveInterBranchTransferDto): Promise<InterBranchTransfer> {
-    const response: AxiosResponse<InterBranchTransfer> = await this.api.post(`/inter-branch-transfer/${approvalData.id}/approve`, approvalData);
+    const response: AxiosResponse<InterBranchTransfer> = await this.api.put(`/InterBranchTransfer/${approvalData.id}/approve`, approvalData);
     return response.data;
   }
 
   async rejectInterBranchTransfer(id: string, rejectionData: RejectInterBranchTransferDto): Promise<InterBranchTransfer> {
-    const response: AxiosResponse<InterBranchTransfer> = await this.api.post(`/inter-branch-transfer/${id}/reject`, rejectionData);
+    const response: AxiosResponse<InterBranchTransfer> = await this.api.put(`/InterBranchTransfer/${id}/reject`, rejectionData);
     return response.data;
   }
 
   async processInterBranchTransfer(processingData: ProcessInterBranchTransferDto): Promise<InterBranchTransfer> {
-    const response: AxiosResponse<InterBranchTransfer> = await this.api.post(`/inter-branch-transfer/${processingData.id}/process`, processingData);
+    const response: AxiosResponse<InterBranchTransfer> = await this.api.put(`/InterBranchTransfer/${processingData.id}/process`, processingData);
+    return response.data;
+  }
+
+  async dispatchInterBranchTransfer(dispatchData: DispatchInterBranchTransferDto): Promise<InterBranchTransfer> {
+    const response: AxiosResponse<InterBranchTransfer> = await this.api.put(`/InterBranchTransfer/${dispatchData.id}/dispatch`, dispatchData);
     return response.data;
   }
 
   async cancelInterBranchTransfer(id: string, reason: string): Promise<InterBranchTransfer> {
-    const response: AxiosResponse<InterBranchTransfer> = await this.api.post(`/inter-branch-transfer/${id}/cancel`, { reason });
+    const response: AxiosResponse<InterBranchTransfer> = await this.api.put(`/InterBranchTransfer/${id}/cancel`, { reason });
     return response.data;
   }
 
   // Transfer audit and tracking
   async getInterBranchTransferLogs(transferId: string): Promise<InterBranchTransferLogDto[]> {
-    const response: AxiosResponse<InterBranchTransferLogDto[]> = await this.api.get(`/inter-branch-transfer/${transferId}/logs`);
+    const response: AxiosResponse<InterBranchTransferLogDto[]> = await this.api.get(`/InterBranchTransfer/${transferId}/logs`);
     return response.data;
   }
 
   async getTransferAuditTrail(transferId: string): Promise<InterBranchTransferLogDto[]> {
-    const response: AxiosResponse<InterBranchTransferLogDto[]> = await this.api.get(`/inter-branch-transfer/${transferId}/audit-trail`);
+    const response: AxiosResponse<InterBranchTransferLogDto[]> = await this.api.get(`/InterBranchTransfer/${transferId}/audit-trail`);
     return response.data;
   }
 
@@ -586,7 +591,7 @@ class ApiService {
     if (branchId) params.append('branchId', branchId.toString());
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
-    const response: AxiosResponse<ConsolidatedTransferReportDto> = await this.api.get(`/inter-branch-transfer/reports/consolidated?${params}`);
+    const response: AxiosResponse<ConsolidatedTransferReportDto> = await this.api.get(`/InterBranchTransfer/consolidated-report?${params}`);
     return response.data;
   }
 
@@ -594,7 +599,16 @@ class ApiService {
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
-    const response: AxiosResponse<any> = await this.api.get(`/inter-branch-transfer/branch/${branchId}/summary?${params}`);
+    const qs = params.toString();
+    const url = qs
+      ? `/InterBranchTransfer/branch/${branchId}/summary?${qs}`
+      : `/InterBranchTransfer/branch/${branchId}/summary`;
+    const response: AxiosResponse<any> = await this.api.get(url);
+    return response.data;
+  }
+
+  async getBranchFinancialSummary(branchId: number): Promise<any> {
+    const response: AxiosResponse<any> = await this.api.get(`/Branch/${branchId}/financial-summary`);
     return response.data;
   }
 
@@ -829,13 +843,24 @@ class ApiService {
 
   // Exchange Transaction Management
   async calculateExchange(calculation: ExchangeCalculationDto): Promise<ExchangeCalculationResult> {
-    const response: AxiosResponse<ExchangeCalculationResult> = await this.api.post('/currency-exchange/calculate', calculation);
-    return response.data;
+    const response: AxiosResponse<any> = await this.api.post('/currency-exchange/calculate', calculation);
+    return response.data.data;
   }
 
   async processExchange(exchangeData: ProcessExchangeDto): Promise<ExchangeTransaction> {
-    const response: AxiosResponse<ExchangeTransaction> = await this.api.post('/currency-exchange/process', exchangeData);
-    return response.data;
+    const response: AxiosResponse<any> = await this.api.post('/currency-exchange/transactions', {
+      branchId: exchangeData.branchId,
+      fromCurrency: exchangeData.fromCurrency,
+      toCurrency: exchangeData.toCurrency,
+      exchangeType: exchangeData.exchangeType,
+      amount: exchangeData.fromAmount,
+      fromAmount: exchangeData.fromAmount,
+      customerName: exchangeData.customerName,
+      customerDocument: exchangeData.customerDocument,
+      customerPhone: exchangeData.customerPhone,
+      notes: exchangeData.notes
+    });
+    return response.data.data;
   }
 
   async getExchangeTransactions(searchDto?: ExchangeTransactionSearchDto): Promise<ExchangeTransaction[]> {

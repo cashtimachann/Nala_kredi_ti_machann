@@ -6,11 +6,6 @@ import {
   CardContent,
   Typography,
   Button,
-  TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Alert,
   Chip,
   List,
@@ -27,21 +22,15 @@ import {
   CheckCircle as CheckIcon,
   Send as SendIcon,
 } from '@mui/icons-material';
+import InterBranchTransferModal from './InterBranchTransferModal';
 
 const SpecialOperationsModule: React.FC = () => {
   const [transferDialogOpen, setTransferDialogOpen] = useState(false);
-  const [transferData, setTransferData] = useState({
-    toBranch: '',
-    amount: '',
-    currency: 'HTG',
-    reason: '',
-  });
 
-  const handleTransfer = () => {
+  const handleTransferSubmit = (transferData: any) => {
     // TODO: API call to process transfer
     console.log('Processing transfer:', transferData);
-    setTransferDialogOpen(false);
-    setTransferData({ toBranch: '', amount: '', currency: 'HTG', reason: '' });
+    // The modal will close itself after submission
   };
 
   return (
@@ -260,82 +249,12 @@ const SpecialOperationsModule: React.FC = () => {
         </Grid>
       </Grid>
 
-      {/* Transfer Dialog */}
-      <Dialog open={transferDialogOpen} onClose={() => setTransferDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          🔄 Nouveau Transfert Inter-Succursale
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ mt: 2 }}>
-            <TextField
-              fullWidth
-              select
-              label="Succursale Destinataire"
-              value={transferData.toBranch}
-              onChange={(e) => setTransferData({ ...transferData, toBranch: e.target.value })}
-              sx={{ mb: 2 }}
-              SelectProps={{ native: true }}
-            >
-              <option value="">Sélectionnez...</option>
-              <option value="cap-haitien">Cap-Haïtien</option>
-              <option value="gonaives">Gonaïves</option>
-              <option value="saint-marc">Saint-Marc</option>
-              <option value="jacmel">Jacmel</option>
-            </TextField>
-
-            <Grid container spacing={2} sx={{ mb: 2 }}>
-              <Grid item xs={8}>
-                <TextField
-                  fullWidth
-                  label="Montant"
-                  type="number"
-                  value={transferData.amount}
-                  onChange={(e) => setTransferData({ ...transferData, amount: e.target.value })}
-                />
-              </Grid>
-              <Grid item xs={4}>
-                <TextField
-                  fullWidth
-                  select
-                  label="Devise"
-                  value={transferData.currency}
-                  onChange={(e) => setTransferData({ ...transferData, currency: e.target.value })}
-                  SelectProps={{ native: true }}
-                >
-                  <option value="HTG">HTG</option>
-                  <option value="USD">USD</option>
-                </TextField>
-              </Grid>
-            </Grid>
-
-            <TextField
-              fullWidth
-              multiline
-              rows={3}
-              label="Motif du Transfert"
-              value={transferData.reason}
-              onChange={(e) => setTransferData({ ...transferData, reason: e.target.value })}
-              sx={{ mb: 2 }}
-            />
-
-            {Number(transferData.amount) > 100000 && (
-              <Alert severity="warning">
-                ⚠️ Montant élevé - Une validation du Directeur Régional sera requise
-              </Alert>
-            )}
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setTransferDialogOpen(false)}>Annuler</Button>
-          <Button 
-            variant="contained" 
-            onClick={handleTransfer}
-            disabled={!transferData.toBranch || !transferData.amount || !transferData.reason}
-          >
-            Initier Transfert
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* Transfer Modal */}
+      <InterBranchTransferModal
+        open={transferDialogOpen}
+        onClose={() => setTransferDialogOpen(false)}
+        onSubmit={handleTransferSubmit}
+      />
     </Box>
   );
 };

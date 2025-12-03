@@ -1,0 +1,315 @@
+<!-- Exemple d'interface XAML pour les rapports -->
+<!-- Fichier: frontend-desktop/NalaCreditDesktop/Views/BranchReportView.xaml -->
+
+<Window x:Class="NalaCreditDesktop.Views.BranchReportView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Rapò Sikisyal / Rapports Succursale" 
+        Height="800" Width="1200"
+        WindowStartupLocation="CenterScreen">
+    
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- En-tête -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,20">
+            <TextBlock Text="📊 RAPÒ JOUNEN / RAPPORT JOURNALIER" 
+                       FontSize="24" 
+                       FontWeight="Bold" 
+                       Foreground="#2c3e50"
+                       VerticalAlignment="Center"/>
+        </StackPanel>
+
+        <!-- Contrôles de filtre -->
+        <Border Grid.Row="1" 
+                Background="#ecf0f1" 
+                CornerRadius="5" 
+                Padding="15" 
+                Margin="0,0,0,20">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Dat / Date:" 
+                           VerticalAlignment="Center" 
+                           Margin="0,0,10,0"
+                           FontWeight="Bold"/>
+                <DatePicker SelectedDate="{Binding SelectedDate}" 
+                           Width="150" 
+                           Margin="0,0,20,0"/>
+                
+                <Button Content="📥 Chaje Rapò / Charger" 
+                        Command="{Binding LoadReportCommand}"
+                        Padding="15,8"
+                        Background="#3498db"
+                        Foreground="White"
+                        BorderThickness="0"
+                        Cursor="Hand"
+                        Margin="0,0,10,0"/>
+                
+                <Button Content="💾 Ekspòte CSV / Export CSV" 
+                        Command="{Binding ExportCsvCommand}"
+                        Padding="15,8"
+                        Background="#27ae60"
+                        Foreground="White"
+                        BorderThickness="0"
+                        Cursor="Hand"
+                        Margin="0,0,10,0"/>
+                
+                <Button Content="🖨️ Enprime / Imprimer" 
+                        Command="{Binding PrintCommand}"
+                        Padding="15,8"
+                        Background="#95a5a6"
+                        Foreground="White"
+                        BorderThickness="0"
+                        Cursor="Hand"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Contenu du rapport -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <!-- Indicateur de chargement -->
+                <TextBlock Text="⏳ Chaje... / Chargement..." 
+                          FontSize="18"
+                          HorizontalAlignment="Center"
+                          Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                <!-- Rapport -->
+                <StackPanel Visibility="{Binding CurrentReport, Converter={StaticResource NullToVisibilityConverter}}">
+                    
+                    <!-- En-tête du rapport -->
+                    <Border Background="#3498db" 
+                            CornerRadius="5" 
+                            Padding="15" 
+                            Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="{Binding CurrentReport.BranchName}" 
+                                      FontSize="20" 
+                                      FontWeight="Bold" 
+                                      Foreground="White"/>
+                            <TextBlock FontSize="14" 
+                                      Foreground="White">
+                                <Run Text="Rapò pou dat / Rapport pour le: "/>
+                                <Run Text="{Binding CurrentReport.ReportDate, StringFormat='{}{0:dd/MM/yyyy}'}"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Résumé général -->
+                    <Border Background="#ecf0f1" 
+                            CornerRadius="5" 
+                            Padding="15" 
+                            Margin="0,0,0,20">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Crédits décaissés -->
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="💰 KREDI BAY / CRÉDITS" 
+                                          FontWeight="Bold" 
+                                          Margin="0,0,0,5"/>
+                                <TextBlock FontSize="24" 
+                                          Foreground="#27ae60" 
+                                          FontWeight="Bold">
+                                    <Run Text="{Binding CurrentReport.CreditsDisbursedCount}"/>
+                                </TextBlock>
+                                <TextBlock FontSize="12">
+                                    <Run Text="HTG: "/>
+                                    <Run Text="{Binding CurrentReport.TotalCreditsDisbursedHTG, StringFormat='{}{0:N2}'}"/>
+                                </TextBlock>
+                                <TextBlock FontSize="12">
+                                    <Run Text="USD: "/>
+                                    <Run Text="{Binding CurrentReport.TotalCreditsDisbursedUSD, StringFormat='{}{0:N2}'}"/>
+                                </TextBlock>
+                            </StackPanel>
+
+                            <!-- Paiements -->
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="💵 PEMAN / PAIEMENTS" 
+                                          FontWeight="Bold" 
+                                          Margin="0,0,0,5"/>
+                                <TextBlock FontSize="24" 
+                                          Foreground="#3498db" 
+                                          FontWeight="Bold">
+                                    <Run Text="{Binding CurrentReport.PaymentsReceivedCount}"/>
+                                </TextBlock>
+                                <TextBlock FontSize="12">
+                                    <Run Text="HTG: "/>
+                                    <Run Text="{Binding CurrentReport.TotalPaymentsReceivedHTG, StringFormat='{}{0:N2}'}"/>
+                                </TextBlock>
+                                <TextBlock FontSize="12">
+                                    <Run Text="USD: "/>
+                                    <Run Text="{Binding CurrentReport.TotalPaymentsReceivedUSD, StringFormat='{}{0:N2}'}"/>
+                                </TextBlock>
+                            </StackPanel>
+
+                            <!-- Dépôts -->
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="📥 DEPO / DÉPÔTS" 
+                                          FontWeight="Bold" 
+                                          Margin="0,0,0,5"/>
+                                <TextBlock FontSize="24" 
+                                          Foreground="#9b59b6" 
+                                          FontWeight="Bold">
+                                    <Run Text="{Binding CurrentReport.DepositsCount}"/>
+                                </TextBlock>
+                                <TextBlock FontSize="12">
+                                    <Run Text="HTG: "/>
+                                    <Run Text="{Binding CurrentReport.TotalDepositsHTG, StringFormat='{}{0:N2}'}"/>
+                                </TextBlock>
+                                <TextBlock FontSize="12">
+                                    <Run Text="USD: "/>
+                                    <Run Text="{Binding CurrentReport.TotalDepositsUSD, StringFormat='{}{0:N2}'}"/>
+                                </TextBlock>
+                            </StackPanel>
+
+                            <!-- Retraits -->
+                            <StackPanel Grid.Column="3">
+                                <TextBlock Text="📤 RETRÈ / RETRAITS" 
+                                          FontWeight="Bold" 
+                                          Margin="0,0,0,5"/>
+                                <TextBlock FontSize="24" 
+                                          Foreground="#e74c3c" 
+                                          FontWeight="Bold">
+                                    <Run Text="{Binding CurrentReport.WithdrawalsCount}"/>
+                                </TextBlock>
+                                <TextBlock FontSize="12">
+                                    <Run Text="HTG: "/>
+                                    <Run Text="{Binding CurrentReport.TotalWithdrawalsHTG, StringFormat='{}{0:N2}'}"/>
+                                </TextBlock>
+                                <TextBlock FontSize="12">
+                                    <Run Text="USD: "/>
+                                    <Run Text="{Binding CurrentReport.TotalWithdrawalsUSD, StringFormat='{}{0:N2}'}"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Solde de caisse -->
+                    <Border Background="#fff" 
+                            BorderBrush="#bdc3c7" 
+                            BorderThickness="1"
+                            CornerRadius="5" 
+                            Padding="15" 
+                            Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="💼 BALANS KÈS / SOLDE DE CAISSE" 
+                                      FontSize="16" 
+                                      FontWeight="Bold" 
+                                      Margin="0,0,0,10"/>
+                            
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Louvèti / Ouverture" FontWeight="Bold"/>
+                                    <TextBlock>
+                                        <Run Text="HTG: "/>
+                                        <Run Text="{Binding CurrentReport.CashBalance.OpeningBalanceHTG, StringFormat='{}{0:N2}'}"/>
+                                    </TextBlock>
+                                    <TextBlock>
+                                        <Run Text="USD: "/>
+                                        <Run Text="{Binding CurrentReport.CashBalance.OpeningBalanceUSD, StringFormat='{}{0:N2}'}"/>
+                                    </TextBlock>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="Fèmti / Fermeture" FontWeight="Bold"/>
+                                    <TextBlock>
+                                        <Run Text="HTG: "/>
+                                        <Run Text="{Binding CurrentReport.CashBalance.ClosingBalanceHTG, StringFormat='{}{0:N2}'}"/>
+                                    </TextBlock>
+                                    <TextBlock>
+                                        <Run Text="USD: "/>
+                                        <Run Text="{Binding CurrentReport.CashBalance.ClosingBalanceUSD, StringFormat='{}{0:N2}'}"/>
+                                    </TextBlock>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Chanjman / Variation" FontWeight="Bold"/>
+                                    <TextBlock Foreground="{Binding CurrentReport.CashBalance.NetChangeHTG, Converter={StaticResource AmountColorConverter}}">
+                                        <Run Text="HTG: "/>
+                                        <Run Text="{Binding CurrentReport.CashBalance.NetChangeHTG, StringFormat='{}{0:+#,##0.00;-#,##0.00;0.00}'}"/>
+                                    </TextBlock>
+                                    <TextBlock Foreground="{Binding CurrentReport.CashBalance.NetChangeUSD, Converter={StaticResource AmountColorConverter}}">
+                                        <Run Text="USD: "/>
+                                        <Run Text="{Binding CurrentReport.CashBalance.NetChangeUSD, StringFormat='{}{0:+#,##0.00;-#,##0.00;0.00}'}"/>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Crédits décaissés - Liste détaillée -->
+                    <Border Background="#fff" 
+                            BorderBrush="#bdc3c7" 
+                            BorderThickness="1"
+                            CornerRadius="5" 
+                            Padding="15" 
+                            Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="💰 DETAY KREDI BAY / DÉTAIL CRÉDITS DÉCAISSÉS" 
+                                      FontSize="16" 
+                                      FontWeight="Bold" 
+                                      Margin="0,0,0,10"/>
+                            
+                            <DataGrid ItemsSource="{Binding CurrentReport.CreditsDisbursed}"
+                                     AutoGenerateColumns="False"
+                                     IsReadOnly="True"
+                                     AlternatingRowBackground="#f5f5f5">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Nimewo / Numéro" Binding="{Binding CreditNumber}" Width="120"/>
+                                    <DataGridTextColumn Header="Kliyann / Client" Binding="{Binding CustomerName}" Width="*"/>
+                                    <DataGridTextColumn Header="Montan / Montant" Binding="{Binding Amount, StringFormat='{}{0:N2}'}" Width="100"/>
+                                    <DataGridTextColumn Header="Lajan / Devise" Binding="{Binding Currency}" Width="80"/>
+                                    <DataGridTextColumn Header="Dat / Date" Binding="{Binding DisbursementDate, StringFormat='{}{0:dd/MM/yyyy}'}" Width="100"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Paiements reçus - Liste détaillée -->
+                    <Border Background="#fff" 
+                            BorderBrush="#bdc3c7" 
+                            BorderThickness="1"
+                            CornerRadius="5" 
+                            Padding="15" 
+                            Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="💵 DETAY PEMAN / DÉTAIL PAIEMENTS" 
+                                      FontSize="16" 
+                                      FontWeight="Bold" 
+                                      Margin="0,0,0,10"/>
+                            
+                            <DataGrid ItemsSource="{Binding CurrentReport.PaymentsReceived}"
+                                     AutoGenerateColumns="False"
+                                     IsReadOnly="True"
+                                     AlternatingRowBackground="#f5f5f5">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Kredi / Crédit" Binding="{Binding CreditNumber}" Width="120"/>
+                                    <DataGridTextColumn Header="Kliyann / Client" Binding="{Binding CustomerName}" Width="*"/>
+                                    <DataGridTextColumn Header="Montan / Montant" Binding="{Binding Amount, StringFormat='{}{0:N2}'}" Width="100"/>
+                                    <DataGridTextColumn Header="Prensipal / Principal" Binding="{Binding PrincipalPaid, StringFormat='{}{0:N2}'}" Width="100"/>
+                                    <DataGridTextColumn Header="Enterè / Intérêt" Binding="{Binding InterestPaid, StringFormat='{}{0:N2}'}" Width="100"/>
+                                    <DataGridTextColumn Header="Lajan / Devise" Binding="{Binding Currency}" Width="80"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

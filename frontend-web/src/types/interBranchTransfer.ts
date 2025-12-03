@@ -34,20 +34,21 @@ export interface InterBranchTransfer {
 }
 
 export enum Currency {
-  HTG = 1,
-  USD = 2
+  HTG = 0,
+  USD = 1
 }
 
 export enum TransferStatus {
   Pending = 0,
   Approved = 1,
-  InTransit = 2,
-  Completed = 3,
-  Rejected = 4,
+  Rejected = 2,
+  InTransit = 3,
+  Completed = 4,
   Cancelled = 5
 }
 
 export interface CreateInterBranchTransferDto {
+  fromBranchId?: number; // Optional for SuperAdmin, required if user has no BranchId
   toBranchId: number;
   currency: Currency;
   amount: number;
@@ -75,6 +76,13 @@ export interface RejectInterBranchTransferDto {
 }
 
 export interface ProcessInterBranchTransferDto {
+  id: string;
+  referenceNumber?: string;
+  trackingNumber?: string;
+  notes?: string;
+}
+
+export interface DispatchInterBranchTransferDto {
   id: string;
   referenceNumber?: string;
   trackingNumber?: string;
@@ -110,6 +118,10 @@ export interface BranchTransferSummaryDto {
   branchName: string;
   totalSent: number;
   totalReceived: number;
+  totalSentHTG?: number;
+  totalReceivedHTG?: number;
+  totalSentUSD?: number;
+  totalReceivedUSD?: number;
   pendingTransfers: number;
   completedTransfers: number;
   lastTransferDate: string;
@@ -124,6 +136,7 @@ export interface ConsolidatedTransferReportDto {
 
 // Form data interfaces for frontend components
 export interface InterBranchTransferFormData {
+  fromBranchId?: number; // Optional for users with BranchId, required for SuperAdmin
   toBranchId: number;
   currency: Currency;
   amount: number;

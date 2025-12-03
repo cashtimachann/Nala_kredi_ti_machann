@@ -40,6 +40,11 @@ namespace NalaCreditAPI.DTOs
 
     public class CreateInterBranchTransferDto
     {
+        /// <summary>
+        /// Optional. If not provided, will use the user's branch. Required for SuperAdmin.
+        /// </summary>
+        public int? FromBranchId { get; set; }
+
         [Required]
         public int ToBranchId { get; set; }
 
@@ -106,6 +111,8 @@ namespace NalaCreditAPI.DTOs
         public string? Notes { get; set; }
     }
 
+    // Duplicate removed below; keep single definition above
+
     public class ProcessInterBranchTransferDto
     {
         public Guid Id { get; set; }
@@ -118,6 +125,8 @@ namespace NalaCreditAPI.DTOs
 
         public string? Notes { get; set; }
     }
+
+    
 
     public class InterBranchTransferSearchDto
     {
@@ -149,8 +158,15 @@ namespace NalaCreditAPI.DTOs
     {
         public int BranchId { get; set; }
         public string BranchName { get; set; } = string.Empty;
+        // Converted totals (existing) - typically in converted units (e.g., HTG)
         public decimal TotalSent { get; set; }
         public decimal TotalReceived { get; set; }
+
+        // Per-currency totals (new)
+        public decimal TotalSentHTG { get; set; }
+        public decimal TotalReceivedHTG { get; set; }
+        public decimal TotalSentUSD { get; set; }
+        public decimal TotalReceivedUSD { get; set; }
         public int PendingTransfers { get; set; }
         public int CompletedTransfers { get; set; }
         public DateTime LastTransferDate { get; set; }

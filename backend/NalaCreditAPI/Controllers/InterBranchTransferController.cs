@@ -23,16 +23,35 @@ public class InterBranchTransferController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin")]
     public async Task<ActionResult<InterBranchTransferDto>> CreateTransfer([FromBody] CreateInterBranchTransferDto dto)
     {
         try
         {
-            // Get current user branch ID (this would come from claims or user context)
-            var userBranchId = GetCurrentUserBranchId();
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "system";
+            // Get current user branch ID
+            int fromBranchId;
+            
+            // If FromBranchId is provided in DTO (e.g., by SuperAdmin), use it
+            if (dto.FromBranchId.HasValue && dto.FromBranchId.Value > 0)
+            {
+                fromBranchId = dto.FromBranchId.Value;
+            }
+            else
+            {
+                // Otherwise, use user's BranchId claim (required for non-SuperAdmin users)
+                var branchClaim = User.FindFirst("BranchId")?.Value;
+                if (string.IsNullOrWhiteSpace(branchClaim) || !int.TryParse(branchClaim, out fromBranchId) || fromBranchId <= 0)
+                {
+                    return BadRequest("BranchId manquant. Veuillez spécifier FromBranchId dans la requête ou assurez-vous que votre compte est associé à une succursale.");
+                }
+            }
 
-            var result = await _transferService.CreateTransferAsync(dto, userBranchId, userId);
+            // Prefer stable user identifier
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                         ?? User.Identity?.Name
+                         ?? "system";
+
+            var result = await _transferService.CreateTransferAsync(dto, fromBranchId, userId);
             return CreatedAtAction(nameof(GetTransfer), new { transferId = result.Id }, result);
         }
         catch (ArgumentException ex)
@@ -85,7 +104,7 @@ public class InterBranchTransferController : ControllerBase
     }
 
     [HttpPut("{transferId}/approve")]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin")]
     public async Task<ActionResult<InterBranchTransferDto>> ApproveTransfer(Guid transferId)
     {
         try
@@ -110,7 +129,7 @@ public class InterBranchTransferController : ControllerBase
     }
 
     [HttpPut("{transferId}/reject")]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin")]
     public async Task<ActionResult<InterBranchTransferDto>> RejectTransfer(Guid transferId, [FromBody] RejectInterBranchTransferDto dto)
     {
         try
@@ -135,7 +154,7 @@ public class InterBranchTransferController : ControllerBase
     }
 
     [HttpPut("{transferId}/process")]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin")]
     public async Task<ActionResult<InterBranchTransferDto>> ProcessTransfer(Guid transferId, [FromBody] ProcessInterBranchTransferDto dto)
     {
         try
@@ -159,8 +178,35 @@ public class InterBranchTransferController : ControllerBase
         }
     }
 
+    [HttpPut("{transferId}/dispatch")]
+    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin")]
+    public async Task<ActionResult<InterBranchTransferDto>> DispatchTransfer(Guid transferId, [FromBody] DispatchInterBranchTransferDto dto)
+    {
+        try
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                         ?? User.Identity?.Name
+                         ?? "system";
+            var result = await _transferService.DispatchTransferAsync(transferId, dto, userId);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound("Transfer not found");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error dispatching transfer {TransferId}", transferId);
+            return StatusCode(500, "Une erreur interne s'est produite");
+        }
+    }
+
     [HttpPut("{transferId}/cancel")]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin")]
     public async Task<ActionResult<InterBranchTransferDto>> CancelTransfer(Guid transferId, [FromBody] RejectInterBranchTransferDto dto)
     {
         try
@@ -185,7 +231,7 @@ public class InterBranchTransferController : ControllerBase
     }
 
     [HttpGet("consolidated-report")]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin")]
     public async Task<ActionResult<ConsolidatedTransferReportDto>> GetConsolidatedReport([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
     {
         try
@@ -222,35 +268,31 @@ public class InterBranchTransferController : ControllerBase
     private int GetCurrentUserBranchId()
     {
         var branchClaim = User.FindFirst("BranchId")?.Value;
-        if (int.TryParse(branchClaim, out var branchId) && branchId > 0)
+        if (!string.IsNullOrWhiteSpace(branchClaim) && int.TryParse(branchClaim, out var branchId) && branchId > 0)
         {
             return branchId;
         }
-        throw new InvalidOperationException("BranchId manke nan claims itilizatè a");
+        throw new UnauthorizedAccessException("BranchId claim not found for user");
     }
-
-    [HttpPut("{transferId}/dispatch")]
-    [Authorize(Roles = "Admin,Manager")]
-    public async Task<ActionResult<InterBranchTransferDto>> DispatchTransfer(Guid transferId, [FromBody] DispatchInterBranchTransferDto dto)
+    
+    [HttpGet("branch/{branchId}/summary")]
+    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin,Director")]
+    public async Task<ActionResult<BranchTransferSummaryDto>> GetBranchTransferSummary(int branchId, [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
     {
         try
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "system";
-            var result = await _transferService.DispatchTransferAsync(transferId, dto, userId);
-            return Ok(result);
+            var summary = await _transferService.GetBranchTransferSummaryAsync(branchId, startDate, endDate);
+            return Ok(summary);
         }
-        catch (InvalidOperationException ex)
+        catch (KeyNotFoundException ex)
         {
-            return BadRequest(ex.Message);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound("Transfer not found");
+            _logger.LogWarning(ex, "Branch not found: {BranchId}", branchId);
+            return NotFound(new { message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error dispatching transfer {TransferId}", transferId);
-            return StatusCode(500, "Une erreur interne s'est produite");
+            _logger.LogError(ex, "Error getting branch transfer summary for {BranchId}", branchId);
+            return StatusCode(500, new { message = "Erreur lors de la récupération du résumé", error = ex.Message });
         }
     }
 }

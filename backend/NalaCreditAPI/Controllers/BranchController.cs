@@ -652,6 +652,126 @@ namespace NalaCreditAPI.Controllers
             }
         }
 
+        /// <summary>
+        /// Get financial summary for a branch including all deposits and withdrawals
+        /// Aggregates across generic Transactions, SavingsTransactions, CurrentAccountTransactions and TermSavingsTransactions
+        /// </summary>
+        [HttpGet("{id}/financial-summary")]
+        public async Task<ActionResult<BranchFinancialSummaryDto>> GetBranchFinancialSummary(int id)
+        {
+            try
+            {
+                var branch = await _context.Branches.FindAsync(id);
+                if (branch == null)
+                {
+                    return NotFound(new { message = "Succursale non trouvée" });
+                }
+
+                // Helper method to standardize currency comparison
+                bool IsHTG(object currency) => currency switch
+                {
+                    Currency c => c == Currency.HTG,
+                    SavingsCurrency sc => sc == SavingsCurrency.HTG,
+                    ClientCurrency cc => cc == ClientCurrency.HTG,
+                    _ => false
+                };
+
+                bool IsUSD(object currency) => currency switch
+                {
+                    Currency c => c == Currency.USD,
+                    SavingsCurrency sc => sc == SavingsCurrency.USD,
+                    ClientCurrency cc => cc == ClientCurrency.USD,
+                    _ => false
+                };
+
+                // Base transactions (generic)
+                var baseTx = await _context.Transactions
+                    .Where(t => t.BranchId == id && t.Status == TransactionStatus.Completed)
+                    .ToListAsync();
+
+                // Savings transactions
+                var savingsTx = await _context.SavingsTransactions
+                    .Where(t => t.BranchId == id && t.Status == SavingsTransactionStatus.Completed)
+                    .ToListAsync();
+
+                // Current account transactions
+                var currentTx = await _context.CurrentAccountTransactions
+                    .Where(t => t.BranchId == id && t.Status == SavingsTransactionStatus.Completed)
+                    .ToListAsync();
+
+                // Term savings transactions
+                var termTx = await _context.TermSavingsTransactions
+                    .Where(t => t.BranchId == id && t.Status == SavingsTransactionStatus.Completed)
+                    .ToListAsync();
+
+                // Inter-branch transfers (completed)
+                var transfers = await _context.InterBranchTransfers
+                    .Where(t => (t.FromBranchId == id || t.ToBranchId == id) && t.Status == TransferStatus.Completed)
+                    .ToListAsync();
+
+                // HTG totals
+                var htgDeposits = 0m
+                    + baseTx.Where(t => t.Type == TransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
+                    + savingsTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
+                    + currentTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
+                    + termTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
+                    + transfers.Where(t => t.ToBranchId == id && IsHTG(t.Currency)).Sum(t => t.Amount);
+
+                var htgWithdrawals = 0m
+                    + baseTx.Where(t => t.Type == TransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
+                    + savingsTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
+                    + currentTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
+                    + termTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
+                    + transfers.Where(t => t.FromBranchId == id && IsHTG(t.Currency)).Sum(t => t.Amount);
+
+                // USD totals
+                var usdDeposits = 0m
+                    + baseTx.Where(t => t.Type == TransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
+                    + savingsTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
+                    + currentTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
+                    + termTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
+                    + transfers.Where(t => t.ToBranchId == id && IsUSD(t.Currency)).Sum(t => t.Amount);
+
+                var usdWithdrawals = 0m
+                    + baseTx.Where(t => t.Type == TransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)
+                    + savingsTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)
+                    + currentTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)
+                    + termTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)
+                    + transfers.Where(t => t.FromBranchId == id && IsUSD(t.Currency)).Sum(t => t.Amount);
+
+                // Total count and last date across all
+                var totalCount = baseTx.Count + savingsTx.Count + currentTx.Count + termTx.Count + transfers.Count;
+                var lastDateCandidates = new List<DateTime>();
+                if (baseTx.Any()) lastDateCandidates.Add(baseTx.Max(t => t.CreatedAt));
+                if (savingsTx.Any()) lastDateCandidates.Add(savingsTx.Max(t => t.ProcessedAt));
+                if (currentTx.Any()) lastDateCandidates.Add(currentTx.Max(t => t.ProcessedAt));
+                if (termTx.Any()) lastDateCandidates.Add(termTx.Max(t => t.ProcessedAt));
+                if (transfers.Any()) lastDateCandidates.Add(transfers.Max(t => t.CreatedAt));
+                var lastDate = lastDateCandidates.Any() ? lastDateCandidates.Max() : DateTime.MinValue;
+
+                var summary = new BranchFinancialSummaryDto
+                {
+                    BranchId = id,
+                    BranchName = branch.Name,
+                    TotalDepositHTG = htgDeposits,
+                    TotalWithdrawalHTG = htgWithdrawals,
+                    BalanceHTG = htgDeposits - htgWithdrawals,
+                    TotalDepositUSD = usdDeposits,
+                    TotalWithdrawalUSD = usdWithdrawals,
+                    BalanceUSD = usdDeposits - usdWithdrawals,
+                    TotalTransactions = totalCount,
+                    LastTransactionDate = lastDate
+                };
+
+                return Ok(summary);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetBranchFinancialSummary failed for branch {BranchId}", id);
+                return StatusCode(500, new { message = "Erreur lors du chargement du résumé financier", error = ex.Message });
+            }
+        }
+
         public class RejectLoanRequest
         {
             public string Reason { get; set; } = string.Empty;

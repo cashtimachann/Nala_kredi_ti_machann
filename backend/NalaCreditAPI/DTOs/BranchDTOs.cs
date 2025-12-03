@@ -96,4 +96,18 @@ namespace NalaCreditAPI.DTOs
     {
         public string ManagerId { get; set; } = string.Empty;
     }
+
+    public class BranchFinancialSummaryDto
+    {
+        public int BranchId { get; set; }
+        public string BranchName { get; set; } = string.Empty;
+        public decimal TotalDepositHTG { get; set; }
+        public decimal TotalWithdrawalHTG { get; set; }
+        public decimal BalanceHTG { get; set; }
+        public decimal TotalDepositUSD { get; set; }
+        public decimal TotalWithdrawalUSD { get; set; }
+        public decimal BalanceUSD { get; set; }
+        public int TotalTransactions { get; set; }
+        public DateTime LastTransactionDate { get; set; }
+    }
 }

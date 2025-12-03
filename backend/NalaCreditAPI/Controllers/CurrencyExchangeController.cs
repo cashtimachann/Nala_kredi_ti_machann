@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using NalaCreditAPI.DTOs;
 using NalaCreditAPI.Models;
 using NalaCreditAPI.Services;
+using NalaCreditAPI.Utilities;
 using System.Security.Claims;
 
 namespace NalaCreditAPI.Controllers
@@ -28,10 +29,21 @@ namespace NalaCreditAPI.Controllers
             return User.FindFirst(ClaimTypes.Name)?.Value ?? "System";
         }
 
-        private Guid GetCurrentBranchId()
+        private Guid GetCurrentBranchId(string? branchIdSource = null)
         {
+            if (BranchIntegrationHelper.TryParseBranchGuid(branchIdSource, out var branchGuidFromPayload, out _))
+            {
+                return branchGuidFromPayload;
+            }
+
             var branchIdClaim = User.FindFirst("BranchId")?.Value;
-            return Guid.TryParse(branchIdClaim, out var branchId) ? branchId : Guid.Empty;
+            if (BranchIntegrationHelper.TryParseBranchGuid(branchIdClaim, out var branchGuidFromClaim, out _))
+            {
+                return branchGuidFromClaim;
+            }
+
+            _logger.LogWarning("Unable to resolve branch context. Provided value: {ProvidedValue}, claim value: {ClaimValue}", branchIdSource, branchIdClaim);
+            return Guid.Empty;
         }
 
         #region Exchange Rate Management
@@ -149,7 +161,7 @@ namespace NalaCreditAPI.Controllers
         {
             try
             {
-                var branchId = GetCurrentBranchId();
+                var branchId = GetCurrentBranchId(dto.BranchId);
                 if (branchId == Guid.Empty)
                 {
                     return BadRequest(new { success = false, message = "Branch information is required" });
@@ -171,7 +183,7 @@ namespace NalaCreditAPI.Controllers
         {
             try
             {
-                var branchId = GetCurrentBranchId();
+                var branchId = GetCurrentBranchId(dto.BranchId);
                 if (branchId == Guid.Empty)
                 {
                     return BadRequest(new { success = false, message = "Branch information is required" });
