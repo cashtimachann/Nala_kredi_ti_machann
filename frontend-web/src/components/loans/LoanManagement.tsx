@@ -2056,7 +2056,7 @@ const LoanManagement: React.FC = () => {
               <div className="flex flex-wrap items-center gap-4">
                 <button
                   onClick={handleExportPdf}
-                  className="px-3 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
+                  className="px-3 py-2 border border-gray-300 rounded-md text-sm text-black hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                   title="Exporter PDF"
                 >
                   Exporter PDF

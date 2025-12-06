@@ -237,15 +237,15 @@ const CurrentAccountTransactions: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Transactions - Comptes Courants</h1>
-          <p className="text-sm text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-black">Transactions - Comptes Courants</h1>
+          <p className="text-sm text-black mt-1">
             Historique des transactions des comptes courants
           </p>
         </div>
         <div className="flex gap-3">
           <button
             onClick={() => window.location.reload()}
-            className="flex items-center gap-2 px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="flex items-center gap-2 px-4 py-2 text-black bg-white border border-gray-300 rounded-lg hover:bg-gray-100"
           >
             <RefreshCw className="w-4 h-4" />
             Actualiser
@@ -326,10 +326,10 @@ const CurrentAccountTransactions: React.FC = () => {
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Filtres</h2>
+          <h2 className="text-lg font-semibold text-black">Filtres</h2>
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700"
+            className="flex items-center gap-2 text-sm text-black hover:text-black"
           >
             <Filter className="w-4 h-4" />
             {showFilters ? 'Masquer' : 'Afficher'} les filtres

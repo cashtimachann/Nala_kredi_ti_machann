@@ -1,6 +1,6 @@
 // Branch Report Dashboard - For Branch Managers and Supervisors
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { branchReportService } from '../../services/branchReportService';
 import apiService from '../../services/apiService';
 import {
@@ -8,6 +8,430 @@ import {
   MonthlyBranchReportDto,
   BranchOverviewDto,
 } from '../../types/branchReports';
+
+type SupportedCurrency = 'HTG' | 'USD';
+
+const toNumber = (value: any): number => {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+
+  let candidate: any = value;
+  if (typeof value === 'string') {
+    candidate = value.replace(/[^0-9+\-.,]/g, '');
+    if (candidate.includes(',') && !candidate.includes('.')) {
+      candidate = candidate.replace(',', '.');
+    } else {
+      candidate = candidate.replace(/,/g, '');
+    }
+  }
+
+  const numeric = Number(candidate);
+  return Number.isFinite(numeric) ? numeric : 0;
+};
+
+const keyIncludesBase = (normalizedKey: string, baseLower: string): boolean => {
+  if (normalizedKey.includes(baseLower)) {
+    return true;
+  }
+  if (baseLower.endsWith('s')) {
+    const singular = baseLower.slice(0, -1);
+    if (singular && normalizedKey.includes(singular)) {
+      return true;
+    }
+  }
+  if (!baseLower.endsWith('s')) {
+    const plural = `${baseLower}s`;
+    if (normalizedKey.includes(plural)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const gatherTransactions = (source: any, collectionKey: string): Array<{ amount: number | string; currency?: string }> => {
+  const normalizedBase = collectionKey.toLowerCase();
+  const aggregated: Array<{ amount: number | string; currency?: string }> = [];
+  const seenArrays = new Set<any>();
+
+  const collectArray = (arr: any, key: string, parentKey: string) => {
+    if (!Array.isArray(arr) || arr.length === 0) {
+      return;
+    }
+    if (seenArrays.has(arr)) {
+      return;
+    }
+    seenArrays.add(arr);
+
+    const normalizedKey = key.toLowerCase();
+    const normalizedParent = parentKey.toLowerCase();
+    if (
+      normalizedKey === normalizedBase ||
+      keyIncludesBase(normalizedKey, normalizedBase) ||
+      keyIncludesBase(normalizedParent, normalizedBase)
+    ) {
+      aggregated.push(...arr as Array<{ amount: number | string; currency?: string }>);
+    }
+  };
+
+  const traverse = (node: any, currentKey: string = '') => {
+    if (!node || typeof node !== 'object') {
+      return;
+    }
+
+    if (Array.isArray(node)) {
+      collectArray(node, currentKey, currentKey);
+      return;
+    }
+
+    Object.entries(node).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        collectArray(value, key, currentKey);
+      } else if (value && typeof value === 'object') {
+        traverse(value, key);
+      }
+    });
+  };
+
+  traverse(source);
+
+  return aggregated.filter(item => item !== undefined && item !== null);
+};
+
+const getAmountForCurrency = (item: any, currency: SupportedCurrency): number => {
+  if (!item || typeof item !== 'object') {
+    return 0;
+  }
+
+  if (item.currency) {
+    const itemCurrency = String(item.currency).trim().toUpperCase();
+    if (itemCurrency === currency) {
+      const direct = toNumber(item.amount);
+      if (direct !== 0 || item.amount === 0) {
+        return direct;
+      }
+    }
+  }
+
+  const currencyLower = currency.toLowerCase();
+  let bestAmount = 0;
+
+  Object.entries(item).forEach(([key, value]) => {
+    const normalizedKey = key.toLowerCase();
+    if (
+      !normalizedKey.includes('amount') &&
+      !normalizedKey.includes('total') &&
+      !normalizedKey.includes('sum')
+    ) {
+      return;
+    }
+    if (!normalizedKey.endsWith(currencyLower)) {
+      return;
+    }
+    const numeric = toNumber(value);
+    if (!Number.isFinite(numeric)) {
+      return;
+    }
+    if (Math.abs(numeric) > Math.abs(bestAmount)) {
+      bestAmount = numeric;
+    }
+  });
+
+  if (bestAmount !== 0) {
+    return bestAmount;
+  }
+
+  if (!item.currency) {
+    const fallback = toNumber(item.amount);
+    if (fallback !== 0 || item.amount === 0) {
+      return fallback;
+    }
+  }
+
+  return 0;
+};
+
+const sumCategoryTotals = (
+  source: any,
+  baseKey: string,
+  currency: SupportedCurrency,
+  generalKeyLower: string
+): number | null => {
+  const baseLower = baseKey.toLowerCase();
+  const currencyLower = currency.toLowerCase();
+  let total = 0;
+  let hasMatch = false;
+
+  Object.entries(source || {}).forEach(([key, value]) => {
+    const normalizedKey = key.toLowerCase();
+    if (!normalizedKey.startsWith('total')) return;
+    if (!normalizedKey.endsWith(currencyLower)) return;
+    if (!keyIncludesBase(normalizedKey, baseLower)) return;
+    if (normalizedKey === generalKeyLower) return;
+
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return;
+    }
+    total += numeric;
+    hasMatch = true;
+  });
+
+  return hasMatch ? total : null;
+};
+
+const sumCategoryCounts = (
+  source: any,
+  collectionKey: string,
+  generalKeyLower: string
+): number | null => {
+  const baseLower = collectionKey.toLowerCase();
+  let total = 0;
+  let hasMatch = false;
+
+  Object.entries(source || {}).forEach(([key, value]) => {
+    const normalizedKey = key.toLowerCase();
+    if (!normalizedKey.endsWith('count')) return;
+    if (!keyIncludesBase(normalizedKey, baseLower)) return;
+    if (normalizedKey === generalKeyLower) return;
+
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return;
+    }
+    total += numeric;
+    hasMatch = true;
+  });
+
+  return hasMatch ? total : null;
+};
+
+const resolveAmountWithFallback = (
+  source: any,
+  baseKey: string,
+  currency: SupportedCurrency,
+  collectionKey: string,
+  transactions: Array<{ amount: number | string; currency?: string }>
+): number => {
+  const generalKey = `total${baseKey}${currency}`;
+  const generalValue = source?.[generalKey];
+  const categoryTotal = sumCategoryTotals(source, baseKey, currency, generalKey.toLowerCase());
+
+  if (generalValue !== undefined && generalValue !== null) {
+    const generalNumeric = toNumber(generalValue);
+    if (generalNumeric !== 0 || categoryTotal === null) {
+      return generalNumeric;
+    }
+  }
+
+  if (categoryTotal !== null) {
+    return categoryTotal;
+  }
+
+  if (transactions.length > 0) {
+    return transactions.reduce(
+      (total, item) => total + getAmountForCurrency(item, currency),
+      0
+    );
+  }
+
+  return 0;
+};
+
+const resolveCountWithFallback = (
+  source: any,
+  collectionKey: string,
+  countKey: string,
+  transactions: Array<{ amount: number | string; currency?: string }>
+): number => {
+  const generalValue = source?.[countKey];
+  if (generalValue !== undefined && generalValue !== null) {
+    return toNumber(generalValue);
+  }
+
+  const categoryCount = sumCategoryCounts(source, collectionKey, countKey.toLowerCase());
+  if (categoryCount !== null) {
+    return categoryCount;
+  }
+
+  return transactions.length;
+};
+
+const computeDailyTotals = (report: DailyBranchReportDto) => {
+  const buildMetric = (
+    baseKey: string,
+    collectionKey: keyof DailyBranchReportDto & string,
+    countKey: keyof DailyBranchReportDto & string
+  ) => {
+    const transactions = gatherTransactions(report, collectionKey);
+    return {
+      totalHTG: resolveAmountWithFallback(report, baseKey, 'HTG', collectionKey, transactions),
+      totalUSD: resolveAmountWithFallback(report, baseKey, 'USD', collectionKey, transactions),
+      count: resolveCountWithFallback(report, collectionKey, countKey, transactions)
+    };
+  };
+
+  return {
+    credits: buildMetric('CreditsDisbursed', 'creditsDisbursed', 'creditsDisbursedCount'),
+    payments: buildMetric('PaymentsReceived', 'paymentsReceived', 'paymentsReceivedCount'),
+    deposits: buildMetric('Deposits', 'deposits', 'depositsCount'),
+    withdrawals: buildMetric('Withdrawals', 'withdrawals', 'withdrawalsCount'),
+    cash: {
+      closingHTG: toNumber(report.cashBalance?.closingBalanceHTG),
+      closingUSD: toNumber(report.cashBalance?.closingBalanceUSD)
+    }
+  };
+};
+
+const resolveAggregateAmount = (
+  source: any,
+  baseKey: string,
+  currency: SupportedCurrency,
+  fallbackValue: number
+): number => {
+  const generalKey = `total${baseKey}${currency}`;
+  const generalValue = source?.[generalKey];
+  const categoryTotal = sumCategoryTotals(source, baseKey, currency, generalKey.toLowerCase());
+  if (generalValue !== undefined && generalValue !== null) {
+    const generalNumeric = toNumber(generalValue);
+    if (generalNumeric !== 0 || categoryTotal === null) {
+      return generalNumeric;
+    }
+  }
+
+  if (categoryTotal !== null) {
+    return categoryTotal;
+  }
+
+  return fallbackValue;
+};
+
+const resolveAggregateCount = (
+  source: any,
+  collectionKey: string,
+  countKey: string,
+  fallbackValue: number
+): number => {
+  const generalValue = source?.[countKey];
+  const categoryCount = sumCategoryCounts(source, collectionKey, countKey.toLowerCase());
+  if (generalValue !== undefined && generalValue !== null) {
+    const generalNumeric = toNumber(generalValue);
+    if (generalNumeric !== 0 || categoryCount === null) {
+      return generalNumeric;
+    }
+  }
+
+  if (categoryCount !== null) {
+    return categoryCount;
+  }
+
+  return fallbackValue;
+};
+
+const computeMonthlyTotals = (report: MonthlyBranchReportDto) => {
+  const dailySummaries = (report.dailyReports ?? []).map(computeDailyTotals);
+
+  const sumFromDaily = (selector: (summary: ReturnType<typeof computeDailyTotals>) => number) =>
+    dailySummaries.reduce((total, summary) => total + selector(summary), 0);
+
+  const averageFromDaily = (selector: (summary: ReturnType<typeof computeDailyTotals>) => number) => {
+    if (dailySummaries.length === 0) {
+      return 0;
+    }
+    return sumFromDaily(selector) / dailySummaries.length;
+  };
+
+  return {
+    credits: {
+      totalHTG: resolveAggregateAmount(
+        report,
+        'CreditsDisbursed',
+        'HTG',
+        sumFromDaily(summary => summary.credits.totalHTG)
+      ),
+      totalUSD: resolveAggregateAmount(
+        report,
+        'CreditsDisbursed',
+        'USD',
+        sumFromDaily(summary => summary.credits.totalUSD)
+      ),
+      count: resolveAggregateCount(
+        report,
+        'creditsDisbursed',
+        'totalCreditsDisbursedCount',
+        sumFromDaily(summary => summary.credits.count)
+      )
+    },
+    payments: {
+      totalHTG: resolveAggregateAmount(
+        report,
+        'PaymentsReceived',
+        'HTG',
+        sumFromDaily(summary => summary.payments.totalHTG)
+      ),
+      totalUSD: resolveAggregateAmount(
+        report,
+        'PaymentsReceived',
+        'USD',
+        sumFromDaily(summary => summary.payments.totalUSD)
+      ),
+      count: resolveAggregateCount(
+        report,
+        'paymentsReceived',
+        'totalPaymentsReceivedCount',
+        sumFromDaily(summary => summary.payments.count)
+      )
+    },
+    deposits: {
+      totalHTG: resolveAggregateAmount(
+        report,
+        'Deposits',
+        'HTG',
+        sumFromDaily(summary => summary.deposits.totalHTG)
+      ),
+      totalUSD: resolveAggregateAmount(
+        report,
+        'Deposits',
+        'USD',
+        sumFromDaily(summary => summary.deposits.totalUSD)
+      ),
+      count: resolveAggregateCount(
+        report,
+        'deposits',
+        'totalDepositsCount',
+        sumFromDaily(summary => summary.deposits.count)
+      )
+    },
+    withdrawals: {
+      totalHTG: resolveAggregateAmount(
+        report,
+        'Withdrawals',
+        'HTG',
+        sumFromDaily(summary => summary.withdrawals.totalHTG)
+      ),
+      totalUSD: resolveAggregateAmount(
+        report,
+        'Withdrawals',
+        'USD',
+        sumFromDaily(summary => summary.withdrawals.totalUSD)
+      ),
+      count: resolveAggregateCount(
+        report,
+        'withdrawals',
+        'totalWithdrawalsCount',
+        sumFromDaily(summary => summary.withdrawals.count)
+      )
+    },
+    cash: {
+      averageHTG: toNumber(
+        report.averageDailyCashBalanceHTG ?? averageFromDaily(summary => summary.cash.closingHTG)
+      ),
+      averageUSD: toNumber(
+        report.averageDailyCashBalanceUSD ?? averageFromDaily(summary => summary.cash.closingUSD)
+      )
+    }
+  };
+};
 
 interface BranchReportDashboardProps {
   userRole: string;
@@ -31,6 +455,10 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
   const [financialSummary, setFinancialSummary] = useState<any | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const summaryFallbackMessage = isSuperAdminOrDirector
+    ? 'Sélectionnez une succursale pour voir le solde.'
+    : 'Aucune donnée reçue pour votre succursale. Cliquez sur "Actualiser" pour réessayer.';
+  const lastSummaryKeyRef = useRef<string>('');
 
   // Daily report state
   const [dailyReport, setDailyReport] = useState<DailyBranchReportDto | null>(null);
@@ -107,12 +535,29 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
     if (!isSuperAdminOrDirector) return;
     
     try {
-      const overview = await branchReportService.getAllBranchesOverview(
-        new Date().toISOString().split('T')[0]
-      );
-      setBranches(overview.branches.map(b => ({ id: b.branchId, name: b.branchName })));
+      // Try to get branches from overview first
+      try {
+        const overview = await branchReportService.getAllBranchesOverview(
+          new Date().toISOString().split('T')[0]
+        );
+        if (overview.branches && overview.branches.length > 0) {
+          setBranches(overview.branches.map(b => ({ id: b.branchId, name: b.branchName })));
+          return;
+        }
+      } catch (overviewErr) {
+        console.warn('Could not load from overview, trying alternative:', overviewErr);
+      }
+      
+      // Fallback: Use general branch API
+      const branchesData = await apiService.getAllBranches();
+      setBranches(branchesData.map((b: any) => ({ 
+        id: b.id || b.branchId, 
+        name: b.name || b.branchName 
+      })));
     } catch (err) {
       console.error('Error loading branches:', err);
+      // Set error message for user
+      setError('Erreur lors du chargement des succursales');
     }
   };
   
@@ -128,31 +573,571 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
     } else {
       loadMonthlyReport();
     }
-    // Also load financial summary when branch selection changes
-    if (selectedBranchId || !isSuperAdminOrDirector) {
-      loadFinancialSummary();
-    }
-  }, [activeTab, selectedDate, selectedMonth, selectedYear, selectedBranchId]);
+  }, [activeTab, selectedDate, selectedMonth, selectedYear, selectedBranchId, isSuperAdminOrDirector]);
 
-  const loadFinancialSummary = async () => {
+  const loadFinancialSummary = async (branchIdOverride?: number) => {
+    const targetBranchId = branchIdOverride
+      ?? (isSuperAdminOrDirector
+        ? selectedBranchId
+        : selectedBranchId || dailyReport?.branchId || monthlyReport?.branchId || initialBranchId);
+
+    if (!targetBranchId) {
+      setSummaryError(
+        isSuperAdminOrDirector
+          ? 'Veuillez sélectionner une succursale'
+          : 'Résumé financier non disponible pour le moment.'
+      );
+      setFinancialSummary(null);
+      setLoadingSummary(false);
+      lastSummaryKeyRef.current = '';
+      return;
+    }
+
+    const summaryKey = `${targetBranchId}-${activeTab}-${selectedDate}-${selectedMonth}-${selectedYear}`;
+    if (branchIdOverride === undefined && summaryKey !== lastSummaryKeyRef.current) {
+      lastSummaryKeyRef.current = summaryKey;
+    }
+
     try {
       setLoadingSummary(true);
       setSummaryError(null);
-      let id = selectedBranchId;
-      if (!isSuperAdminOrDirector) {
-        // For branch managers, backend infers from token; need their branch id
-        // Fallback: use dailyReport/monthlyReport when available
-        id = dailyReport?.branchId || monthlyReport?.branchId || undefined;
+      const data = await apiService.getBranchFinancialSummary(targetBranchId);
+      if (summaryKey !== lastSummaryKeyRef.current) {
+        return;
       }
-      if (!id) return;
-      const data = await apiService.getBranchFinancialSummary(id);
       setFinancialSummary(data);
     } catch (e: any) {
-      setSummaryError(e.response?.data?.message || 'Erreur résumé financier');
-      setFinancialSummary(null);
+      if (summaryKey === lastSummaryKeyRef.current) {
+        setSummaryError(e.response?.data?.message || 'Erreur résumé financier');
+        setFinancialSummary(null);
+      }
     } finally {
-      setLoadingSummary(false);
+      if (summaryKey === lastSummaryKeyRef.current) {
+        setLoadingSummary(false);
+      }
     }
+  };
+
+  useEffect(() => {
+    const branchIdFromSelection = selectedBranchId ?? initialBranchId;
+    const branchIdFromReports = dailyReport?.branchId || monthlyReport?.branchId;
+
+    const targetBranchId = isSuperAdminOrDirector
+      ? selectedBranchId
+      : branchIdFromSelection ?? branchIdFromReports;
+
+    if (!targetBranchId) {
+      setSummaryError(
+        isSuperAdminOrDirector
+          ? 'Veuillez sélectionner une succursale'
+          : 'Résumé financier non disponible pour le moment.'
+      );
+      setFinancialSummary(null);
+      setLoadingSummary(false);
+      lastSummaryKeyRef.current = '';
+      return;
+    }
+
+    const summaryKey = `${targetBranchId}-${activeTab}-${selectedDate}-${selectedMonth}-${selectedYear}`;
+    if (summaryKey === lastSummaryKeyRef.current) {
+      return;
+    }
+
+    lastSummaryKeyRef.current = summaryKey;
+    loadFinancialSummary(targetBranchId);
+  }, [
+    activeTab,
+    selectedDate,
+    selectedMonth,
+    selectedYear,
+    selectedBranchId,
+    initialBranchId,
+    isSuperAdminOrDirector,
+    dailyReport?.branchId,
+    monthlyReport?.branchId
+  ]);
+
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  const safeText = (value?: string | number | null) => {
+    if (value === undefined || value === null || value === '') {
+      return 'N/A';
+    }
+    return escapeHtml(String(value));
+  };
+
+  const formatCurrencyForPdf = (value: number, currency: SupportedCurrency) => {
+    const numeric = Number.isFinite(value) ? value : Number(value) || 0;
+    return escapeHtml(
+      branchReportService
+        .formatCurrency(numeric, currency)
+        .replace(/\u00A0/g, ' ')
+    );
+  };
+
+  const formatDateForPdf = (value: string) =>
+    value
+      ? escapeHtml(
+          new Date(value).toLocaleDateString('fr-HT', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          })
+        )
+      : 'N/A';
+
+  const formatDateTimeForPdf = (date: Date) =>
+    escapeHtml(
+      date.toLocaleString('fr-HT', {
+        dateStyle: 'full',
+        timeStyle: 'short'
+      })
+    );
+
+  const buildDailyPdfHtml = (report: DailyBranchReportDto) => {
+    const summary = computeDailyTotals(report);
+    const generatedAt = formatDateTimeForPdf(new Date());
+    const branchName = safeText(report.branchName);
+    const reportDate = formatDateForPdf(report.reportDate);
+    const region = safeText(report.branchRegion);
+    const totalTransactions = safeText(report.totalTransactions);
+    const activeSessions = safeText(report.activeCashSessions);
+    const completedSessions = safeText(report.completedCashSessions);
+
+    const summaryRows = [
+      { label: 'Crédits décaissés', totals: summary.credits },
+      { label: 'Paiements reçus', totals: summary.payments },
+      { label: 'Dépôts', totals: summary.deposits },
+      { label: 'Retraits', totals: summary.withdrawals }
+    ];
+
+    const summaryBody = summaryRows
+      .map(
+        (row) => `
+          <tr>
+            <td>${escapeHtml(row.label)}</td>
+            <td class="number">${formatCurrencyForPdf(row.totals.totalHTG, 'HTG')}</td>
+            <td class="number">${formatCurrencyForPdf(row.totals.totalUSD, 'USD')}</td>
+            <td class="number">${escapeHtml(String(row.totals.count ?? 0))}</td>
+          </tr>
+        `
+      )
+      .join('');
+
+    const cash = report.cashBalance ?? {
+      openingBalanceHTG: 0,
+      openingBalanceUSD: 0,
+      closingBalanceHTG: 0,
+      closingBalanceUSD: 0,
+      netChangeHTG: 0,
+      netChangeUSD: 0
+    };
+
+    const cashBody = `
+      <tr>
+        <td>Solde ouverture</td>
+        <td class="number">${formatCurrencyForPdf(toNumber(cash.openingBalanceHTG), 'HTG')}</td>
+        <td class="number">${formatCurrencyForPdf(toNumber(cash.openingBalanceUSD), 'USD')}</td>
+      </tr>
+      <tr>
+        <td>Solde fermeture</td>
+        <td class="number">${formatCurrencyForPdf(toNumber(cash.closingBalanceHTG), 'HTG')}</td>
+        <td class="number">${formatCurrencyForPdf(toNumber(cash.closingBalanceUSD), 'USD')}</td>
+      </tr>
+      <tr>
+        <td>Variation nette</td>
+        <td class="number">${formatCurrencyForPdf(toNumber(cash.netChangeHTG), 'HTG')}</td>
+        <td class="number">${formatCurrencyForPdf(toNumber(cash.netChangeUSD), 'USD')}</td>
+      </tr>
+    `;
+
+    const transfersExist =
+      toNumber(report.totalTransfersInHTG) !== 0 ||
+      toNumber(report.totalTransfersInUSD) !== 0 ||
+      toNumber(report.totalTransfersOutHTG) !== 0 ||
+      toNumber(report.totalTransfersOutUSD) !== 0;
+
+    const transfersSection = transfersExist
+      ? `
+        <div class="section">
+          <h2>Transferts inter-succursales</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Total HTG</th>
+                <th>Total USD</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Entrants</td>
+                <td class="number">${formatCurrencyForPdf(toNumber(report.totalTransfersInHTG ?? 0), 'HTG')}</td>
+                <td class="number">${formatCurrencyForPdf(toNumber(report.totalTransfersInUSD ?? 0), 'USD')}</td>
+              </tr>
+              <tr>
+                <td>Sortants</td>
+                <td class="number">${formatCurrencyForPdf(toNumber(report.totalTransfersOutHTG ?? 0), 'HTG')}</td>
+                <td class="number">${formatCurrencyForPdf(toNumber(report.totalTransfersOutUSD ?? 0), 'USD')}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="note">Les transferts apparaissent après validation complète par les deux succursales.</p>
+        </div>
+      `
+      : '';
+
+    return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Rapport journalier - ${branchName}</title>
+  <style>
+    body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; padding: 32px; color: #111827; background: #f9fafb; }
+    .header { text-align: center; margin-bottom: 24px; }
+    .header h1 { font-size: 26px; margin-bottom: 8px; color: #1f2937; }
+    .header p { margin: 4px 0; color: #4b5563; }
+    .section { background: #ffffff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }
+    .section h2 { font-size: 18px; margin-bottom: 12px; color: #1f2937; }
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 4px; }
+    .info-grid div { background: #eef2ff; border-radius: 6px; padding: 12px; font-size: 13px; }
+    .info-grid span { display: block; font-weight: 600; color: #1f2937; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px 10px; font-size: 12px; text-align: left; }
+    thead th { background: #1d4ed8; color: #ffffff; }
+    tbody tr:nth-child(even) { background: #f3f4f6; }
+    .number { text-align: right; font-variant-numeric: tabular-nums; }
+    .note { font-size: 11px; color: #6b7280; margin-top: 12px; }
+    .actions { margin-top: 24px; text-align: center; }
+    .actions button { background: #2563eb; color: #ffffff; border: none; padding: 12px 24px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+    .actions button + button { background: #6b7280; margin-left: 12px; }
+    @media print {
+      body { background: #ffffff; padding: 0; }
+      .actions { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Rapport journalier - ${branchName}</h1>
+    <p>Date du rapport : ${reportDate}</p>
+    <p>Document généré le ${generatedAt}</p>
+  </div>
+
+  <div class="section">
+    <h2>Informations succursale</h2>
+    <div class="info-grid">
+      <div><span>Succursale</span>${branchName}</div>
+      <div><span>Région</span>${region}</div>
+      <div><span>Total transactions</span>${totalTransactions}</div>
+      <div><span>Sessions caisse actives</span>${activeSessions}</div>
+      <div><span>Sessions caisse terminées</span>${completedSessions}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Synthèse financière</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Catégorie</th>
+          <th>Total HTG</th>
+          <th>Total USD</th>
+          <th>Nombre</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${summaryBody}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Solde caisse</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Ligne</th>
+          <th>HTG</th>
+          <th>USD</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${cashBody}
+      </tbody>
+    </table>
+    <p class="note">Les soldes correspondent aux montants communiqués par la caisse pour la journée.</p>
+  </div>
+
+  ${transfersSection}
+
+  <div class="section">
+    <h2>Notes</h2>
+    <p class="note">Les montants sont fournis par le service des rapports et peuvent différer des écritures comptables tant que toutes les opérations n'ont pas été rapprochées.</p>
+  </div>
+
+  <div class="actions">
+    <button onclick="window.print()">Imprimer ou sauvegarder en PDF</button>
+    <button onclick="window.close()">Fermer</button>
+  </div>
+</body>
+</html>
+    `;
+  };
+
+  const buildMonthlyPdfHtml = (report: MonthlyBranchReportDto) => {
+    const summary = computeMonthlyTotals(report);
+    const generatedAt = formatDateTimeForPdf(new Date());
+    const branchName = safeText(report.branchName);
+    const monthLabel = escapeHtml(
+      new Date(report.year, report.month - 1).toLocaleDateString('fr-HT', {
+        year: 'numeric',
+        month: 'long'
+      })
+    );
+    const region = safeText(report.branchRegion);
+    const businessDays = safeText(report.numberOfBusinessDays);
+    const par = report.portfolioAtRisk !== undefined && report.portfolioAtRisk !== null
+      ? `${escapeHtml((report.portfolioAtRisk ?? 0).toFixed(2))}%`
+      : escapeHtml('Non disponible');
+    const collectionRate = report.collectionRate !== undefined && report.collectionRate !== null
+      ? `${escapeHtml((report.collectionRate ?? 0).toFixed(2))}%`
+      : escapeHtml('Non disponible');
+
+    const summaryRows = [
+      { label: 'Crédits décaissés', totals: summary.credits },
+      { label: 'Paiements reçus', totals: summary.payments },
+      { label: 'Dépôts', totals: summary.deposits },
+      { label: 'Retraits', totals: summary.withdrawals }
+    ];
+
+    const summaryBody = summaryRows
+      .map(
+        (row) => `
+          <tr>
+            <td>${escapeHtml(row.label)}</td>
+            <td class="number">${formatCurrencyForPdf(row.totals.totalHTG, 'HTG')}</td>
+            <td class="number">${formatCurrencyForPdf(row.totals.totalUSD, 'USD')}</td>
+            <td class="number">${escapeHtml(String(row.totals.count ?? 0))}</td>
+          </tr>
+        `
+      )
+      .join('');
+
+    const averageCashBody = `
+      <tr>
+        <td>Solde moyen journalier</td>
+        <td class="number">${formatCurrencyForPdf(summary.cash.averageHTG, 'HTG')}</td>
+        <td class="number">${formatCurrencyForPdf(summary.cash.averageUSD, 'USD')}</td>
+      </tr>
+    `;
+
+    const dailyReports = report.dailyReports ?? [];
+    const dailyRows = dailyReports.length
+      ? dailyReports
+          .map((daily) => {
+            const dailySummary = computeDailyTotals(daily);
+            return `
+              <tr>
+                <td>${formatDateForPdf(daily.reportDate)}</td>
+                <td class="number">${formatCurrencyForPdf(dailySummary.credits.totalHTG, 'HTG')}</td>
+                <td class="number">${formatCurrencyForPdf(dailySummary.credits.totalUSD, 'USD')}</td>
+                <td class="number">${formatCurrencyForPdf(dailySummary.payments.totalHTG, 'HTG')}</td>
+                <td class="number">${formatCurrencyForPdf(dailySummary.payments.totalUSD, 'USD')}</td>
+                <td class="number">${formatCurrencyForPdf(dailySummary.deposits.totalHTG, 'HTG')}</td>
+                <td class="number">${formatCurrencyForPdf(dailySummary.deposits.totalUSD, 'USD')}</td>
+                <td class="number">${formatCurrencyForPdf(dailySummary.withdrawals.totalHTG, 'HTG')}</td>
+                <td class="number">${formatCurrencyForPdf(dailySummary.withdrawals.totalUSD, 'USD')}</td>
+              </tr>
+            `;
+          })
+          .join('')
+      : `
+          <tr>
+            <td colspan="9" class="empty">Aucune donnée journalière disponible pour ce mois.</td>
+          </tr>
+        `;
+
+    return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Rapport mensuel - ${branchName}</title>
+  <style>
+    body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; padding: 32px; color: #111827; background: #f3f4f6; }
+    .header { text-align: center; margin-bottom: 24px; }
+    .header h1 { font-size: 26px; margin-bottom: 8px; color: #1f2937; }
+    .header p { margin: 4px 0; color: #4b5563; }
+    .section { background: #ffffff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }
+    .section h2 { font-size: 18px; margin-bottom: 12px; color: #1f2937; }
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 4px; }
+    .info-grid div { background: #e0f2fe; border-radius: 6px; padding: 12px; font-size: 13px; }
+    .info-grid span { display: block; font-weight: 600; color: #1f2937; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px 10px; font-size: 12px; text-align: left; }
+    thead th { background: #047857; color: #ffffff; }
+    tbody tr:nth-child(even) { background: #f9fafb; }
+    .number { text-align: right; font-variant-numeric: tabular-nums; }
+    .empty { text-align: center; color: #6b7280; padding: 18px 10px; }
+    .note { font-size: 11px; color: #6b7280; margin-top: 12px; }
+    .actions { margin-top: 24px; text-align: center; }
+    .actions button { background: #10b981; color: #ffffff; border: none; padding: 12px 24px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+    .actions button + button { background: #6b7280; }
+    @media print {
+      body { background: #ffffff; padding: 0; }
+      .actions { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Rapport mensuel - ${branchName}</h1>
+    <p>Mois : ${monthLabel}</p>
+    <p>Document généré le ${generatedAt}</p>
+  </div>
+
+  <div class="section">
+    <h2>Informations succursale</h2>
+    <div class="info-grid">
+      <div><span>Succursale</span>${branchName}</div>
+      <div><span>Région</span>${region}</div>
+      <div><span>Jours ouvrables</span>${businessDays}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Indicateurs clés</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Indicateur</th>
+          <th>Valeur</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Portfolio at Risk (PAR)</td>
+          <td class="number">${par}</td>
+        </tr>
+        <tr>
+          <td>Taux de recouvrement</td>
+          <td class="number">${collectionRate}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Synthèse mensuelle</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Catégorie</th>
+          <th>Total HTG</th>
+          <th>Total USD</th>
+          <th>Nombre</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${summaryBody}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Solde moyen</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Métrique</th>
+          <th>HTG</th>
+          <th>USD</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${averageCashBody}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Détail par journée</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Crédits HTG</th>
+          <th>Crédits USD</th>
+          <th>Paiements HTG</th>
+          <th>Paiements USD</th>
+          <th>Dépôts HTG</th>
+          <th>Dépôts USD</th>
+          <th>Retraits HTG</th>
+          <th>Retraits USD</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${dailyRows}
+      </tbody>
+    </table>
+    <p class="note">Chaque ligne représente le total des transactions enregistrées pour la journée correspondante.</p>
+  </div>
+
+  <div class="section">
+    <h2>Notes</h2>
+    <p class="note">Les montants agrégés sont calculés à partir des rapports journaliers et peuvent varier si des ajustements sont effectués après la clôture de la période.</p>
+  </div>
+
+  <div class="actions">
+    <button onclick="window.print()">Imprimer ou sauvegarder en PDF</button>
+    <button onclick="window.close()">Fermer</button>
+  </div>
+</body>
+</html>
+    `;
+  };
+
+  const openPdfWindow = (html: string) => {
+    const pdfWindow = window.open('', '_blank', 'noopener,noreferrer');
+    if (!pdfWindow) {
+      // Fallback: render into hidden iframe and trigger print without popup
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(iframe);
+      const doc = iframe.contentDocument || (iframe as any).document;
+      if (doc) {
+        doc.open();
+        doc.write(html);
+        doc.close();
+        const tryPrint = () => {
+          const win = iframe.contentWindow;
+          if (win) {
+            win.focus();
+            win.print();
+          }
+        };
+        // Give the browser a moment to layout content
+        setTimeout(tryPrint, 100);
+      }
+      return;
+    }
+    pdfWindow.document.write(html);
+    pdfWindow.document.close();
+    pdfWindow.focus();
   };
 
   // Export daily report
@@ -190,24 +1175,29 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
     }
   };
 
-  // Load data when tab or filters change
-  useEffect(() => {
-    if (activeTab === 'daily') {
-      loadDailyReport();
-    } else {
-      loadMonthlyReport();
+  const handleExportDailyPDF = () => {
+    if (!dailyReport) {
+      return;
     }
-  }, [activeTab, selectedDate, selectedMonth, selectedYear, selectedBranchId]);
+    openPdfWindow(buildDailyPdfHtml(dailyReport));
+  };
+
+  const handleExportMonthlyPDF = () => {
+    if (!monthlyReport) {
+      return;
+    }
+    openPdfWindow(buildMonthlyPdfHtml(monthlyReport));
+  };
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-black mb-2">
             📊 Rapport de Succursale
           </h1>
-          <p className="text-gray-600">
+          <p className="text-black">
             Consulter les rapports journaliers et mensuels de la succursale
           </p>
         </div>
@@ -215,7 +1205,7 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
         {/* Branch Selector for SuperAdmin/Director */}
         {isSuperAdminOrDirector && (
           <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-black mb-2">
               Sélectionner une succursale:
             </label>
             <select
@@ -242,7 +1232,7 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
                 className={`px-6 py-3 text-sm font-medium border-b-2 ${
                   activeTab === 'daily'
                     ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-black hover:text-black hover:border-gray-300'
                 }`}
               >
                 📅 Rapport Journalier
@@ -252,7 +1242,7 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
                 className={`px-6 py-3 text-sm font-medium border-b-2 ${
                   activeTab === 'monthly'
                     ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-black hover:text-black hover:border-gray-300'
                 }`}
               >
                 📆 Rapport Mensuel
@@ -264,7 +1254,7 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
           <div className="p-4 bg-gray-50 border-b border-gray-200">
             {activeTab === 'daily' ? (
               <div className="flex items-center gap-4">
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-black">
                   Date:
                 </label>
                 <input
@@ -281,17 +1271,25 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
                   🔄 Actualiser
                 </button>
                 {dailyReport && (
-                  <button
-                    onClick={handleExportDaily}
-                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                  >
-                    📥 Exporter CSV
-                  </button>
+                  <>
+                    <button
+                      onClick={handleExportDaily}
+                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                    >
+                      📥 Exporter CSV
+                    </button>
+                    <button
+                      onClick={handleExportDailyPDF}
+                      className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                    >
+                      📄 Exporter PDF
+                    </button>
+                  </>
                 )}
               </div>
             ) : (
               <div className="flex items-center gap-4">
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-black">
                   Mois:
                 </label>
                 <select
@@ -305,7 +1303,7 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
                     </option>
                   ))}
                 </select>
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-black">
                   Année:
                 </label>
                 <select
@@ -327,12 +1325,20 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
                   🔄 Actualiser
                 </button>
                 {monthlyReport && (
-                  <button
-                    onClick={handleExportMonthly}
-                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                  >
-                    📥 Exporter CSV
-                  </button>
+                  <>
+                    <button
+                      onClick={handleExportMonthly}
+                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                    >
+                      📥 Exporter CSV
+                    </button>
+                    <button
+                      onClick={handleExportMonthlyPDF}
+                      className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                    >
+                      📄 Exporter PDF
+                    </button>
+                  </>
                 )}
               </div>
             )}
@@ -352,7 +1358,7 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-gray-900">💼 Solde Total (Succursale)</h3>
               <button
-                onClick={loadFinancialSummary}
+                onClick={() => loadFinancialSummary()}
                 disabled={loadingSummary}
                 className="px-3 py-1 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 disabled:bg-gray-400 flex items-center gap-2"
               >
@@ -408,7 +1414,7 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="text-sm text-gray-500">Sélectionnez une succursale pour voir le solde.</div>
+              <div className="text-sm text-gray-500">{summaryFallbackMessage}</div>
             )}
             {financialSummary && (
               <div className="mt-4 text-xs text-gray-500">
@@ -443,6 +1449,26 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
 
 // Daily Report View Component
 const DailyReportView: React.FC<{ report: DailyBranchReportDto }> = ({ report }) => {
+  const summary = computeDailyTotals(report);
+  const creditsTotalHTG = summary.credits.totalHTG;
+  const creditsTotalUSD = summary.credits.totalUSD;
+  const creditsCount = summary.credits.count;
+
+  const paymentsTotalHTG = summary.payments.totalHTG;
+  const paymentsTotalUSD = summary.payments.totalUSD;
+  const paymentsCount = summary.payments.count;
+
+  const depositsTotalHTG = summary.deposits.totalHTG;
+  const depositsTotalUSD = summary.deposits.totalUSD;
+  const depositsCount = summary.deposits.count;
+
+  const withdrawalsTotalHTG = summary.withdrawals.totalHTG;
+  const withdrawalsTotalUSD = summary.withdrawals.totalUSD;
+  const withdrawalsCount = summary.withdrawals.count;
+
+  const cashBalanceHTG = summary.cash.closingHTG;
+  const cashBalanceUSD = summary.cash.closingUSD;
+
   return (
     <div className="space-y-6">
       {/* Branch Info */}
@@ -478,17 +1504,17 @@ const DailyReportView: React.FC<{ report: DailyBranchReportDto }> = ({ report })
         <div className="grid grid-cols-3 gap-4">
           <MetricCard
             label="Total HTG"
-            value={branchReportService.formatCurrency(report.totalCreditsDisbursedHTG || 0, 'HTG')}
+            value={branchReportService.formatCurrency(creditsTotalHTG, 'HTG')}
             color="blue"
           />
           <MetricCard
             label="Total USD"
-            value={branchReportService.formatCurrency(report.totalCreditsDisbursedUSD || 0, 'USD')}
+            value={branchReportService.formatCurrency(creditsTotalUSD, 'USD')}
             color="blue"
           />
           <MetricCard
             label="Quantité"
-            value={(report.creditsDisbursedCount ?? 0).toString()}
+            value={creditsCount.toString()}
             color="blue"
           />
         </div>
@@ -502,17 +1528,17 @@ const DailyReportView: React.FC<{ report: DailyBranchReportDto }> = ({ report })
         <div className="grid grid-cols-3 gap-4">
           <MetricCard
             label="Total HTG"
-            value={branchReportService.formatCurrency(report.totalPaymentsReceivedHTG || 0, 'HTG')}
+            value={branchReportService.formatCurrency(paymentsTotalHTG, 'HTG')}
             color="green"
           />
           <MetricCard
             label="Total USD"
-            value={branchReportService.formatCurrency(report.totalPaymentsReceivedUSD || 0, 'USD')}
+            value={branchReportService.formatCurrency(paymentsTotalUSD, 'USD')}
             color="green"
           />
           <MetricCard
             label="Quantité"
-            value={(report.paymentsReceivedCount ?? 0).toString()}
+            value={paymentsCount.toString()}
             color="green"
           />
         </div>
@@ -526,17 +1552,17 @@ const DailyReportView: React.FC<{ report: DailyBranchReportDto }> = ({ report })
         <div className="grid grid-cols-3 gap-4">
           <MetricCard
             label="Total HTG"
-            value={branchReportService.formatCurrency(report.totalDepositsHTG || 0, 'HTG')}
+            value={branchReportService.formatCurrency(depositsTotalHTG, 'HTG')}
             color="purple"
           />
           <MetricCard
             label="Total USD"
-            value={branchReportService.formatCurrency(report.totalDepositsUSD || 0, 'USD')}
+            value={branchReportService.formatCurrency(depositsTotalUSD, 'USD')}
             color="purple"
           />
           <MetricCard
             label="Quantité"
-            value={(report.depositsCount ?? 0).toString()}
+            value={depositsCount.toString()}
             color="purple"
           />
         </div>
@@ -550,17 +1576,17 @@ const DailyReportView: React.FC<{ report: DailyBranchReportDto }> = ({ report })
         <div className="grid grid-cols-3 gap-4">
           <MetricCard
             label="Total HTG"
-            value={branchReportService.formatCurrency(report.totalWithdrawalsHTG || 0, 'HTG')}
+            value={branchReportService.formatCurrency(withdrawalsTotalHTG, 'HTG')}
             color="orange"
           />
           <MetricCard
             label="Total USD"
-            value={branchReportService.formatCurrency(report.totalWithdrawalsUSD || 0, 'USD')}
+            value={branchReportService.formatCurrency(withdrawalsTotalUSD, 'USD')}
             color="orange"
           />
           <MetricCard
             label="Quantité"
-            value={(report.withdrawalsCount ?? 0).toString()}
+            value={withdrawalsCount.toString()}
             color="orange"
           />
         </div>
@@ -574,13 +1600,13 @@ const DailyReportView: React.FC<{ report: DailyBranchReportDto }> = ({ report })
         <div className="grid grid-cols-2 gap-4">
           <MetricCard
             label="Solde HTG"
-            value={branchReportService.formatCurrency(report.cashBalance?.closingBalanceHTG ?? 0, 'HTG')}
+            value={branchReportService.formatCurrency(cashBalanceHTG, 'HTG')}
             color="indigo"
             large
           />
           <MetricCard
             label="Solde USD"
-            value={branchReportService.formatCurrency(report.cashBalance?.closingBalanceUSD ?? 0, 'USD')}
+            value={branchReportService.formatCurrency(cashBalanceUSD, 'USD')}
             color="indigo"
             large
           />
@@ -597,6 +1623,27 @@ const DailyReportView: React.FC<{ report: DailyBranchReportDto }> = ({ report })
 
 // Monthly Report View Component
 const MonthlyReportView: React.FC<{ report: MonthlyBranchReportDto }> = ({ report }) => {
+  const summary = computeMonthlyTotals(report);
+
+  const totalCreditsDisbursedHTG = summary.credits.totalHTG;
+  const totalCreditsDisbursedUSD = summary.credits.totalUSD;
+  const totalCreditsDisbursedCount = summary.credits.count;
+
+  const totalPaymentsReceivedHTG = summary.payments.totalHTG;
+  const totalPaymentsReceivedUSD = summary.payments.totalUSD;
+  const totalPaymentsReceivedCount = summary.payments.count;
+
+  const totalDepositsHTG = summary.deposits.totalHTG;
+  const totalDepositsUSD = summary.deposits.totalUSD;
+  const totalDepositsCount = summary.deposits.count;
+
+  const totalWithdrawalsHTG = summary.withdrawals.totalHTG;
+  const totalWithdrawalsUSD = summary.withdrawals.totalUSD;
+  const totalWithdrawalsCount = summary.withdrawals.count;
+
+  const averageCashHTG = summary.cash.averageHTG;
+  const averageCashUSD = summary.cash.averageUSD;
+
   return (
     <div className="space-y-6">
       {/* Branch Info */}
@@ -664,13 +1711,13 @@ const MonthlyReportView: React.FC<{ report: MonthlyBranchReportDto }> = ({ repor
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Moyenne HTG:</span>
               <span className="font-bold text-lg text-indigo-600">
-                {branchReportService.formatCurrency(report.averageDailyCashBalanceHTG ?? 0, 'HTG')}
+                {branchReportService.formatCurrency(averageCashHTG, 'HTG')}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Moyenne USD:</span>
               <span className="font-bold text-lg text-indigo-600">
-                {branchReportService.formatCurrency(report.averageDailyCashBalanceUSD ?? 0, 'USD')}
+                {branchReportService.formatCurrency(averageCashUSD, 'USD')}
               </span>
             </div>
           </div>
@@ -685,17 +1732,17 @@ const MonthlyReportView: React.FC<{ report: MonthlyBranchReportDto }> = ({ repor
           <div className="space-y-3">
             <MetricCard
               label="HTG"
-              value={branchReportService.formatCurrency(report.totalCreditsDisbursedHTG, 'HTG')}
+              value={branchReportService.formatCurrency(totalCreditsDisbursedHTG, 'HTG')}
               color="blue"
             />
             <MetricCard
               label="USD"
-              value={branchReportService.formatCurrency(report.totalCreditsDisbursedUSD, 'USD')}
+              value={branchReportService.formatCurrency(totalCreditsDisbursedUSD, 'USD')}
               color="blue"
             />
             <MetricCard
               label="Quantité"
-              value={(report.totalCreditsDisbursedCount ?? 0).toString()}
+              value={Number(totalCreditsDisbursedCount ?? 0).toString()}
               color="blue"
             />
           </div>
@@ -707,17 +1754,17 @@ const MonthlyReportView: React.FC<{ report: MonthlyBranchReportDto }> = ({ repor
           <div className="space-y-3">
             <MetricCard
               label="HTG"
-              value={branchReportService.formatCurrency(report.totalPaymentsReceivedHTG, 'HTG')}
+              value={branchReportService.formatCurrency(totalPaymentsReceivedHTG, 'HTG')}
               color="green"
             />
             <MetricCard
               label="USD"
-              value={branchReportService.formatCurrency(report.totalPaymentsReceivedUSD, 'USD')}
+              value={branchReportService.formatCurrency(totalPaymentsReceivedUSD, 'USD')}
               color="green"
             />
             <MetricCard
               label="Quantité"
-              value={(report.totalPaymentsReceivedCount ?? 0).toString()}
+              value={Number(totalPaymentsReceivedCount ?? 0).toString()}
               color="green"
             />
           </div>
@@ -729,17 +1776,17 @@ const MonthlyReportView: React.FC<{ report: MonthlyBranchReportDto }> = ({ repor
           <div className="space-y-3">
             <MetricCard
               label="HTG"
-              value={branchReportService.formatCurrency(report.totalDepositsHTG, 'HTG')}
+              value={branchReportService.formatCurrency(totalDepositsHTG, 'HTG')}
               color="purple"
             />
             <MetricCard
               label="USD"
-              value={branchReportService.formatCurrency(report.totalDepositsUSD, 'USD')}
+              value={branchReportService.formatCurrency(totalDepositsUSD, 'USD')}
               color="purple"
             />
             <MetricCard
               label="Quantité"
-              value={(report.totalDepositsCount ?? 0).toString()}
+              value={Number(totalDepositsCount ?? 0).toString()}
               color="purple"
             />
           </div>
@@ -751,17 +1798,17 @@ const MonthlyReportView: React.FC<{ report: MonthlyBranchReportDto }> = ({ repor
           <div className="space-y-3">
             <MetricCard
               label="HTG"
-              value={branchReportService.formatCurrency(report.totalWithdrawalsHTG, 'HTG')}
+              value={branchReportService.formatCurrency(totalWithdrawalsHTG, 'HTG')}
               color="orange"
             />
             <MetricCard
               label="USD"
-              value={branchReportService.formatCurrency(report.totalWithdrawalsUSD, 'USD')}
+              value={branchReportService.formatCurrency(totalWithdrawalsUSD, 'USD')}
               color="orange"
             />
             <MetricCard
               label="Quantité"
-              value={(report.totalWithdrawalsCount ?? 0).toString()}
+              value={Number(totalWithdrawalsCount ?? 0).toString()}
               color="orange"
             />
           </div>

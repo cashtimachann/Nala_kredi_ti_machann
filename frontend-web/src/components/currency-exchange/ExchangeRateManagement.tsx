@@ -431,7 +431,7 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
               setTargetCurrencyFilter('');
               setActiveFilter('');
             }}
-            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 flex items-center justify-center"
+            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 flex items-center justify-center text-black"
           >
             <Filter className="w-4 h-4 mr-2" />
             Réinitialiser
@@ -440,7 +440,7 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
           {/* Refresh */}
           <button
             onClick={loadExchangeRates}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center justify-center"
+            className="px-4 py-2 bg-gray-100 text-black rounded-md hover:bg-gray-200 flex items-center justify-center"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -539,7 +539,7 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
               setStartDateFilter('');
               setEndDateFilter('');
             }}
-            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 flex items-center justify-center"
+            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 flex items-center justify-center text-black"
           >
             <Filter className="w-4 h-4 mr-2" />
             Réinitialiser

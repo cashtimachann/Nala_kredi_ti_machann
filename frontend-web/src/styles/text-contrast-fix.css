@@ -4,17 +4,12 @@
 label,
 .label,
 h1, h2, h3, h4, h5, h6,
-.text-gray-700 {
-  color: #1f2937 !important; /* gray-800 */
-}
-
-/* Texte secondaire un peu plus foncé mais toujours gris */
-.text-gray-600 {
-  color: #4b5563 !important; /* gray-700 */
-}
-
-.text-gray-500 {
-  color: #6b7280 !important; /* gray-600 */
+.text-gray-700,
+.text-gray-600,
+.text-gray-500,
+.text-gray-400,
+.text-gray-300 {
+  color: #000000 !important;
 }
 
 /* Specific override for the Term Savings 'Comptes' tab to force gray text to black for readability */
@@ -89,7 +84,7 @@ select:focus {
 /* Paragraphes et texte général */
 p,
 span:not([class*="text-"]) {
-  color: #1f2937; /* gray-800 */
+  color: #000000;
 }
 
 /* Titres principaux en noir pur pour maximum de contraste */

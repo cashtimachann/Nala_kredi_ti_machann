@@ -928,16 +928,16 @@ const AdminAccountList: React.FC = () => {
       {totalFiltered > 0 && (
         <div className="mt-3 bg-white rounded-md border border-gray-200">
           <div className="px-4 py-3 flex items-center justify-between">
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-black">
               Affichage {Math.min((currentPage - 1) * pageSize + 1, totalFiltered)}–{Math.min(currentPage * pageSize, totalFiltered)} de {totalFiltered} comptes
             </div>
 
             <div className="flex items-center space-x-2">
-              <label className="text-sm text-gray-600">Afficher</label>
+              <label className="text-sm text-black">Afficher</label>
               <select
                 value={pageSize}
                 onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                className="px-2 py-1 border border-gray-300 rounded-md text-sm"
+                className="px-2 py-1 border border-gray-300 rounded-md text-sm text-black"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -948,17 +948,17 @@ const AdminAccountList: React.FC = () => {
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage <= 1}
-                className="px-3 py-1 bg-gray-100 text-sm rounded-md disabled:opacity-50"
+                className="px-3 py-1 bg-gray-100 text-sm rounded-md disabled:opacity-50 text-black"
               >
                 Préc
               </button>
 
-              <div className="text-sm text-gray-700">{currentPage} / {totalPages}</div>
+              <div className="text-sm text-black">{currentPage} / {totalPages}</div>
 
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage >= totalPages}
-                className="px-3 py-1 bg-gray-100 text-sm rounded-md disabled:opacity-50"
+                className="px-3 py-1 bg-gray-100 text-sm rounded-md disabled:opacity-50 text-black"
               >
                 Suiv
               </button>

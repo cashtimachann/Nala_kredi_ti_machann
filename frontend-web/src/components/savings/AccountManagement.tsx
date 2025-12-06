@@ -183,9 +183,9 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
       case AccountStatus.SUSPENDED:
         return 'bg-red-100 text-red-800';
       case AccountStatus.CLOSED:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-100 text-black';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-100 text-black';
     }
   };
 
@@ -237,8 +237,8 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
       {/* En-tête */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Gestion des Comptes d'Épargne</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-3xl font-bold text-black">Gestion des Comptes d'Épargne</h1>
+          <p className="text-black mt-1">
             Gérez les comptes d'épargne, consultez les soldes et effectuez des transactions
           </p>
         </div>
@@ -258,8 +258,8 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
         <div className="bg-white p-6 rounded-lg shadow border">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Comptes</p>
-              <p className="text-3xl font-bold text-gray-900">{statistics.totalAccounts}</p>
+              <p className="text-sm font-medium text-black">Total Comptes</p>
+              <p className="text-3xl font-bold text-black">{statistics.totalAccounts}</p>
             </div>
             <div className="p-3 bg-blue-100 rounded-full">
               <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -268,7 +268,7 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
               </svg>
             </div>
           </div>
-          <p className="text-sm text-gray-500 mt-2">
+          <p className="text-sm text-black mt-2">
             {statistics.activeAccounts} actifs
           </p>
         </div>
@@ -276,8 +276,8 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
         <div className="bg-white p-6 rounded-lg shadow border">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Solde Total HTG</p>
-              <p className="text-3xl font-bold text-gray-900">
+              <p className="text-sm font-medium text-black">Solde Total HTG</p>
+              <p className="text-3xl font-bold text-black">
                 {formatCurrency(statistics.totalBalanceHTG, Currency.HTG)}
               </p>
             </div>
@@ -293,8 +293,8 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
         <div className="bg-white p-6 rounded-lg shadow border">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Solde Total USD</p>
-              <p className="text-3xl font-bold text-gray-900">
+              <p className="text-sm font-medium text-black">Solde Total USD</p>
+              <p className="text-3xl font-bold text-black">
                 {formatCurrency(statistics.totalBalanceUSD, Currency.USD)}
               </p>
             </div>
@@ -310,8 +310,8 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
         <div className="bg-white p-6 rounded-lg shadow border">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Nouveaux ce mois</p>
-              <p className="text-3xl font-bold text-gray-900">{statistics.newAccountsThisMonth}</p>
+              <p className="text-sm font-medium text-black">Nouveaux ce mois</p>
+              <p className="text-3xl font-bold text-black">{statistics.newAccountsThisMonth}</p>
             </div>
             <div className="p-3 bg-orange-100 rounded-full">
               <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -325,11 +325,11 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
 
       {/* Filtres */}
       <div className="bg-white p-6 rounded-lg shadow border">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Filtres de Recherche</h3>
+        <h3 className="text-lg font-semibold text-black mb-4">Filtres de Recherche</h3>
         
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Recherche</label>
+            <label className="block text-sm font-medium text-black mb-1">Recherche</label>
             <input
               type="text"
               value={filters.search}
@@ -340,7 +340,7 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Devise</label>
+            <label className="block text-sm font-medium text-black mb-1">Devise</label>
             <select
               value={filters.currency}
               onChange={(e) => handleFilterChange({ currency: e.target.value as Currency | '' })}
@@ -353,7 +353,7 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Statut</label>
+            <label className="block text-sm font-medium text-black mb-1">Statut</label>
             <select
               value={filters.status}
               onChange={(e) => handleFilterChange({ status: e.target.value as AccountStatus | '' })}
@@ -368,7 +368,7 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Succursale</label>
+            <label className="block text-sm font-medium text-black mb-1">Succursale</label>
             <select
               value={filters.branchId}
               onChange={(e) => handleFilterChange({ branchId: e.target.value ? Number(e.target.value) : '' })}
@@ -382,7 +382,7 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Solde minimum</label>
+            <label className="block text-sm font-medium text-black mb-1">Solde minimum</label>
             <input
               type="number"
               value={filters.minBalance || ''}
@@ -405,7 +405,7 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
               minBalance: undefined,
               maxBalance: undefined
             })}
-            className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="px-4 py-2 text-black border border-gray-300 rounded-lg hover:bg-gray-50"
           >
             Réinitialiser
           </button>
@@ -416,11 +416,11 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
       <div className="bg-white rounded-lg shadow border">
         <div className="p-6 border-b border-gray-200">
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold text-gray-900">
+            <h3 className="text-lg font-semibold text-black">
               Comptes d'Épargne ({filteredAccounts.length})
             </h3>
             <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-600">Trier par:</span>
+              <span className="text-sm text-black">Trier par:</span>
               <select
                 value={sortBy}
                 onChange={(e) => handleSort(e.target.value as typeof sortBy)}
@@ -433,7 +433,7 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
               </select>
               <button
                 onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
-                className="p-1 text-gray-400 hover:text-gray-600"
+                className="p-1 text-black hover:text-black"
               >
                 <svg 
                   className={`w-4 h-4 transform ${sortDirection === 'desc' ? 'rotate-180' : ''}`} 
@@ -453,22 +453,22 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">
                   Compte / Client
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">
                   Solde
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">
                   Statut
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">
                   Succursale
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">
                   Dernière activité
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-black uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -478,22 +478,22 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
                 <tr key={account.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">
+                      <div className="text-sm font-medium text-black">
                         {account.accountNumber}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-black">
                         {account.customer?.fullName}
                       </div>
-                      <div className="text-xs text-gray-400">
+                      <div className="text-xs text-black">
                         {account.customer?.contact.primaryPhone}
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm font-medium text-black">
                       {formatCurrency(account.balance, account.currency)}
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-black">
                       Disponible: {formatCurrency(account.availableBalance, account.currency)}
                     </div>
                   </td>
@@ -502,10 +502,10 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
                       {account.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
+                  <td className="px-6 py-4 text-sm text-black">
                     {account.branchName}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
+                  <td className="px-6 py-4 text-sm text-black">
                     {account.lastTransactionDate 
                       ? formatDate(account.lastTransactionDate)
                       : 'Aucune transaction'
@@ -538,7 +538,7 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="px-6 py-3 border-t border-gray-200 flex items-center justify-between">
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-black">
               Affichage de {((currentPage - 1) * pageSize) + 1} à {Math.min(currentPage * pageSize, filteredAccounts.length)} sur {filteredAccounts.length} comptes
             </div>
             <div className="flex space-x-1">
@@ -578,12 +578,12 @@ const AccountManagement: React.FC<AccountManagementProps> = ({ branches }) => {
         {/* Message si aucun compte trouvé */}
         {filteredAccounts.length === 0 && (
           <div className="text-center py-12">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="mx-auto h-12 w-12 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                     d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun compte trouvé</h3>
-            <p className="mt-1 text-sm text-gray-500">
+            <h3 className="mt-2 text-sm font-medium text-black">Aucun compte trouvé</h3>
+            <p className="mt-1 text-sm text-black">
               Aucun compte ne correspond à vos critères de recherche.
             </p>
           </div>

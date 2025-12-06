@@ -123,21 +123,21 @@ const RecouvrementModal: React.FC<Props> = ({ loan, onClose, onSuccess }) => {
           <div className="flex gap-3 mb-6">
             <button
               onClick={() => setActiveTab('payment')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${activeTab === 'payment' ? 'bg-rose-50 border border-rose-200 text-rose-700' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${activeTab === 'payment' ? 'bg-rose-50 border border-rose-200 text-rose-700' : 'bg-white border border-gray-200 text-black hover:bg-gray-50'}`}
             >
               <Phone className="w-4 h-4" />
               Paiement
             </button>
             <button
               onClick={() => setActiveTab('notes')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${activeTab === 'notes' ? 'bg-rose-50 border border-rose-200 text-rose-700' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${activeTab === 'notes' ? 'bg-rose-50 border border-rose-200 text-rose-700' : 'bg-white border border-gray-200 text-black hover:bg-gray-50'}`}
             >
               <MessageSquare className="w-4 h-4" />
               Notes
             </button>
             <button
               onClick={() => setActiveTab('schedule')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${activeTab === 'schedule' ? 'bg-rose-50 border border-rose-200 text-rose-700' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${activeTab === 'schedule' ? 'bg-rose-50 border border-rose-200 text-rose-700' : 'bg-white border border-gray-200 text-black hover:bg-gray-50'}`}
             >
               <Calendar className="w-4 h-4" />
               Planifier
@@ -146,7 +146,7 @@ const RecouvrementModal: React.FC<Props> = ({ loan, onClose, onSuccess }) => {
 
           {activeTab === 'payment' && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">Enregistrer un paiement de recouvrement pour le prêt.</p>
+              <p className="text-sm text-black">Enregistrer un paiement de recouvrement pour le prêt.</p>
               <div className="flex gap-3 items-center">
                 <button
                   onClick={() => setShowPayment(true)}
@@ -155,8 +155,8 @@ const RecouvrementModal: React.FC<Props> = ({ loan, onClose, onSuccess }) => {
                   <Edit className="w-4 h-4 inline-block mr-2" />
                   Ouvrir Paiement de Recouvrement
                 </button>
-                <span className="text-sm text-gray-500">Mensualité + Frais: <strong>{monthlyWithFee}</strong> {loan.currency}</span>
-                <span className="text-sm text-gray-500">Reste à payer (+ frais): <strong>{remainingWithFees}</strong> {loan.currency}</span>
+                <span className="text-sm text-black">Mensualité + Frais: <strong>{monthlyWithFee}</strong> {loan.currency}</span>
+                <span className="text-sm text-black">Reste à payer (+ frais): <strong>{remainingWithFees}</strong> {loan.currency}</span>
                 {loan.daysOverdue && loan.daysOverdue > 0 && (
                   <span className="text-sm text-red-600">{loan.daysOverdue} jours de retard</span>
                 )}
@@ -190,22 +190,22 @@ const RecouvrementModal: React.FC<Props> = ({ loan, onClose, onSuccess }) => {
 
           {activeTab === 'notes' && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">Ajouter une note à l'historique de recouvrement.</p>
+              <p className="text-sm text-black">Ajouter une note à l'historique de recouvrement.</p>
 
               {/* Existing notes */}
               <div className="space-y-3 max-h-48 overflow-y-auto border border-gray-100 rounded-lg p-3 bg-white">
                 {loadingNotes ? (
-                  <p className="text-sm text-gray-500">Chargement des notes...</p>
+                  <p className="text-sm text-black">Chargement des notes...</p>
                 ) : notes.length === 0 ? (
-                  <p className="text-sm text-gray-500">Aucune note de recouvrement enregistrée.</p>
+                  <p className="text-sm text-black">Aucune note de recouvrement enregistrée.</p>
                 ) : (
                   notes.map((n) => (
                     <div key={n.id} className="border-b last:border-b-0 pb-2 mb-2">
-                      <div className="flex items-center justify-between text-xs text-gray-500">
+                      <div className="flex items-center justify-between text-xs text-black">
                         <div>{n.createdByName || n.createdBy}</div>
                         <div>{new Date(n.createdAt).toLocaleString('fr-FR')}</div>
                       </div>
-                      <div className="text-sm text-gray-700 mt-1">{n.note}</div>
+                      <div className="text-sm text-black mt-1">{n.note}</div>
                     </div>
                   ))
                 )}
@@ -221,7 +221,7 @@ const RecouvrementModal: React.FC<Props> = ({ loan, onClose, onSuccess }) => {
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setNoteText('')}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-black hover:bg-gray-100"
                 >Annuler</button>
                 <button
                   onClick={handleSaveNote}
@@ -234,15 +234,15 @@ const RecouvrementModal: React.FC<Props> = ({ loan, onClose, onSuccess }) => {
 
           {activeTab === 'schedule' && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">Planifier la prochaine action de recouvrement.</p>
+              <p className="text-sm text-black">Planifier la prochaine action de recouvrement.</p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Date de Suivi</label>
+                  <label className="block text-sm font-medium text-black mb-2">Date de Suivi</label>
                   <input type="date" className="w-full px-4 py-3 border border-gray-300 rounded-lg" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Action</label>
+                  <label className="block text-sm font-medium text-black mb-2">Action</label>
                   <select className="w-full px-4 py-3 border border-gray-300 rounded-lg">
                     <option>Rappel Appel</option>
                     <option>Visite</option>
@@ -263,7 +263,7 @@ const RecouvrementModal: React.FC<Props> = ({ loan, onClose, onSuccess }) => {
         <div className="border-t border-gray-200 bg-gray-50 px-6 py-4 flex justify-between items-center">
           <div></div>
           <div className="flex gap-3">
-            <button onClick={onClose} className="px-6 py-2.5 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-100">Fermer</button>
+            <button onClick={onClose} className="px-6 py-2.5 border border-gray-300 rounded-lg font-medium text-black hover:bg-gray-100">Fermer</button>
           </div>
         </div>
 

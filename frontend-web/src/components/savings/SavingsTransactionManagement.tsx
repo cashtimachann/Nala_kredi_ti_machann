@@ -835,8 +835,8 @@ const SavingsTransactionManagement: React.FC = () => {
           <div className="flex gap-2">
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`px-4 py-2 rounded-lg border-2 transition-colors flex items-center gap-2 ${
-                showFilters ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-gray-300 hover:border-blue-500'
+              className={`px-4 py-2 rounded-lg border-2 transition-colors flex items-center gap-2 text-black ${
+                showFilters ? 'bg-blue-100 border-blue-500' : 'border-gray-300 hover:border-blue-500 hover:bg-gray-50'
               }`}
             >
               <Filter className="h-4 w-4" />

@@ -1009,16 +1009,16 @@ const CurrentAccountManagement: React.FC<{ showTabs?: boolean }> = ({ showTabs =
             </div>
             {/* Pagination controls for accounts list */}
           <div className="p-4 border-t bg-white flex items-center justify-between">
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-black">
               Affichage {Math.min((accPage - 1) * accPageSize + 1, totalFilteredAccounts)} - {Math.min(accPage * accPageSize, totalFilteredAccounts)} sur {totalFilteredAccounts} comptes
             </div>
             <div className="flex items-center gap-2">
-              <select value={accPageSize} onChange={(e) => setAccPageSize(Number(e.target.value))} className="px-3 py-2 border rounded">
+              <select value={accPageSize} onChange={(e) => setAccPageSize(Number(e.target.value))} className="px-3 py-2 border border-gray-300 rounded text-black">
                 {[10,20,50,100].map(n => <option key={n} value={n}>{n} / page</option>)}
               </select>
-              <button onClick={() => setAccPage(Math.max(1, accPage - 1))} disabled={accPage <= 1} className="px-3 py-2 border rounded disabled:opacity-50">Préc</button>
-              <span className="px-2 text-sm">{accPage} / {totalAccPages}</span>
-              <button onClick={() => setAccPage(Math.min(totalAccPages, accPage + 1))} disabled={accPage >= totalAccPages} className="px-3 py-2 border rounded disabled:opacity-50">Suiv</button>
+              <button onClick={() => setAccPage(Math.max(1, accPage - 1))} disabled={accPage <= 1} className="px-3 py-2 border border-gray-300 rounded text-black hover:bg-gray-100 disabled:opacity-50 disabled:text-gray-400">Préc</button>
+              <span className="px-2 text-sm text-black">{accPage} / {totalAccPages}</span>
+              <button onClick={() => setAccPage(Math.min(totalAccPages, accPage + 1))} disabled={accPage >= totalAccPages} className="px-3 py-2 border border-gray-300 rounded text-black hover:bg-gray-100 disabled:opacity-50 disabled:text-gray-400">Suiv</button>
             </div>
             </div>
           </div>
@@ -1648,15 +1648,15 @@ const ClientsTabCurrent: React.FC<{ onOpenCurrent: (customer: any) => void }> = 
 
           {/* Pagination controls */}
           <div className="px-4 py-3 bg-white border-t flex items-center justify-between">
-            <div className="text-sm text-gray-600">
-              Affichage {(page - 1) * pageSize + 1} – {Math.min(page * pageSize, totalFiltered)} sur {totalFiltered}
+            <div className="text-sm text-black">
+              Affichage {Math.min((page - 1) * pageSize + 1, totalFiltered)} – {Math.min(page * pageSize, totalFiltered)} sur {totalFiltered}
             </div>
             <div className="flex items-center space-x-2">
-              <label className="text-sm text-gray-600">Lignes</label>
+              <label className="text-sm text-black">Lignes</label>
               <select
                 value={pageSize}
                 onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                className="px-2 py-1 border rounded"
+                className="px-2 py-1 border border-gray-300 rounded text-black hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -1668,14 +1668,14 @@ const ClientsTabCurrent: React.FC<{ onOpenCurrent: (customer: any) => void }> = 
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="px-3 py-1 border rounded disabled:opacity-50"
+                className="px-3 py-1 border border-gray-300 rounded text-black hover:bg-gray-100 disabled:opacity-50 disabled:text-gray-400 disabled:hover:bg-white"
               >Préc</button>
 
-              <span className="text-sm">Page</span>
+              <span className="text-sm text-black">Page</span>
               <select
                 value={page}
                 onChange={(e) => setPage(Number(e.target.value))}
-                className="px-2 py-1 border rounded"
+                className="px-2 py-1 border border-gray-300 rounded text-black hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {Array.from({ length: totalPages }).map((_, i) => (
                   <option key={i} value={i + 1}>{i + 1}</option>
@@ -1685,7 +1685,7 @@ const ClientsTabCurrent: React.FC<{ onOpenCurrent: (customer: any) => void }> = 
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="px-3 py-1 border rounded disabled:opacity-50"
+                className="px-3 py-1 border border-gray-300 rounded text-black hover:bg-gray-100 disabled:opacity-50 disabled:text-gray-400 disabled:hover:bg-white"
               >Suiv</button>
             </div>
           </div>
@@ -2717,7 +2717,7 @@ const TransactionsTabCurrent: React.FC = () => {
                 className="w-full pl-9 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 ref={accountInputRef}
               />
-              <button onClick={() => loadTransactions()} className="absolute right-1 top-1/2 -translate-y-1/2 px-2 py-1 text-xs border rounded-md hover:bg-gray-50">Charger</button>
+              <button onClick={() => loadTransactions()} className="absolute right-1 top-1/2 -translate-y-1/2 px-3 py-1.5 text-xs border border-gray-300 rounded-md text-black bg-white hover:bg-gray-100">Charger</button>
             </div>
           </div>
         </div>
@@ -2800,14 +2800,14 @@ const TransactionsTabCurrent: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => { setTypeFilter('ALL'); setBranchFilter('ALL'); setStartDate(''); setEndDate(''); setMinAmount(''); setMaxAmount(''); }}
-              className="px-3 py-2 border rounded-lg hover:bg-gray-50"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-black hover:bg-gray-100"
               title="Réinitialiser les filtres"
             >
               Réinitialiser
             </button>
             <button
               onClick={() => setShowAdvancedFilters((v) => !v)}
-              className="px-3 py-2 border rounded-lg hover:bg-gray-50"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-black hover:bg-gray-100"
               title="Plus d'options"
             >
               {showAdvancedFilters ? 'Masquer options' : 'Options avancées'}
@@ -3055,16 +3055,16 @@ const TransactionsTabCurrent: React.FC = () => {
 
         {/* Pagination controls for transactions */}
         <div className="px-4 py-3 bg-white border-t flex items-center justify-between">
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-black">
             Affichage {totalFilteredTx === 0 ? 0 : Math.min((txPage - 1) * txPageSize + 1, totalFilteredTx)} - {Math.min(txPage * txPageSize, totalFilteredTx)} sur {totalFilteredTx} transactions
           </div>
           <div className="flex items-center gap-2">
-            <select value={txPageSize} onChange={(e) => { setTxPageSize(Number(e.target.value)); setTxPage(1); }} className="px-2 py-1 border rounded">
+            <select value={txPageSize} onChange={(e) => { setTxPageSize(Number(e.target.value)); setTxPage(1); }} className="px-2 py-1 border border-gray-300 rounded text-black">
               {[10,20,50,100].map(n => <option key={n} value={n}>{n} / page</option>)}
             </select>
-            <button onClick={() => setTxPage(Math.max(1, txPage - 1))} disabled={txPage <= 1} className="px-3 py-1 border rounded disabled:opacity-50">Préc</button>
-            <span className="px-2 text-sm">{txPage} / {totalTxPages}</span>
-            <button onClick={() => setTxPage(Math.min(totalTxPages, txPage + 1))} disabled={txPage >= totalTxPages} className="px-3 py-1 border rounded disabled:opacity-50">Suiv</button>
+            <button onClick={() => setTxPage(Math.max(1, txPage - 1))} disabled={txPage <= 1} className="px-3 py-1 border border-gray-300 rounded text-black hover:bg-gray-100 disabled:opacity-50 disabled:text-gray-400">Préc</button>
+            <span className="px-2 text-sm text-black">{txPage} / {totalTxPages}</span>
+            <button onClick={() => setTxPage(Math.min(totalTxPages, txPage + 1))} disabled={txPage >= totalTxPages} className="px-3 py-1 border border-gray-300 rounded text-black hover:bg-gray-100 disabled:opacity-50 disabled:text-gray-400">Suiv</button>
           </div>
         </div>
 

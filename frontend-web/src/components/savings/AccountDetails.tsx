@@ -266,7 +266,7 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({ account, onBack, onUpda
             <div className="bg-white p-6 rounded-lg shadow border">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Solde Actuel</p>
+                  <p className="text-sm font-medium text-black">Solde Actuel</p>
                   <p className="text-2xl font-bold text-gray-900">
                     {formatCurrency(account.balance)}
                   </p>
@@ -280,7 +280,7 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({ account, onBack, onUpda
             <div className="bg-white p-6 rounded-lg shadow border">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Disponible</p>
+                  <p className="text-sm font-medium text-black">Disponible</p>
                   <p className="text-2xl font-bold text-gray-900">
                     {formatCurrency(account.availableBalance)}
                   </p>
@@ -333,7 +333,7 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({ account, onBack, onUpda
                   <span className="font-medium">{account.currency}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Statut:</span>
+                  <span className="text-black">Statut:</span>
                   <span className={`font-medium px-2 py-1 rounded text-sm ${
                     account.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                   }`}>
@@ -345,7 +345,7 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({ account, onBack, onUpda
                   <span className="font-medium">{formatDate(account.openingDate + 'T00:00:00Z')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Taux d'intérêt:</span>
+                  <span className="text-black">Taux d'intérêt:</span>
                   <span className="font-medium">{(account.interestRate * 100).toFixed(2)}% annuel</span>
                 </div>
                 <div className="flex justify-between">

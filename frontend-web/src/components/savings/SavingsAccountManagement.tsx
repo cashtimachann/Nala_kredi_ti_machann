@@ -4,12 +4,12 @@ import AccountManagement from './AccountManagement';
 
 const SavingsAccountManagement: React.FC = () => {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 accounts-contrast-fix">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Gestion des Comptes d'Épargne</h2>
-          <p className="text-gray-600 mt-1">Ouvrir et gérer les comptes d'épargne</p>
+          <h2 className="text-xl font-semibold text-black">Gestion des Comptes d'Épargne</h2>
+          <p className="text-black mt-1">Ouvrir et gérer les comptes d'épargne</p>
         </div>
       </div>
 

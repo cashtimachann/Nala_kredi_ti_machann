@@ -430,7 +430,7 @@ const CompleteSavingsAccountManagement: React.FC = () => {
   }).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 accounts-contrast-fix">
       {/* Statistics Cards */}
       {statistics && (
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
@@ -518,10 +518,10 @@ const CompleteSavingsAccountManagement: React.FC = () => {
           <div className="flex gap-2">
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`px-4 py-2 rounded-lg border-2 transition-colors flex items-center gap-2 ${
+              className={`px-4 py-2 rounded-lg border-2 transition-colors flex items-center gap-2 text-black ${
                 showFilters
-                  ? 'bg-blue-50 border-blue-500 text-blue-700'
-                  : 'border-gray-300 hover:border-blue-500'
+                  ? 'bg-blue-100 border-blue-500'
+                  : 'border-gray-300 hover:border-blue-500 hover:bg-gray-50'
               }`}
             >
               <Filter className="h-4 w-4" />
@@ -744,7 +744,7 @@ const CompleteSavingsAccountManagement: React.FC = () => {
                       <div className="font-semibold text-gray-900">
                         {formatCurrency(account.balance, account.currency)}
                       </div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-black">
                         Dispo: {formatCurrency(account.availableBalance, account.currency)}
                       </div>
                       {account.blockedBalance > 0 && (
@@ -761,7 +761,7 @@ const CompleteSavingsAccountManagement: React.FC = () => {
                         {account.interestRate ? `${account.interestRate}% / an` : '—'}
                       </div>
                       {(account as any).termType && (
-                        <div className="text-xs text-gray-500">Par mois: {getMonthlyInterestRatePercent({ interestRate: account.interestRate, interestRateMonthly: (account as any).interestRateMonthly, termType: (account as any).termType }).toFixed(2)}%</div>
+                        <div className="text-xs text-black">Par mois: {getMonthlyInterestRatePercent({ interestRate: account.interestRate, interestRateMonthly: (account as any).interestRateMonthly, termType: (account as any).termType }).toFixed(2)}%</div>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">

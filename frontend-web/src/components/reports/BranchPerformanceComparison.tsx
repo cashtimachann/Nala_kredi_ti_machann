@@ -75,10 +75,10 @@ export const BranchPerformanceComparison: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-black mb-2">
             📊 Comparaison des Performances des Succursales
           </h1>
-          <p className="text-gray-600">
+          <p className="text-black">
             Comparer les performances entre toutes les succursales
           </p>
         </div>
@@ -87,7 +87,7 @@ export const BranchPerformanceComparison: React.FC = () => {
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="flex items-center gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-black mb-1">
                 Date de Début
               </label>
               <input
@@ -98,7 +98,7 @@ export const BranchPerformanceComparison: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-black mb-1">
                 Date de Fin
               </label>
               <input
@@ -109,7 +109,7 @@ export const BranchPerformanceComparison: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-black mb-1">
                 Trier Par
               </label>
               <select
@@ -124,7 +124,7 @@ export const BranchPerformanceComparison: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-black mb-1">
                 Ordre
               </label>
               <select
@@ -157,7 +157,7 @@ export const BranchPerformanceComparison: React.FC = () => {
         {loading && (
           <div className="text-center py-12 bg-white rounded-lg shadow-sm">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p className="mt-4 text-gray-600">Chargement de la comparaison des performances...</p>
+            <p className="mt-4 text-black">Chargement de la comparaison des performances...</p>
           </div>
         )}
 
@@ -166,7 +166,7 @@ export const BranchPerformanceComparison: React.FC = () => {
           <>
             {/* Top 3 Branches */}
             <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
+              <h2 className="text-xl font-bold text-black mb-4">
                 🏆 Top 3 Succursales
               </h2>
               <div className="grid grid-cols-3 gap-6">
@@ -183,7 +183,7 @@ export const BranchPerformanceComparison: React.FC = () => {
             {/* All Branches Comparison Table */}
             <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
               <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-bold text-gray-900">
+                <h3 className="text-lg font-bold text-black">
                   Comparaison Détaillée - {sortedBranches.length} Succursales
                 </h3>
               </div>
@@ -192,28 +192,28 @@ export const BranchPerformanceComparison: React.FC = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase">
                         Rang
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-black uppercase">
                         Succursale
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-6 py-3 text-right text-xs font-medium text-black uppercase">
                         Crédits Décaissés (HTG)
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-6 py-3 text-right text-xs font-medium text-black uppercase">
                         Paiements (HTG)
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-6 py-3 text-right text-xs font-medium text-black uppercase">
                         Taux Recouv.
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-6 py-3 text-right text-xs font-medium text-black uppercase">
                         PAR
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-6 py-3 text-right text-xs font-medium text-black uppercase">
                         Crédits Actifs
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-6 py-3 text-right text-xs font-medium text-black uppercase">
                         Clients
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
@@ -346,17 +346,17 @@ const TopBranchCard: React.FC<{ branch: BranchPerformanceDto; position: number }
     <div className={`rounded-lg shadow-lg p-6 border-2 ${colors[position - 1]}`}>
       <div className="text-center mb-4">
         <div className="text-6xl mb-2">{medals[position - 1]}</div>
-        <div className="text-xl font-bold text-gray-900">{branch.branchName}</div>
-        {branch.region && <div className="text-sm text-gray-600">{branch.region}</div>}
+        <div className="text-xl font-bold text-black">{branch.branchName}</div>
+        {branch.region && <div className="text-sm text-black">{branch.region}</div>}
       </div>
 
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-600">Taux Recouvrement:</span>
+          <span className="text-sm text-black">Taux Recouvrement:</span>
           <span className="text-lg font-bold text-green-600">{branch.collectionRate.toFixed(1)}%</span>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-600">PAR:</span>
+          <span className="text-sm text-black">PAR:</span>
           <span className={`text-lg font-bold ${
             branch.portfolioAtRisk < 5 ? 'text-green-600' :
             branch.portfolioAtRisk < 10 ? 'text-blue-600' :
@@ -366,13 +366,13 @@ const TopBranchCard: React.FC<{ branch: BranchPerformanceDto; position: number }
           </span>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-600">Paiements Total:</span>
+          <span className="text-sm text-black">Paiements Total:</span>
           <span className="text-sm font-bold text-purple-600">
             {branchReportService.formatCurrency(branch.totalCollectionsHTG, 'HTG')}
           </span>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-600">Clients:</span>
+          <span className="text-sm text-black">Clients:</span>
           <span className="text-sm font-medium text-gray-900">{branch.numberOfCustomers.toLocaleString()}</span>
         </div>
       </div>
@@ -390,8 +390,8 @@ const BranchComparisonRow: React.FC<{ branch: BranchPerformanceDto }> = ({ branc
         </span>
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
-        <div className="font-medium text-gray-900">{branch.branchName}</div>
-        {branch.region && <div className="text-sm text-gray-500">{branch.region}</div>}
+        <div className="font-medium text-black">{branch.branchName}</div>
+        {branch.region && <div className="text-sm text-black">{branch.region}</div>}
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-right">
         <div className="text-sm text-blue-600 font-medium">
@@ -424,13 +424,13 @@ const BranchComparisonRow: React.FC<{ branch: BranchPerformanceDto }> = ({ branc
         </span>
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-right">
-        <div className="text-sm text-gray-900">{branch.numberOfActiveLoans.toLocaleString()}</div>
+        <div className="text-sm text-black">{branch.numberOfActiveLoans.toLocaleString()}</div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-right">
-        <div className="text-sm text-gray-900">{branch.numberOfCustomers.toLocaleString()}</div>
+        <div className="text-sm text-black">{branch.numberOfCustomers.toLocaleString()}</div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-right">
-        <div className="text-sm text-gray-900">{branch.numberOfEmployees}</div>
+        <div className="text-sm text-black">{branch.numberOfEmployees}</div>
       </td>
     </tr>
   );

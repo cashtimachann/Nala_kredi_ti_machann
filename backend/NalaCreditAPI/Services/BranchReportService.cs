@@ -210,6 +210,26 @@ public class BranchReportService : IBranchReportService
 
     private async Task PopulateDepositsAndWithdrawalsAsync(DailyBranchReportDto report, int branchId, DateTime startDate, DateTime endDate)
     {
+        string FormatUser(User? user) => BuildUserDisplayName(user);
+
+        void AppendDeposit(TransactionSummaryDto summary, Currency currency, decimal amount)
+        {
+            report.Deposits.Add(summary);
+            if (currency == Currency.HTG)
+                report.TotalDepositsHTG += amount;
+            else
+                report.TotalDepositsUSD += amount;
+        }
+
+        void AppendWithdrawal(TransactionSummaryDto summary, Currency currency, decimal amount)
+        {
+            report.Withdrawals.Add(summary);
+            if (currency == Currency.HTG)
+                report.TotalWithdrawalsHTG += amount;
+            else
+                report.TotalWithdrawalsUSD += amount;
+        }
+
         var transactions = await _context.Transactions
             .Include(t => t.Account)
                 .ThenInclude(a => a.Customer)
@@ -228,29 +248,138 @@ public class BranchReportService : IBranchReportService
                 TransactionId = transaction.Id,
                 TransactionNumber = transaction.TransactionNumber,
                 AccountNumber = transaction.Account.AccountNumber,
-                CustomerName = $"{transaction.Account.Customer.FirstName} {transaction.Account.Customer.LastName}",
+                CustomerName = $"{transaction.Account.Customer.FirstName} {transaction.Account.Customer.LastName}".Trim(),
                 Amount = transaction.Amount,
                 Currency = transaction.Currency,
                 Type = transaction.Type,
                 TransactionDate = transaction.CreatedAt,
-                ProcessedBy = transaction.User != null ? $"{transaction.User.FirstName} {transaction.User.LastName}" : "N/A"
+                ProcessedBy = FormatUser(transaction.User)
             };
 
             if (transaction.Type == TransactionType.Deposit)
             {
-                report.Deposits.Add(summary);
-                if (transaction.Currency == Currency.HTG)
-                    report.TotalDepositsHTG += transaction.Amount;
-                else
-                    report.TotalDepositsUSD += transaction.Amount;
+                AppendDeposit(summary, transaction.Currency, transaction.Amount);
             }
-            else if (transaction.Type == TransactionType.Withdrawal)
+            else
             {
-                report.Withdrawals.Add(summary);
-                if (transaction.Currency == Currency.HTG)
-                    report.TotalWithdrawalsHTG += transaction.Amount;
-                else
-                    report.TotalWithdrawalsUSD += transaction.Amount;
+                AppendWithdrawal(summary, transaction.Currency, transaction.Amount);
+            }
+        }
+
+        var savingsTransactions = await _context.SavingsTransactions
+            .Include(t => t.Account)
+                .ThenInclude(a => a.Customer)
+            .Include(t => t.ProcessedByUser)
+            .Where(t => t.BranchId == branchId &&
+                        t.ProcessedAt >= startDate &&
+                        t.ProcessedAt < endDate &&
+                        t.Status == SavingsTransactionStatus.Completed &&
+                        (t.Type == SavingsTransactionType.Deposit ||
+                         t.Type == SavingsTransactionType.OpeningDeposit ||
+                         t.Type == SavingsTransactionType.Withdrawal))
+            .ToListAsync();
+
+        foreach (var savingsTransaction in savingsTransactions)
+        {
+            var currency = MapSavingsCurrency(savingsTransaction.Currency);
+            var summary = new TransactionSummaryDto
+            {
+                TransactionId = 0,
+                TransactionNumber = !string.IsNullOrWhiteSpace(savingsTransaction.Reference) ? savingsTransaction.Reference : savingsTransaction.Id,
+                AccountNumber = savingsTransaction.Account?.AccountNumber ?? savingsTransaction.AccountNumber,
+                CustomerName = savingsTransaction.Account?.Customer?.FullName ?? "N/A",
+                Amount = savingsTransaction.Amount,
+                Currency = currency,
+                Type = savingsTransaction.Type == SavingsTransactionType.Withdrawal ? TransactionType.Withdrawal : TransactionType.Deposit,
+                TransactionDate = savingsTransaction.ProcessedAt,
+                ProcessedBy = FormatUser(savingsTransaction.ProcessedByUser)
+            };
+
+            if (savingsTransaction.Type == SavingsTransactionType.Withdrawal)
+            {
+                AppendWithdrawal(summary, currency, savingsTransaction.Amount);
+            }
+            else
+            {
+                AppendDeposit(summary, currency, savingsTransaction.Amount);
+            }
+        }
+
+        var termTransactions = await _context.TermSavingsTransactions
+            .Include(t => t.Account)
+                .ThenInclude(a => a.Customer)
+            .Include(t => t.ProcessedByUser)
+            .Where(t => t.BranchId == branchId &&
+                        t.ProcessedAt >= startDate &&
+                        t.ProcessedAt < endDate &&
+                        t.Status == SavingsTransactionStatus.Completed &&
+                        (t.Type == SavingsTransactionType.Deposit ||
+                         t.Type == SavingsTransactionType.OpeningDeposit ||
+                         t.Type == SavingsTransactionType.Withdrawal))
+            .ToListAsync();
+
+        foreach (var termTransaction in termTransactions)
+        {
+            var currency = MapClientCurrency(termTransaction.Currency);
+            var summary = new TransactionSummaryDto
+            {
+                TransactionId = 0,
+                TransactionNumber = !string.IsNullOrWhiteSpace(termTransaction.Reference) ? termTransaction.Reference : termTransaction.Id,
+                AccountNumber = termTransaction.Account?.AccountNumber ?? termTransaction.AccountNumber,
+                CustomerName = termTransaction.Account?.Customer?.FullName ?? "N/A",
+                Amount = termTransaction.Amount,
+                Currency = currency,
+                Type = termTransaction.Type == SavingsTransactionType.Withdrawal ? TransactionType.Withdrawal : TransactionType.Deposit,
+                TransactionDate = termTransaction.ProcessedAt,
+                ProcessedBy = FormatUser(termTransaction.ProcessedByUser)
+            };
+
+            if (termTransaction.Type == SavingsTransactionType.Withdrawal)
+            {
+                AppendWithdrawal(summary, currency, termTransaction.Amount);
+            }
+            else
+            {
+                AppendDeposit(summary, currency, termTransaction.Amount);
+            }
+        }
+
+        var currentAccountTransactions = await _context.CurrentAccountTransactions
+            .Include(t => t.Account)
+                .ThenInclude(a => a.Customer)
+            .Include(t => t.ProcessedByUser)
+            .Where(t => t.BranchId == branchId &&
+                        t.ProcessedAt >= startDate &&
+                        t.ProcessedAt < endDate &&
+                        t.Status == SavingsTransactionStatus.Completed &&
+                        (t.Type == SavingsTransactionType.Deposit ||
+                         t.Type == SavingsTransactionType.OpeningDeposit ||
+                         t.Type == SavingsTransactionType.Withdrawal))
+            .ToListAsync();
+
+        foreach (var currentTransaction in currentAccountTransactions)
+        {
+            var currency = MapClientCurrency(currentTransaction.Currency);
+            var summary = new TransactionSummaryDto
+            {
+                TransactionId = 0,
+                TransactionNumber = !string.IsNullOrWhiteSpace(currentTransaction.Reference) ? currentTransaction.Reference : currentTransaction.Id,
+                AccountNumber = currentTransaction.Account?.AccountNumber ?? currentTransaction.AccountNumber,
+                CustomerName = currentTransaction.Account?.Customer?.FullName ?? "N/A",
+                Amount = currentTransaction.Amount,
+                Currency = currency,
+                Type = currentTransaction.Type == SavingsTransactionType.Withdrawal ? TransactionType.Withdrawal : TransactionType.Deposit,
+                TransactionDate = currentTransaction.ProcessedAt,
+                ProcessedBy = FormatUser(currentTransaction.ProcessedByUser)
+            };
+
+            if (currentTransaction.Type == SavingsTransactionType.Withdrawal)
+            {
+                AppendWithdrawal(summary, currency, currentTransaction.Amount);
+            }
+            else
+            {
+                AppendDeposit(summary, currency, currentTransaction.Amount);
             }
         }
 
@@ -348,7 +477,33 @@ public class BranchReportService : IBranchReportService
                     report.TotalTransfersInUSD += transfer.Amount;
             }
         }
+
     }
+
+        private static Currency MapSavingsCurrency(SavingsCurrency currency)
+        {
+            return currency == SavingsCurrency.USD ? Currency.USD : Currency.HTG;
+        }
+
+        private static Currency MapClientCurrency(ClientCurrency currency)
+        {
+            return currency == ClientCurrency.USD ? Currency.USD : Currency.HTG;
+        }
+
+        private static string BuildUserDisplayName(User? user)
+        {
+            if (user == null)
+                return "N/A";
+
+            var fullName = $"{user.FirstName} {user.LastName}".Trim();
+            if (!string.IsNullOrWhiteSpace(fullName))
+                return fullName;
+
+            if (!string.IsNullOrWhiteSpace(user.UserName))
+                return user.UserName!;
+
+            return "N/A";
+        }
 
     public async Task<MonthlyBranchReportDto> GenerateMonthlyReportAsync(int branchId, int month, int year)
     {

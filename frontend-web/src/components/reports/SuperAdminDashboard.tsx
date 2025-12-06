@@ -79,15 +79,15 @@ export const SuperAdminDashboard: React.FC = () => {
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            <h1 className="text-3xl font-bold text-black mb-2">
               🔐 Dashboard SuperAdmin
             </h1>
-            <p className="text-gray-600">
+            <p className="text-black">
               Contrôle total sur toutes les succursales
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 text-sm text-gray-700">
+            <label className="flex items-center gap-2 text-sm text-black">
               <input
                 type="checkbox"
                 checked={autoRefresh}
@@ -120,7 +120,7 @@ export const SuperAdminDashboard: React.FC = () => {
           <>
             {/* Today's Activity */}
             <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
+              <h2 className="text-xl font-bold text-black mb-4">
                 📊 Activité d'Aujourd'hui
               </h2>
               <div className="grid grid-cols-5 gap-4">
@@ -166,16 +166,16 @@ export const SuperAdminDashboard: React.FC = () => {
               </h2>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">💰 Crédits Décaissés</h3>
+                  <h3 className="text-lg font-semibold text-black mb-4">💰 Crédits Décaissés</h3>
                   <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span className="text-gray-600">HTG:</span>
+                      <span className="text-black">HTG:</span>
                       <span className="font-bold text-blue-600">
                         {branchReportService.formatCurrency(dashboardStats.monthToDateDisbursementsHTG, 'HTG')}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">USD:</span>
+                      <span className="text-black">USD:</span>
                       <span className="font-bold text-blue-600">
                         {branchReportService.formatCurrency(dashboardStats.monthToDateDisbursementsUSD, 'USD')}
                       </span>
@@ -183,16 +183,16 @@ export const SuperAdminDashboard: React.FC = () => {
                   </div>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">💵 Paiements Reçus</h3>
+                  <h3 className="text-lg font-semibold text-black mb-4">💵 Paiements Reçus</h3>
                   <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span className="text-gray-600">HTG:</span>
+                      <span className="text-black">HTG:</span>
                       <span className="font-bold text-green-600">
                         {branchReportService.formatCurrency(dashboardStats.monthToDateCollectionsHTG, 'HTG')}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">USD:</span>
+                      <span className="text-black">USD:</span>
                       <span className="font-bold text-green-600">
                         {branchReportService.formatCurrency(dashboardStats.monthToDateCollectionsUSD, 'USD')}
                       </span>
@@ -204,30 +204,30 @@ export const SuperAdminDashboard: React.FC = () => {
 
             {/* Portfolio Overview */}
             <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
+              <h2 className="text-xl font-bold text-black mb-4">
                 💼 Aperçu Portefeuille
               </h2>
               <div className="grid grid-cols-4 gap-4">
                 <div className="bg-white rounded-lg shadow-sm p-6">
-                  <div className="text-sm text-gray-600 mb-1">Total HTG</div>
+                  <div className="text-sm text-black mb-1">Total HTG</div>
                   <div className="text-2xl font-bold text-indigo-600">
                     {branchReportService.formatCurrency(dashboardStats.totalOutstandingPortfolioHTG, 'HTG')}
                   </div>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm p-6">
-                  <div className="text-sm text-gray-600 mb-1">Total USD</div>
+                  <div className="text-sm text-black mb-1">Total USD</div>
                   <div className="text-2xl font-bold text-indigo-600">
                     {branchReportService.formatCurrency(dashboardStats.totalOutstandingPortfolioUSD, 'USD')}
                   </div>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm p-6">
-                  <div className="text-sm text-gray-600 mb-1">Crédits Actifs</div>
+                  <div className="text-sm text-black mb-1">Crédits Actifs</div>
                   <div className="text-2xl font-bold text-blue-600">
                     {dashboardStats.totalActiveLoans.toLocaleString()}
                   </div>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm p-6">
-                  <div className="text-sm text-gray-600 mb-1">PAR Global</div>
+                  <div className="text-sm text-black mb-1">PAR Global</div>
                   <div className={`text-2xl font-bold ${
                     dashboardStats.globalPAR < 5 ? 'text-green-600' :
                     dashboardStats.globalPAR < 10 ? 'text-blue-600' :
@@ -242,7 +242,7 @@ export const SuperAdminDashboard: React.FC = () => {
 
             {/* Alerts Summary */}
             <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
+              <h2 className="text-xl font-bold text-black mb-4">
                 🚨 Alertes
               </h2>
               <div className="grid grid-cols-3 gap-4">
@@ -364,7 +364,7 @@ export const SuperAdminDashboard: React.FC = () => {
         {/* Consolidated Report Section */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-900">
+            <h2 className="text-xl font-bold text-black">
               📊 Rapport Consolidé - Toutes les Succursales
             </h2>
             <div className="flex items-center gap-4">
@@ -374,7 +374,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 onChange={(e) => setStartDate(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-md"
               />
-              <span className="text-gray-600">→</span>
+              <span className="text-black">→</span>
               <input
                 type="date"
                 value={endDate}
@@ -387,7 +387,7 @@ export const SuperAdminDashboard: React.FC = () => {
           {loading && (
             <div className="text-center py-12 bg-white rounded-lg shadow-sm">
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-              <p className="mt-4 text-gray-600">Chargement du rapport consolidé...</p>
+              <p className="mt-4 text-black">Chargement du rapport consolidé...</p>
             </div>
           )}
 
@@ -396,25 +396,25 @@ export const SuperAdminDashboard: React.FC = () => {
               {/* Global Totals */}
               <div className="grid grid-cols-4 gap-4 mb-6">
                 <div className="bg-white rounded-lg shadow-sm p-6">
-                  <div className="text-sm text-gray-600 mb-1">Total Succursales</div>
+                  <div className="text-sm text-black mb-1">Total Succursales</div>
                   <div className="text-3xl font-bold text-indigo-600">
                     {consolidatedReport.totalBranches}
                   </div>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm p-6">
-                  <div className="text-sm text-gray-600 mb-1">Total Clients</div>
+                  <div className="text-sm text-black mb-1">Total Clients</div>
                   <div className="text-3xl font-bold text-blue-600">
                     {consolidatedReport.totalActiveCustomers.toLocaleString()}
                   </div>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm p-6">
-                  <div className="text-sm text-gray-600 mb-1">Total Crédits</div>
+                  <div className="text-sm text-black mb-1">Total Crédits</div>
                   <div className="text-3xl font-bold text-green-600">
                     {consolidatedReport.totalActiveLoans.toLocaleString()}
                   </div>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm p-6">
-                  <div className="text-sm text-gray-600 mb-1">Total Employés</div>
+                  <div className="text-sm text-black mb-1">Total Employés</div>
                   <div className="text-3xl font-bold text-purple-600">
                     {consolidatedReport.totalEmployees}
                   </div>
@@ -424,7 +424,7 @@ export const SuperAdminDashboard: React.FC = () => {
               {/* Alerts */}
               {consolidatedReport.alerts.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4">
+                  <h3 className="text-lg font-bold text-black mb-4">
                     🚨 Alertes Actives
                   </h3>
                   <div className="space-y-2">
@@ -438,7 +438,7 @@ export const SuperAdminDashboard: React.FC = () => {
               {/* Top Performers */}
               {consolidatedReport.topPerformers.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4">
+                  <h3 className="text-lg font-bold text-black mb-4">
                     🏆 Meilleures Performances
                   </h3>
                   <div className="bg-white rounded-lg shadow-sm overflow-hidden">
@@ -459,8 +459,8 @@ export const SuperAdminDashboard: React.FC = () => {
                               <span className="text-2xl">{branch.rank === 1 ? '🥇' : branch.rank === 2 ? '🥈' : branch.rank === 3 ? '🥉' : `#${branch.rank}`}</span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="font-medium text-gray-900">{branch.branchName}</div>
-                              {branch.region && <div className="text-sm text-gray-500">{branch.region}</div>}
+                              <div className="font-medium text-black">{branch.branchName}</div>
+                              {branch.region && <div className="text-sm text-black">{branch.region}</div>}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right">
                               <div className="text-sm font-medium text-green-600">
@@ -516,11 +516,11 @@ const StatCard: React.FC<StatCardProps> = ({ icon, label, value, valueHTG, value
   return (
     <div className={`bg-white rounded-lg shadow-sm p-6 border ${colorClasses[color]}`}>
       <div className="flex items-center justify-between mb-2">
-        <div className="text-sm text-gray-600">{label}</div>
+        <div className="text-sm text-black">{label}</div>
         <div className="text-2xl">{icon}</div>
       </div>
       {value ? (
-        <div className="text-2xl font-bold text-gray-900">{value}</div>
+        <div className="text-2xl font-bold text-black">{value}</div>
       ) : (
         <div className="space-y-1">
           <div className="text-lg font-bold text-gray-900">

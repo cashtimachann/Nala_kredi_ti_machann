@@ -66,15 +66,15 @@ namespace NalaCreditAPI.Services.Savings
                     Notes = dto.Notes
                 };
 
-                // 4. Calculer les frais si applicable
-                var fees = CalculateFees(dto.Type, dto.Amount, account.Currency);
+                // 4. Pas de frais pour les comptes d'épargne
+                var fees = 0m; // Comptes d'épargne sans frais
                 savingsTransaction.Fees = fees;
 
                 // 5. Mettre à jour le solde du compte
                 var balanceChange = dto.Type switch
                 {
                     SavingsTransactionType.Deposit or SavingsTransactionType.Interest => dto.Amount,
-                    SavingsTransactionType.Withdrawal or SavingsTransactionType.Fee => -(dto.Amount + fees),
+                    SavingsTransactionType.Withdrawal or SavingsTransactionType.Fee => -dto.Amount, // Pas de frais
                     _ => throw new ArgumentException("Type de transaction non supporté")
                 };
 
@@ -162,7 +162,7 @@ namespace NalaCreditAPI.Services.Savings
                 var sourceTxId = Guid.NewGuid().ToString();
                 var destTxId = Guid.NewGuid().ToString();
 
-                var sourceFees = CalculateFees(SavingsTransactionType.Withdrawal, dto.Amount, source.Currency);
+                var sourceFees = 0m; // Pas de frais pour transferts entre comptes d'épargne
 
                 var sourceTransaction = new SavingsTransaction
                 {
@@ -211,7 +211,7 @@ namespace NalaCreditAPI.Services.Savings
                 };
 
                 // Update balances atomically
-                var sourceBalanceChange = -(dto.Amount + sourceFees);
+                var sourceBalanceChange = -dto.Amount; // Pas de frais
                 source.Balance += sourceBalanceChange;
                 source.AvailableBalance = source.Balance - source.BlockedBalance;
                 source.LastTransactionDate = DateTime.UtcNow;
@@ -490,16 +490,8 @@ namespace NalaCreditAPI.Services.Savings
 
         private static decimal CalculateFees(SavingsTransactionType type, decimal amount, SavingsCurrency currency)
         {
-            return type switch
-            {
-                SavingsTransactionType.Withdrawal => currency switch
-                {
-                    SavingsCurrency.HTG => Math.Max(50m, amount * 0.005m), // Min 50 HTG ou 0.5%
-                    SavingsCurrency.USD => Math.Max(1m, amount * 0.005m),  // Min 1 USD ou 0.5%
-                    _ => 0m
-                },
-                _ => 0m
-            };
+            // Comptes d'épargne sans frais - toujours retourner 0
+            return 0m;
         }
 
         private static SavingsTransactionType GetReversalType(SavingsTransactionType originalType)

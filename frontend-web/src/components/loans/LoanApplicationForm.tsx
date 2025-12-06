@@ -900,10 +900,10 @@ const LoanApplicationForm: React.FC<LoanApplicationFormProps> = ({ onSubmit, onC
           {currentStep === 1 && (
             <div className="space-y-6 animate-fadeIn">
               <div className="text-center mb-6">
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                <h3 className="text-2xl font-bold text-black mb-2">
                   Type de Crédit
                 </h3>
-                <p className="text-gray-600">
+                <p className="text-black">
                   Sélectionnez le type de crédit souhaité
                 </p>
               </div>
@@ -931,14 +931,14 @@ const LoanApplicationForm: React.FC<LoanApplicationFormProps> = ({ onSubmit, onC
           {currentStep === 2 && (
             <div className="space-y-6 animate-fadeIn">
               <div className="mb-6">
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Informations du Client</h3>
-                <p className="text-gray-600">Renseignez les informations personnelles</p>
+                <h3 className="text-2xl font-bold text-black mb-2">Informations du Client</h3>
+                <p className="text-black">Renseignez les informations personnelles</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Savings Account */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-black mb-2">
                     Numéro de Compte d'Épargne *
                   </label>
                   <div className="relative">

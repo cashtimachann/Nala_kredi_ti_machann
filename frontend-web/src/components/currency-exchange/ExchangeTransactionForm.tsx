@@ -182,13 +182,13 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
       <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b">
-          <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+          <h2 className="text-2xl font-bold text-black flex items-center">
             <DollarSign className="w-6 h-6 mr-2 text-primary-600" />
             Nouvelle Transaction de Change
           </h2>
           <button
             onClick={onCancel}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-black hover:text-black"
           >
             <X className="w-6 h-6" />
           </button>
@@ -198,14 +198,14 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
           {/* Branch Selection */}
           {!branchId && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-black mb-1">
                 Succursale *
               </label>
               <select
                 value={selectedBranchId}
                 onChange={(e) => setSelectedBranchId(e.target.value)}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-black"
               >
                 <option value="">Sélectionner une succursale</option>
                 {branches.map(branch => (
@@ -217,7 +217,7 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
 
           {/* Exchange Type */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-black mb-1">
               Type de transaction *
             </label>
             <div className="grid grid-cols-2 gap-4">
@@ -227,7 +227,7 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
                 className={`px-4 py-3 border-2 rounded-lg font-medium transition-colors ${
                   exchangeType === ExchangeType.Purchase
                     ? 'border-primary-600 bg-primary-50 text-primary-700'
-                    : 'border-gray-300 hover:border-gray-400'
+                    : 'border-gray-300 hover:border-gray-400 text-black'
                 }`}
               >
                 Achat USD (client achète)
@@ -238,13 +238,13 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
                 className={`px-4 py-3 border-2 rounded-lg font-medium transition-colors ${
                   exchangeType === ExchangeType.Sale
                     ? 'border-primary-600 bg-primary-50 text-primary-700'
-                    : 'border-gray-300 hover:border-gray-400'
+                    : 'border-gray-300 hover:border-gray-400 text-black'
                 }`}
               >
                 Vente USD (client vend)
               </button>
             </div>
-            <p className="mt-2 text-xs text-gray-500">{formatExchangeType(exchangeType)}</p>
+            <p className="mt-2 text-xs text-black">{formatExchangeType(exchangeType)}</p>
           </div>
 
           {/* Currency Exchange Section */}
@@ -252,7 +252,7 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               {/* From Currency */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-black mb-1">
                   Devise source *
                 </label>
                 <select
@@ -265,7 +265,7 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
                     )
                   }
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-black"
                 >
                   <option value={CurrencyType.HTG}>HTG - Gourde</option>
                   <option value={CurrencyType.USD}>USD - Dollar US</option>
@@ -277,7 +277,7 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
                 <button
                   type="button"
                   onClick={swapCurrencies}
-                  className="p-2 text-gray-600 hover:text-primary-600 hover:bg-white rounded-full transition-colors"
+                  className="p-2 text-black hover:text-primary-600 hover:bg-white rounded-full transition-colors"
                   title="Inverser les devises"
                   aria-label="Inverser les devises"
                 >
@@ -287,7 +287,7 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
 
               {/* To Currency */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-black mb-1">
                   Devise cible *
                 </label>
                 <select
@@ -300,7 +300,7 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
                     )
                   }
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-black"
                 >
                   <option value={CurrencyType.USD}>USD - Dollar US</option>
                   <option value={CurrencyType.HTG}>HTG - Gourde</option>
@@ -310,11 +310,11 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
 
             {/* Amount Input */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-black mb-1">
                 Montant à échanger *
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-gray-500">
+                <span className="absolute left-3 top-2.5 text-black">
                   {formatCurrencySymbol(sourceCurrency)}
                 </span>
                 <input
@@ -324,11 +324,11 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
                   value={fromAmount}
                   onChange={(e) => setFromAmount(e.target.value)}
                   required
-                  className="w-full pl-12 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full pl-12 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-black"
                   placeholder="0.00"
                 />
               </div>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-black">
                 {exchangeType === ExchangeType.Purchase
                   ? 'Le client paie en HTG et reçoit des USD.'
                   : 'Le client paie en USD et reçoit des HTG.'}
@@ -352,50 +352,50 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
               </h3>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-gray-600">Montant remis par le client:</span>
-                  <p className="font-medium text-gray-900">
+                  <span className="text-black">Montant remis par le client:</span>
+                  <p className="font-medium text-black">
                     {formatCurrencySymbol(calculationResult.fromCurrency)}{' '}
                     {calculationResult.fromAmount.toFixed(2)}
                   </p>
                 </div>
                 <div>
-                  <span className="text-gray-600">Taux appliqué:</span>
-                  <p className="font-medium text-gray-900">
+                  <span className="text-black">Taux appliqué:</span>
+                  <p className="font-medium text-black">
                     {calculationResult.exchangeRate.toFixed(6)}
                   </p>
                 </div>
                 <div>
-                  <span className="text-gray-600">Montant brut:</span>
-                  <p className="font-medium text-gray-900">
+                  <span className="text-black">Montant brut:</span>
+                  <p className="font-medium text-black">
                     {formatCurrencySymbol(calculationResult.toCurrency)}{' '}
                     {calculationResult.toAmount.toFixed(2)}
                   </p>
                 </div>
                 <div>
-                  <span className="text-gray-600">Commission ({(calculationResult.commissionRate * 100).toFixed(2)}%):</span>
-                  <p className="font-medium text-gray-900">
+                  <span className="text-black">Commission ({(calculationResult.commissionRate * 100).toFixed(2)}%):</span>
+                  <p className="font-medium text-black">
                     {formatCurrencySymbol(calculationResult.toCurrency)}{' '}
                     {calculationResult.commissionAmount.toFixed(2)}
                   </p>
                 </div>
                 <div className="col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-green-300">
                   <div>
-                    <span className="text-gray-600">Montant net à remettre:</span>
+                    <span className="text-black">Montant net à remettre:</span>
                     <p className="text-xl font-bold text-green-700">
                       {formatCurrencySymbol(calculationResult.toCurrency)}{' '}
                       {calculationResult.netAmount.toFixed(2)}
                     </p>
                   </div>
                   <div>
-                    <span className="text-gray-600">Solde total disponible (succursale):</span>
-                    <p className="font-semibold text-gray-900">
+                    <span className="text-black">Solde total disponible (succursale):</span>
+                    <p className="font-semibold text-black">
                       {typeof calculationResult.availableBalance === 'number' ? (
                         <>
                           {formatCurrencySymbol(calculationResult.toCurrency)}{' '}
                           {calculationResult.availableBalance.toFixed(2)}
                         </>
                       ) : (
-                        <span className="text-sm text-gray-500">Non disponible</span>
+                        <span className="text-sm text-black">Non disponible</span>
                       )}
                     </p>
                   </div>
@@ -408,7 +408,7 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-2">
               <p className="text-red-700 text-sm">{calculationError}</p>
               {typeof calculationResult?.availableBalance === 'number' && calculationResult && (
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-black">
                   Solde total disponible: {formatCurrencySymbol(calculationResult.toCurrency)}{' '}
                   {calculationResult.availableBalance.toFixed(2)}
                 </p>
@@ -418,13 +418,13 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
 
           {/* Customer Information */}
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900 flex items-center">
+            <h3 className="font-semibold text-black flex items-center">
               <User className="w-5 h-5 mr-2" />
               Informations client
             </h3>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-black mb-1">
                 Nom du client *
               </label>
               <input
@@ -432,27 +432,27 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-black"
                 placeholder="Nom complet"
               />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-black mb-1">
                   Document d'identité
                 </label>
                 <input
                   type="text"
                   value={customerDocument}
                   onChange={(e) => setCustomerDocument(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-black"
                   placeholder="CIN, Passport, etc."
                 />
               </div>
 
               <div>
-                <label className="flex items-center text-sm font-medium text-gray-700 mb-1">
+                <label className="flex items-center text-sm font-medium text-black mb-1">
                   <Phone className="w-4 h-4 mr-1" />
                   Téléphone
                 </label>
@@ -460,7 +460,7 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
                   type="tel"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-black"
                   placeholder="+509 1234 5678"
                 />
               </div>
@@ -469,7 +469,7 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
 
           {/* Notes */}
           <div>
-            <label className="flex items-center text-sm font-medium text-gray-700 mb-1">
+            <label className="flex items-center text-sm font-medium text-black mb-1">
               <FileText className="w-4 h-4 mr-1" />
               Notes
             </label>
@@ -477,7 +477,7 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-black"
               placeholder="Notes additionnelles..."
             />
           </div>
@@ -487,7 +487,7 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
             <button
               type="button"
               onClick={onCancel}
-              className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              className="px-6 py-2 border border-gray-300 rounded-md text-black hover:bg-gray-50"
               disabled={processing}
             >
               Annuler

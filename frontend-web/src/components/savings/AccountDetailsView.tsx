@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   User,
@@ -102,9 +102,22 @@ interface AuthorizedSigner {
   signature?: string;
 }
 
+type TransactionFilterType = 'all' | 'credits' | 'debits' | 'deposit' | 'withdrawal' | 'interest' | 'fees' | 'transfer';
+
+interface TransactionFilterState {
+  type: TransactionFilterType;
+  dateFrom: string;
+  dateTo: string;
+}
+
 const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onClose, onUpdate }) => {
   const [account, setAccount] = useState<AccountDetails | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactionFilters, setTransactionFilters] = useState<TransactionFilterState>({
+    type: 'all',
+    dateFrom: '',
+    dateTo: ''
+  });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'info' | 'transactions' | 'history' | 'signers'>('info');
   const [showEditModal, setShowEditModal] = useState(false);
@@ -393,6 +406,118 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
     }
   };
 
+  const filteredTransactions = useMemo(() => {
+    const hasTypeFilter = transactionFilters.type !== 'all';
+    const hasFrom = transactionFilters.dateFrom !== '';
+    const hasTo = transactionFilters.dateTo !== '';
+
+    if (!hasTypeFilter && !hasFrom && !hasTo) {
+      return transactions;
+    }
+
+    const from = hasFrom ? new Date(`${transactionFilters.dateFrom}T00:00:00`) : null;
+    const to = hasTo ? new Date(`${transactionFilters.dateTo}T23:59:59.999`) : null;
+
+    return transactions.filter((tx) => {
+      const normalizedType = (tx.type || '').toString().toLowerCase();
+      const credit = isCreditTx(tx);
+
+      const typeMatches = (() => {
+        switch (transactionFilters.type) {
+          case 'credits':
+            return credit;
+          case 'debits':
+            return !credit;
+          case 'deposit':
+            return normalizedType.includes('deposit');
+          case 'withdrawal':
+            return normalizedType.includes('withdraw');
+          case 'interest':
+            return normalizedType.includes('interest');
+          case 'fees':
+            return normalizedType.includes('fee');
+          case 'transfer':
+            return normalizedType.includes('transfer');
+          default:
+            return true;
+        }
+      })();
+
+      if (!typeMatches) {
+        return false;
+      }
+
+      if (!from && !to) {
+        return true;
+      }
+
+      if (!tx.processedAt) {
+        return true;
+      }
+
+      const txDate = new Date(tx.processedAt);
+      if (Number.isNaN(txDate.getTime())) {
+        return true;
+      }
+
+      if (from && txDate < from) {
+        return false;
+      }
+
+      if (to && txDate > to) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [transactions, transactionFilters]);
+
+  const transactionSummary = useMemo(() => {
+    const summary = {
+      totalCredits: 0,
+      totalDebits: 0,
+      interest: 0,
+      fees: 0,
+      creditCount: 0,
+      debitCount: 0,
+      net: 0
+    };
+
+    filteredTransactions.forEach((tx) => {
+      const amount = displayAmount(tx);
+      const normalizedType = (tx.type || '').toString().toLowerCase();
+      if (isCreditTx(tx)) {
+        summary.totalCredits += amount;
+        summary.creditCount += 1;
+      } else {
+        summary.totalDebits += amount;
+        summary.debitCount += 1;
+      }
+
+      if (normalizedType.includes('interest')) {
+        summary.interest += amount;
+      }
+
+      if (normalizedType.includes('fee')) {
+        summary.fees += amount;
+      }
+    });
+
+    summary.net = summary.totalCredits - summary.totalDebits;
+
+    return summary;
+  }, [filteredTransactions]);
+
+  const hasTransactionFilters = transactionFilters.type !== 'all' || Boolean(transactionFilters.dateFrom) || Boolean(transactionFilters.dateTo);
+
+  const transactionsLabel = filteredTransactions.length === transactions.length
+    ? `${transactions.length}`
+    : `${filteredTransactions.length}/${transactions.length}`;
+
+  const resetTransactionFilters = () => {
+    setTransactionFilters({ type: 'all', dateFrom: '', dateTo: '' });
+  };
+
   const handleCloseAccount = () => {
     setShowCloseConfirm(true);
     setCloseReason('');
@@ -565,20 +690,22 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
 
   if (!account) return null;
 
+  const baseCurrency = displayCurrency(account.currency);
+
   return (
     <>
       {/* Statement Date Range Modal */}
       {showStatementModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4 accounts-contrast-fix">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <div className="mb-4">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Relevé de compte</h2>
-              <p className="text-gray-600 text-sm">Sélectionnez la période à inclure dans le relevé.</p>
+              <h2 className="text-xl font-bold text-black mb-2">Relevé de compte</h2>
+              <p className="text-black text-sm">Sélectionnez la période à inclure dans le relevé.</p>
             </div>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1">Du</label>
+                  <label className="block text-sm text-black mb-1">Du</label>
                   <input
                     type="date"
                     value={statementFrom}
@@ -587,7 +714,7 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1">Au</label>
+                  <label className="block text-sm text-black mb-1">Au</label>
                   <input
                     type="date"
                     value={statementTo}
@@ -597,7 +724,7 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
                 </div>
               </div>
               <div>
-                <div className="text-xs text-gray-500 mb-2">Raccourcis</div>
+                <div className="text-xs text-black mb-2">Raccourcis</div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" className="px-2.5 py-1.5 text-xs border rounded" onClick={() => {
                     const now = new Date();
@@ -642,7 +769,7 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
               </div>
             </div>
             <div className="flex gap-3 pt-5">
-              <button type="button" onClick={() => setShowStatementModal(false)} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Annuler</button>
+              <button type="button" onClick={() => setShowStatementModal(false)} className="flex-1 px-4 py-2 border border-gray-300 text-black rounded-lg hover:bg-gray-50">Annuler</button>
               <button type="button" onClick={handleGenerateStatement} className="flex-1 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900">Générer</button>
             </div>
           </div>
@@ -650,11 +777,11 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
       )}
       {/* Calculate Interest Modal */}
       {showInterestModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4 accounts-contrast-fix">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <div className="mb-4">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Calcul des intérêts</h2>
-              <p className="text-gray-600">Prévisualisez et confirmez le calcul des intérêts pour ce compte.</p>
+              <h2 className="text-xl font-bold text-black mb-2">Calcul des intérêts</h2>
+              <p className="text-black">Prévisualisez et confirmez le calcul des intérêts pour ce compte.</p>
             </div>
             {(() => {
               const est = estimateInterest();
@@ -724,11 +851,11 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
       )}
       {/* Close Account Modal */}
       {showCloseConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4 accounts-contrast-fix">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <div className="mb-4">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Fermer le compte</h2>
-              <p className="text-gray-600">Veuillez indiquer la raison de la fermeture :</p>
+              <h2 className="text-xl font-bold text-black mb-2">Fermer le compte</h2>
+              <p className="text-black">Veuillez indiquer la raison de la fermeture :</p>
               <textarea
                 className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 rows={3}
@@ -740,7 +867,7 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
               <button
                 type="button"
                 onClick={() => setShowCloseConfirm(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                className="flex-1 px-4 py-2 border border-gray-300 text-black rounded-lg hover:bg-gray-50"
               >Annuler</button>
               <button
                 type="button"
@@ -753,24 +880,24 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
       )}
 
       {/* Main Modal */}
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 accounts-contrast-fix">
         <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
           {/* Header - compact */}
           <div className="px-4 py-3 border-b">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">{account.accountNumber}</h2>
-                <p className="text-sm text-gray-500">{account.customerName}</p>
+                <h2 className="text-lg font-semibold text-black">{account.accountNumber}</h2>
+                <p className="text-sm text-black">{account.customerName}</p>
               </div>
               <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100" aria-label="Fermer">
-                <X className="h-5 w-5 text-gray-600" />
+                <X className="h-5 w-5 text-black" />
               </button>
             </div>
               <div className="grid grid-cols-4 gap-3 mt-3 text-sm">
               <div>
-                <div className="text-gray-500">Solde Total</div>
+                <div className="text-black">Solde Total</div>
                 <div className="font-semibold">{formatCurrency(account.balance ?? 0, displayCurrency(account.currency))}</div>
-                <div className="text-xs text-gray-500 mt-0.5">
+                <div className="text-xs text-black mt-0.5">
                   Dispo: {formatCurrency(account.availableBalance ?? 0, displayCurrency(account.currency))}
                 </div>
                 {(account.blockedBalance ?? 0) > 0 && (
@@ -780,20 +907,20 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
                 )}
               </div>
               <div>
-                <div className="text-gray-500">Taux</div>
+                <div className="text-black">Taux</div>
                 <div className="font-semibold">{account.interestRate && account.interestRate > 0 ? `${account.interestRate}%` : '—'}</div>
                 {isTermAccount() && (
-                  <div className="text-xs text-gray-500 mt-0.5">Par mois: {(getMonthlyInterestRatePercent({ interestRate: account.interestRate, interestRateMonthly: account.interestRateMonthly, termType: (account as any).termType })).toFixed(2)}%</div>
+                  <div className="text-xs text-black mt-0.5">Par mois: {(getMonthlyInterestRatePercent({ interestRate: account.interestRate, interestRateMonthly: account.interestRateMonthly, termType: (account as any).termType })).toFixed(2)}%</div>
                 )}
                 {(account as any).termType && (
-                  <div className="text-xs text-gray-500 mt-0.5">Terme: {getTermMonths((account as any).termType)} mois</div>
+                  <div className="text-xs text-black mt-0.5">Terme: {getTermMonths((account as any).termType)} mois</div>
                 )}
                 {account.maturityDate && (
-                  <div className="text-xs text-gray-500 mt-0.5">Échéance: {new Date(account.maturityDate).toLocaleDateString('fr-FR')}</div>
+                  <div className="text-xs text-black mt-0.5">Échéance: {new Date(account.maturityDate).toLocaleDateString('fr-FR')}</div>
                 )}
               </div>
               <div>
-                <div className="text-gray-500">Statut</div>
+                <div className="text-black">Statut</div>
                 {(() => {
                   const statusMap = { 0: 'Active', 1: 'Inactive', 2: 'Closed', 3: 'Suspended' } as const;
                   const raw: any = account.status;
@@ -814,19 +941,19 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
             <div className="flex gap-4">
               <button
                 onClick={() => setActiveTab('info')}
-                className={`py-2 px-3 text-sm font-medium transition-colors ${activeTab === 'info' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900'}`}
+                className={`py-2 px-3 text-sm font-medium transition-colors ${activeTab === 'info' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-black'}`}
               >Informations</button>
               <button
                 onClick={() => setActiveTab('transactions')}
-                className={`py-2 px-3 text-sm font-medium transition-colors ${activeTab === 'transactions' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900'}`}
-              >Transactions ({transactions.length})</button>
+                className={`py-2 px-3 text-sm font-medium transition-colors ${activeTab === 'transactions' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-black'}`}
+              >Transactions ({transactionsLabel})</button>
               <button
                 onClick={() => setActiveTab('history')}
-                className={`py-2 px-3 text-sm font-medium transition-colors ${activeTab === 'history' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900'}`}
+                className={`py-2 px-3 text-sm font-medium transition-colors ${activeTab === 'history' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-black'}`}
               >Historique</button>
               <button
                 onClick={() => setActiveTab('signers')}
-                className={`py-2 px-3 text-sm font-medium transition-colors ${activeTab === 'signers' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900'}`}
+                className={`py-2 px-3 text-sm font-medium transition-colors ${activeTab === 'signers' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-black'}`}
               >Signataires{authorizedSigners.length > 0 ? ` (${authorizedSigners.length})` : ''}</button>
             </div>
           </div>
@@ -837,27 +964,27 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
               <div className="space-y-6">
                 {/* Account Information */}
                 <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <h3 className="text-base font-semibold text-gray-900 mb-3">Informations du compte</h3>
+                  <h3 className="text-base font-semibold text-black mb-3">Informations du compte</h3>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <div className="text-xs text-gray-500">Type de compte</div>
-                      <div className="text-gray-900">{displayAccountType(account.accountType)}</div>
+                      <div className="text-xs text-black">Type de compte</div>
+                      <div className="text-black">{displayAccountType(account.accountType)}</div>
                     </div>
                     <div>
-                      <div className="text-xs text-gray-500">Devise</div>
-                      <div className="text-gray-900">{displayCurrency(account.currency) || '—'}</div>
+                      <div className="text-xs text-black">Devise</div>
+                      <div className="text-black">{displayCurrency(account.currency) || '—'}</div>
                     </div>
                     <div>
-                      <div className="text-xs text-gray-500">Date d'ouverture</div>
-                      <div className="text-gray-900">{(account.openedDate || (account as any).openingDate || (account as any).createdAt) ? new Date((account.openedDate || (account as any).openingDate || (account as any).createdAt) as string).toLocaleDateString('fr-FR') : '—'}</div>
+                      <div className="text-xs text-black">Date d'ouverture</div>
+                      <div className="text-black">{(account.openedDate || (account as any).openingDate || (account as any).createdAt) ? new Date((account.openedDate || (account as any).openingDate || (account as any).createdAt) as string).toLocaleDateString('fr-FR') : '—'}</div>
                     </div>
                     <div>
-                      <div className="text-xs text-gray-500">Dernière transaction</div>
-                      <div className="text-gray-900">{account.lastTransactionDate ? new Date(account.lastTransactionDate).toLocaleDateString('fr-FR') : 'Aucune'}</div>
+                      <div className="text-xs text-black">Dernière transaction</div>
+                      <div className="text-black">{account.lastTransactionDate ? new Date(account.lastTransactionDate).toLocaleDateString('fr-FR') : 'Aucune'}</div>
                     </div>
                     <div>
-                      <div className="text-xs text-gray-500">Solde minimum</div>
-                      <div className="text-gray-900">{formatCurrency(account.minimumBalance ?? 0, displayCurrency(account.currency))}</div>
+                      <div className="text-xs text-black">Solde minimum</div>
+                      <div className="text-black">{formatCurrency(account.minimumBalance ?? 0, displayCurrency(account.currency))}</div>
                     </div>
                     <div>
                       <div className="text-xs text-gray-500">Limite de retrait</div>
@@ -947,50 +1074,154 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
               <div className="space-y-4">
                 {transactions.length === 0 ? (
                   <div className="text-center py-12 bg-gray-50 rounded-lg">
-                    <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune transaction</h3>
-                    <p className="text-gray-500">Ce compte n'a pas encore de transactions</p>
+                    <FileText className="mx-auto h-12 w-12 text-black mb-4" />
+                    <h3 className="text-lg font-medium text-black mb-2">Aucune transaction</h3>
+                    <p className="text-black">Ce compte n'a pas encore de transactions.</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {transactions.map((tx) => (
-                      <div key={tx.id} className="bg-white border border-gray-200 rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className={`p-1.5 rounded ${isCreditTx(tx) ? 'bg-green-100' : 'bg-red-100'}`}>
-                              {isCreditTx(tx) ? (
-                                <ArrowUpRight className="h-4 w-4 text-green-600" />
-                              ) : (
-                                <ArrowDownLeft className="h-4 w-4 text-red-600" />
-                              )}
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-900 text-sm">{tx.type === 'Deposit' ? 'Dépôt' : tx.type === 'Withdrawal' ? 'Retrait' : tx.type}</p>
-                              <p className="text-xs text-gray-500">{tx.description}</p>
-                              {tx.reference !== undefined && tx.reference !== null && String(tx.reference).trim() !== '' && String(tx.reference) !== '0' && (
-                                <p className="text-[11px] text-gray-400 mt-1">Réf: {tx.reference}</p>
-                              )}
-                              <div className="flex items-center gap-3 text-[11px] text-gray-500 mt-1">
-                                <span className="inline-flex items-center gap-1">
-                                  <Home className="w-3 h-3" />
-                                  {tx.branchName || (tx as any).BranchName || account.branchName || (tx.branchId ? `#${tx.branchId}` : '—')}
-                                </span>
-                                <span className="inline-flex items-center gap-1">
-                                  <User className="w-3 h-3" />
-                                  {tx.processedByName || (tx as any).processedByFullName || (tx as any).receivedBy || tx.processedBy || '—'}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className={`text-base font-semibold ${isCreditTx(tx) ? 'text-green-600' : 'text-red-600'}`}>{isCreditTx(tx) ? '+' : '-'}{formatCurrency(displayAmount(tx), displayCurrency(tx.currency))}</p>
-                            <p className="text-xs text-gray-600 mt-1">Solde: {formatCurrency(tx.balanceAfter, displayCurrency(tx.currency))}</p>
-                            <p className="text-[11px] text-gray-400 mt-1">{new Date(tx.processedAt).toLocaleString('fr-FR')}</p>
+                  <>
+                    <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
+                      <div className="flex flex-wrap gap-3 items-end">
+                        <div className="min-w-[180px] flex-1 sm:flex-none">
+                          <label className="block text-xs font-semibold text-black uppercase tracking-wide mb-1">Type</label>
+                          <select
+                            value={transactionFilters.type}
+                            onChange={(e) => setTransactionFilters((prev) => ({ ...prev, type: e.target.value as TransactionFilterType }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="all">Tous types</option>
+                            <option value="credits">Crédits</option>
+                            <option value="debits">Débits</option>
+                            <option value="deposit">Dépôts</option>
+                            <option value="withdrawal">Retraits</option>
+                            <option value="interest">Intérêts</option>
+                            <option value="fees">Frais</option>
+                            <option value="transfer">Transferts</option>
+                          </select>
+                        </div>
+                        <div className="min-w-[160px]">
+                          <label className="block text-xs font-semibold text-black uppercase tracking-wide mb-1">Du</label>
+                          <input
+                            type="date"
+                            value={transactionFilters.dateFrom}
+                            onChange={(e) => setTransactionFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
+                            max={transactionFilters.dateTo || undefined}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="min-w-[160px]">
+                          <label className="block text-xs font-semibold text-black uppercase tracking-wide mb-1">Au</label>
+                          <input
+                            type="date"
+                            value={transactionFilters.dateTo}
+                            onChange={(e) => setTransactionFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
+                            min={transactionFilters.dateFrom || undefined}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="flex items-end gap-2 ml-auto">
+                          {hasTransactionFilters && (
+                            <button
+                              type="button"
+                              onClick={resetTransactionFilters}
+                              className="px-3 py-2 border border-gray-300 text-black rounded-lg hover:bg-gray-50"
+                            >
+                              Réinitialiser
+                            </button>
+                          )}
+                          <div className="text-sm text-black whitespace-nowrap">
+                            <span className="font-semibold">{filteredTransactions.length}</span> / {transactions.length}
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="bg-white border border-gray-200 rounded-lg p-3">
+                        <div className="text-xs font-semibold text-black uppercase tracking-wide">Total Crédits</div>
+                        <p className="text-lg font-semibold text-green-600 mt-1">{formatCurrency(transactionSummary.totalCredits, baseCurrency)}</p>
+                        <p className="text-[11px] text-black mt-1">{transactionSummary.creditCount} opérations</p>
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-3">
+                        <div className="text-xs font-semibold text-black uppercase tracking-wide">Total Débits</div>
+                        <p className="text-lg font-semibold text-red-600 mt-1">{formatCurrency(transactionSummary.totalDebits, baseCurrency)}</p>
+                        <p className="text-[11px] text-black mt-1">{transactionSummary.debitCount} opérations</p>
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-3">
+                        <div className="text-xs font-semibold text-black uppercase tracking-wide">Solde net</div>
+                        <p className={`text-lg font-semibold mt-1 ${transactionSummary.net > 0 ? 'text-green-600' : transactionSummary.net < 0 ? 'text-red-600' : 'text-black'}`}>
+                          {transactionSummary.net > 0 ? '+' : transactionSummary.net < 0 ? '-' : ''}{formatCurrency(Math.abs(transactionSummary.net), baseCurrency)}
+                        </p>
+                        <p className="text-[11px] text-black mt-1">Crédits - Débits</p>
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-3">
+                        <div className="text-xs font-semibold text-black uppercase tracking-wide">Intérêts &amp; Frais</div>
+                        <p className="text-lg font-semibold text-blue-600 mt-1">{formatCurrency(transactionSummary.interest, baseCurrency)}</p>
+                        <p className="text-[11px] text-black mt-1">
+                          Frais: <span className="font-semibold text-red-600">{formatCurrency(transactionSummary.fees, baseCurrency)}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    {filteredTransactions.length === 0 ? (
+                      <div className="text-center py-12 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
+                        <FileText className="mx-auto h-12 w-12 text-black mb-4" />
+                        <h3 className="text-lg font-medium text-black mb-2">Aucune transaction trouvée</h3>
+                        <p className="text-black text-sm">Ajustez les filtres de recherche pour voir d'autres opérations.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {filteredTransactions.map((tx) => {
+                          const credit = isCreditTx(tx);
+                          const rawType = tx.type ? tx.type.toString() : '';
+                          const label = rawType === 'Deposit'
+                            ? 'Dépôt'
+                            : rawType === 'Withdrawal'
+                              ? 'Retrait'
+                              : rawType || (credit ? 'Crédit' : 'Débit');
+                          const reference = tx.reference !== undefined && tx.reference !== null && String(tx.reference).trim() !== '' && String(tx.reference) !== '0';
+                          const txCurrency = displayCurrency(tx.currency);
+                          return (
+                            <div key={tx.id} className="bg-white border border-gray-200 rounded-lg p-3">
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-4">
+                                  <div className={`p-1.5 rounded ${credit ? 'bg-green-100' : 'bg-red-100'}`}>
+                                    {credit ? (
+                                      <ArrowUpRight className="h-4 w-4 text-green-600" />
+                                    ) : (
+                                      <ArrowDownLeft className="h-4 w-4 text-red-600" />
+                                    )}
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold text-black text-sm">{label}</p>
+                                    {tx.description && <p className="text-xs text-black mt-0.5">{tx.description}</p>}
+                                    {reference && (
+                                      <p className="text-[11px] text-black mt-1">Réf: {tx.reference}</p>
+                                    )}
+                                    <div className="flex flex-wrap gap-3 text-[11px] text-black mt-2">
+                                      <span className="inline-flex items-center gap-1">
+                                        <Home className="w-3 h-3" />
+                                        {tx.branchName || (tx as any).BranchName || account.branchName || (tx.branchId ? `#${tx.branchId}` : '—')}
+                                      </span>
+                                      <span className="inline-flex items-center gap-1">
+                                        <User className="w-3 h-3" />
+                                        {tx.processedByName || (tx as any).processedByFullName || (tx as any).receivedBy || tx.processedBy || '—'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right min-w-[140px]">
+                                  <p className={`text-base font-semibold ${credit ? 'text-green-600' : 'text-red-600'}`}>{credit ? '+' : '-'}{formatCurrency(displayAmount(tx), txCurrency)}</p>
+                                  <p className="text-xs text-black mt-1">Solde: {formatCurrency(tx.balanceAfter, txCurrency)}</p>
+                                  <p className="text-[11px] text-black mt-1">{tx.processedAt ? new Date(tx.processedAt).toLocaleString('fr-FR') : 'Date inconnue'}</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

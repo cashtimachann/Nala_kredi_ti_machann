@@ -863,7 +863,7 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
         <button
           type="button"
           onClick={onCancel}
-          className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+          className="px-6 py-3 border border-gray-300 rounded-lg text-black hover:bg-gray-50 transition-colors"
           disabled={loading}
         >
           Annuler
@@ -3370,19 +3370,19 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
           <div className="space-y-2">
             <button
               onClick={() => setFilters({ ...filters, accountType: AccountType.SAVINGS })}
-              className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md"
+              className="w-full text-left px-3 py-2 text-sm text-black hover:bg-gray-50 rounded-md"
             >
               Voir comptes d'épargne
             </button>
             <button
               onClick={() => setFilters({ ...filters, accountType: AccountType.CURRENT })}
-              className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md"
+              className="w-full text-left px-3 py-2 text-sm text-black hover:bg-gray-50 rounded-md"
             >
               Voir comptes courants
             </button>
             <button
               onClick={() => setFilters({ ...filters, accountType: AccountType.TERM_SAVINGS })}
-              className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md"
+              className="w-full text-left px-3 py-2 text-sm text-black hover:bg-gray-50 rounded-md"
             >
               Voir épargnes à terme
             </button>
@@ -3450,7 +3450,7 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
             setFilters({});
             setCurrentPage(1);
           }}
-          className="px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+          className="px-4 py-3 border border-gray-300 rounded-lg text-black hover:bg-gray-50 transition-colors"
         >
           Réinitialiser
         </button>
@@ -3598,16 +3598,16 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
       {totalFiltered > 0 && (
         <div className="mt-3 bg-white rounded-md border border-gray-200">
           <div className="px-4 py-3 flex items-center justify-between">
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-black">
               Affichage {Math.min((currentPage - 1) * pageSize + 1, totalFiltered)}–{Math.min(currentPage * pageSize, totalFiltered)} de {totalFiltered} comptes
             </div>
 
             <div className="flex items-center space-x-2">
-              <label className="text-sm text-gray-600">Afficher</label>
+              <label className="text-sm text-black">Afficher</label>
               <select
                 value={pageSize}
                 onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                className="px-2 py-1 border border-gray-300 rounded-md text-sm"
+                className="px-2 py-1 border border-gray-300 rounded-md text-sm text-black"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -3618,17 +3618,17 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage <= 1}
-                className="px-3 py-1 bg-gray-100 text-sm rounded-md disabled:opacity-50"
+                className="px-3 py-1 bg-gray-100 text-sm rounded-md disabled:opacity-50 text-black"
               >
                 Préc
               </button>
 
-              <div className="text-sm text-gray-700">{currentPage} / {totalPages}</div>
+              <div className="text-sm text-black">{currentPage} / {totalPages}</div>
 
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage >= totalPages}
-                className="px-3 py-1 bg-gray-100 text-sm rounded-md disabled:opacity-50"
+                className="px-3 py-1 bg-gray-100 text-sm rounded-md disabled:opacity-50 text-black"
               >
                 Suiv
               </button>
@@ -3750,7 +3750,7 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
             <div className="mt-4 flex items-center space-x-3">
               <button
                 onClick={() => setClientFilters({ branchId: undefined, status: '', customerType: '', dateFrom: '', dateTo: '' })}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                className="px-4 py-2 text-sm text-black hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Effacer les filtres
               </button>
@@ -3900,7 +3900,7 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
                         <button
                           onClick={() => customer.id && handleViewCustomerDetails(customer.id)}
                           disabled={!customer.id}
-                          className="text-gray-600 hover:text-gray-900 transition-colors p-2 hover:bg-gray-50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="text-black transition-colors p-2 hover:bg-gray-50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Voir les détails"
                         >
                           <Eye className="h-5 w-5" />
@@ -3924,15 +3924,15 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
 
         {/* Pagination controls for Clients */}
         <div className="px-4 py-3 bg-white border-t flex items-center justify-between">
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-black">
             Affichage {(clientCurrentPage - 1) * clientPageSize + 1} – {Math.min(clientCurrentPage * clientPageSize, totalClientsFiltered)} sur {totalClientsFiltered}
           </div>
           <div className="flex items-center space-x-2">
-            <label className="text-sm text-gray-600">Lignes</label>
+            <label className="text-sm text-black">Lignes</label>
             <select
               value={clientPageSize}
               onChange={(e) => { setClientPageSize(Number(e.target.value)); setClientCurrentPage(1); }}
-              className="px-2 py-1 border rounded"
+              className="px-2 py-1 border rounded text-black"
             >
               <option value={10}>10</option>
               <option value={20}>20</option>
@@ -3943,14 +3943,14 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
             <button
               onClick={() => setClientCurrentPage((p) => Math.max(1, p - 1))}
               disabled={clientCurrentPage <= 1}
-              className="px-3 py-1 border rounded disabled:opacity-50"
+              className="px-3 py-1 border rounded disabled:opacity-50 text-black"
             >Préc</button>
 
-            <span className="text-sm">Page</span>
+            <span className="text-sm text-black">Page</span>
             <select
               value={clientCurrentPage}
               onChange={(e) => setClientCurrentPage(Number(e.target.value))}
-              className="px-2 py-1 border rounded"
+              className="px-2 py-1 border rounded text-black"
             >
               {Array.from({ length: clientTotalPages }).map((_, i) => (
                 <option key={i} value={i + 1}>{i + 1}</option>
@@ -3960,7 +3960,7 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
             <button
               onClick={() => setClientCurrentPage((p) => Math.min(clientTotalPages, p + 1))}
               disabled={clientCurrentPage >= clientTotalPages}
-              className="px-3 py-1 border rounded disabled:opacity-50"
+              className="px-3 py-1 border rounded disabled:opacity-50 text-black"
             >Suiv</button>
           </div>
         </div>

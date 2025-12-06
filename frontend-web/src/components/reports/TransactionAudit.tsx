@@ -99,22 +99,22 @@ export const TransactionAudit: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-black mb-2">
             🔍 Audit des Transactions
           </h1>
-          <p className="text-gray-600">
+          <p className="text-black">
             Rechercher et filtrer toutes les transactions du système
           </p>
         </div>
 
         {/* Filters */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Filtres</h2>
+          <h2 className="text-lg font-bold text-black mb-4">Filtres</h2>
           
           <div className="grid grid-cols-2 gap-4 mb-4">
             {/* Date Range */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-black mb-1">
                 Date de Début
               </label>
               <input
@@ -125,7 +125,7 @@ export const TransactionAudit: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-black mb-1">
                 Date de Fin
               </label>
               <input
@@ -138,7 +138,7 @@ export const TransactionAudit: React.FC = () => {
 
             {/* Branch ID */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-black mb-1">
                 ID Succursale (optionnel)
               </label>
               <input
@@ -152,7 +152,7 @@ export const TransactionAudit: React.FC = () => {
 
             {/* Transaction Type */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-black mb-1">
                 Type de Transaction (optionnel)
               </label>
               <select
@@ -171,7 +171,7 @@ export const TransactionAudit: React.FC = () => {
 
             {/* User ID */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-black mb-1">
                 ID Utilisateur (optionnel)
               </label>
               <input
@@ -185,7 +185,7 @@ export const TransactionAudit: React.FC = () => {
 
             {/* Amount Range */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-black mb-1">
                 Montant Minimum (optionnel)
               </label>
               <input
@@ -248,7 +248,7 @@ export const TransactionAudit: React.FC = () => {
         {loading && (
           <div className="text-center py-12 bg-white rounded-lg shadow-sm">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p className="mt-4 text-gray-600">Recherche des transactions...</p>
+            <p className="mt-4 text-black">Recherche des transactions...</p>
           </div>
         )}
 
@@ -258,19 +258,19 @@ export const TransactionAudit: React.FC = () => {
             {/* Summary */}
             <div className="grid grid-cols-3 gap-4 mb-6">
               <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="text-sm text-gray-600 mb-1">Total Transactions</div>
+                <div className="text-sm text-black mb-1">Total Transactions</div>
                 <div className="text-3xl font-bold text-blue-600">
                   {auditData.totalTransactions.toLocaleString()}
                 </div>
               </div>
               <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="text-sm text-gray-600 mb-1">Total HTG</div>
+                <div className="text-sm text-black mb-1">Total HTG</div>
                 <div className="text-2xl font-bold text-green-600">
                   {branchReportService.formatCurrency(auditData.totalAmountHTG, 'HTG')}
                 </div>
               </div>
               <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="text-sm text-gray-600 mb-1">Total USD</div>
+                <div className="text-sm text-black mb-1">Total USD</div>
                 <div className="text-2xl font-bold text-green-600">
                   {branchReportService.formatCurrency(auditData.totalAmountUSD, 'USD')}
                 </div>
@@ -280,7 +280,7 @@ export const TransactionAudit: React.FC = () => {
             {/* Transactions Table */}
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-bold text-gray-900">
+                <h3 className="text-lg font-bold text-black">
                   Transactions ({auditData.transactions.length})
                 </h3>
                 {auditData.totalTransactions > 1000 && (
@@ -294,28 +294,28 @@ export const TransactionAudit: React.FC = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-black uppercase">
                         Numéro
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-left text-xs font-medium text.black uppercase">
                         Type
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-black uppercase">
                         Succursale
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-black uppercase">
                         Utilisateur
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                         Client
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-right text-xs font-medium text-black uppercase">
                         Montant
                       </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-center text-xs font-medium text-black uppercase">
                         Statut
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-black uppercase">
                         Date
                       </th>
                     </tr>

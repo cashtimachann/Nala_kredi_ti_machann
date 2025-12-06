@@ -438,7 +438,7 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
               className={`flex-1 px-6 py-4 text-center font-medium transition-colors ${
                 activeTab === 'application'
                   ? 'bg-white text-indigo-600 border-b-2 border-indigo-600'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  : 'text-black hover:text-black hover:bg-gray-100'
               }`}
             >
               <FileText className="w-5 h-5 inline-block mr-2" />
@@ -449,7 +449,7 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
               className={`flex-1 px-6 py-4 text-center font-medium transition-colors ${
                 activeTab === 'evaluation'
                   ? 'bg-white text-indigo-600 border-b-2 border-indigo-600'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  : 'text-black hover:text-black hover:bg-gray-100'
               }`}
             >
               <TrendingUp className="w-5 h-5 inline-block mr-2" />
@@ -460,7 +460,7 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
               className={`flex-1 px-6 py-4 text-center font-medium transition-colors ${
                 activeTab === 'approval'
                   ? 'bg-white text-indigo-600 border-b-2 border-indigo-600'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  : 'text-black hover:text-black hover:bg-gray-100'
               }`}
             >
               <CheckCircle className="w-5 h-5 inline-block mr-2" />
@@ -482,36 +482,36 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-600 mb-1">Type de Prêt</p>
+                    <p className="text-sm text-black mb-1">Type de Prêt</p>
                     <div className="flex items-center gap-2">
                       <span className="text-2xl">{getLoanTypeInfo(application.loanType).emoji}</span>
-                      <p className="font-semibold text-gray-900">{getLoanTypeInfo(application.loanType).label}</p>
+                      <p className="font-semibold text-black">{getLoanTypeInfo(application.loanType).label}</p>
                     </div>
                   </div>
                   <div className="bg-indigo-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-600 mb-1">Montant Demandé</p>
+                    <p className="text-sm text-black mb-1">Montant Demandé</p>
                     <p className="text-xl font-bold text-indigo-900">
                       {formatCurrency(application.requestedAmount, application.currency)}
                     </p>
                   </div>
                   <div className="bg-blue-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-600 mb-1">Paiement Mensuel</p>
+                    <p className="text-sm text-black mb-1">Paiement Mensuel</p>
                     <p className="text-xl font-bold text-blue-900">
                       {formatCurrency(computedMonthlyPayment, application.currency ?? (application as any).currency ?? 'HTG')}
                     </p>
                   </div>
                   <div className="bg-purple-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-600 mb-1">Mensualité + Frais</p>
+                    <p className="text-sm text-black mb-1">Mensualité + Frais</p>
                     <p className="text-xl font-bold text-purple-900">
                       {formatCurrency(monthlyPaymentWithFee, application.currency ?? (application as any).currency ?? 'HTG')}
                     </p>
                     {processingFee > 0 && (
-                      <p className="text-xs text-gray-700 mt-1">Frais dossier total: {formatCurrency(processingFee, application.currency)} (≈ {formatCurrency(distributedFeePortion, application.currency)} / mois)</p>
+                      <p className="text-xs text-black mt-1">Frais dossier total: {formatCurrency(processingFee, application.currency)} (≈ {formatCurrency(distributedFeePortion, application.currency)} / mois)</p>
                     )}
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-600 mb-1">Durée</p>
-                    <p className="font-semibold text-gray-900">{durationMonths} mois</p>
+                    <p className="text-sm text-black mb-1">Durée</p>
+                    <p className="font-semibold text-black">{durationMonths} mois</p>
                   <div className="bg-green-50 p-4 rounded-lg">
                     <p className="text-sm text-gray-600 mb-1">Montant Approuvé (saisie)</p>
                     <p className="text-xl font-bold text-green-900">
@@ -560,8 +560,8 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                   </div>
                 </div>
                 <div className="mt-4">
-                  <p className="text-sm text-gray-600 mb-2">Objectif du Prêt</p>
-                  <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">{application.purpose}</p>
+                  <p className="text-sm text-black mb-2">Objectif du Prêt</p>
+                  <p className="text-black bg-gray-50 p-3 rounded-lg">{application.purpose}</p>
                 </div>
               </div>
 
@@ -573,38 +573,38 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-gray-600">Nom Complet</p>
-                    <p className="font-semibold text-gray-900">{customerName}</p>
+                    <p className="text-sm text-black">Nom Complet</p>
+                    <p className="font-semibold text-black">{customerName}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Numéro Compte Épargne</p>
-                    <p className="font-semibold text-gray-900">{(application as any).savingsAccountNumber || 'N/A'}</p>
+                    <p className="text-sm text-black">Numéro Compte Épargne</p>
+                    <p className="font-semibold text-black">{(application as any).savingsAccountNumber || 'N/A'}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Phone className="w-4 h-4 text-gray-400" />
                     <div>
-                      <p className="text-sm text-gray-600">Téléphone</p>
-                      <p className="font-semibold text-gray-900">{customerPhone}</p>
+                      <p className="text-sm text-black">Téléphone</p>
+                      <p className="font-semibold text-black">{customerPhone}</p>
                     </div>
                   </div>
                   {(application as any).email && (
                     <div>
-                      <p className="text-sm text-gray-600">Email</p>
-                      <p className="font-semibold text-gray-900">{(application as any).email}</p>
+                      <p className="text-sm text-black">Email</p>
+                      <p className="font-semibold text-black">{(application as any).email}</p>
                     </div>
                   )}
                   <div className="flex items-center gap-2">
                     <Home className="w-4 h-4 text-gray-400" />
                     <div>
-                      <p className="text-sm text-gray-600">Adresse</p>
-                      <p className="font-semibold text-gray-900">{customerAddress}</p>
+                      <p className="text-sm text-black">Adresse</p>
+                      <p className="font-semibold text-black">{customerAddress}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Briefcase className="w-4 h-4 text-gray-400" />
                     <div>
-                      <p className="text-sm text-gray-600">Profession</p>
-                      <p className="font-semibold text-gray-900">{occupation}</p>
+                      <p className="text-sm text-black">Profession</p>
+                      <p className="font-semibold text-black">{occupation}</p>
                     </div>
                   </div>
                   <div className="bg-green-50 p-3 rounded-lg">
@@ -751,8 +751,8 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
               <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-lg p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-900 mb-2">Score de Solvabilité</h3>
-                    <p className="text-gray-600">Évaluation basée sur plusieurs critères</p>
+                    <h3 className="text-2xl font-bold text-black mb-2">Score de Solvabilité</h3>
+                    <p className="text-black">Évaluation basée sur plusieurs critères</p>
                   </div>
                   {getRiskBadge(solvency.riskLevel)}
                 </div>
@@ -760,7 +760,7 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                 <div className="bg-white rounded-lg p-6 mb-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-5xl font-bold text-indigo-600">{solvency.score}</span>
-                    <span className="text-2xl text-gray-400">/ {solvency.maxScore}</span>
+                    <span className="text-2xl text-black">/ {solvency.maxScore}</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-4 mb-4">
                     <div
@@ -782,16 +782,16 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Debt to Income Ratio */}
                 <div className="bg-white border border-gray-200 rounded-lg p-6">
-                  <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <h4 className="font-semibold text-black mb-4 flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-indigo-600" />
                     Ratio Dette/Revenu
                   </h4>
                   <div className="text-center mb-4">
-                    <p className="text-4xl font-bold text-gray-900">{solvency.debtToIncomeRatio.toFixed(1)}%</p>
-                    <p className="text-sm text-gray-600 mt-2">
+                    <p className="text-4xl font-bold text-black">{solvency.debtToIncomeRatio.toFixed(1)}%</p>
+                    <p className="text-sm text-black mt-2">
                       Paiement mensuel: {formatCurrency(computedMonthlyPayment, application.currency ?? (application as any).currency ?? 'HTG')}
                     </p>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-black">
                       Revenu mensuel: {formatCurrency(monthlyIncome, application.currency ?? (application as any).currency ?? 'HTG')}
                     </p>
                   </div>
@@ -821,16 +821,16 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
 
                 {/* Collateral Coverage */}
                 <div className="bg-white border border-gray-200 rounded-lg p-6">
-                  <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <h4 className="font-semibold text-black mb-4 flex items-center gap-2">
                     <Shield className="w-5 h-5 text-indigo-600" />
                     Couverture des Garanties
                   </h4>
                   <div className="text-center mb-4">
-                    <p className="text-4xl font-bold text-gray-900">{solvency.collateralCoverageRatio.toFixed(0)}%</p>
-                    <p className="text-sm text-gray-600 mt-2">
+                    <p className="text-4xl font-bold text-black">{solvency.collateralCoverageRatio.toFixed(0)}%</p>
+                    <p className="text-sm text-black mt-2">
                       Valeur garantie: {formatCurrency(application.collateralValue || 0, application.currency)}
                     </p>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-black">
                       Montant demandé: {formatCurrency(application.requestedAmount, application.currency)}
                     </p>
                   </div>
@@ -856,12 +856,12 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
 
               {/* Additional Factors */}
               <div className="bg-white border border-gray-200 rounded-lg p-6">
-                <h4 className="font-semibold text-gray-900 mb-4">Facteurs Additionnels</h4>
+                <h4 className="font-semibold text-black mb-4">Facteurs Additionnels</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-600 mb-2">Historique de Crédit</p>
-                    <p className="text-lg font-semibold text-gray-900 capitalize">{solvency.creditHistory.toLowerCase()}</p>
-                    <p className="text-sm text-gray-600 mt-1">
+                    <p className="text-sm text-black mb-2">Historique de Crédit</p>
+                    <p className="text-lg font-semibold text-black capitalize">{solvency.creditHistory.toLowerCase()}</p>
+                    <p className="text-sm text-black mt-1">
                       {solvency.creditHistory === 'EXCELLENT' && '25/25 points'}
                       {solvency.creditHistory === 'GOOD' && '20/25 points'}
                       {solvency.creditHistory === 'FAIR' && '15/25 points'}
@@ -870,32 +870,32 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                     </p>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-600 mb-2">Capacité de Paiement</p>
-                    <p className="text-lg font-semibold text-gray-900">{solvency.paymentCapacity}/30</p>
-                    <p className="text-sm text-gray-600 mt-1">Points obtenus</p>
+                    <p className="text-sm text-black mb-2">Capacité de Paiement</p>
+                    <p className="text-lg font-semibold text-black">{solvency.paymentCapacity}/30</p>
+                    <p className="text-sm text-black mt-1">Points obtenus</p>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-600 mb-2">Stabilité Professionnelle</p>
-                    <p className="text-lg font-semibold text-gray-900">12/15</p>
-                    <p className="text-sm text-gray-600 mt-1">Points obtenus</p>
+                    <p className="text-sm text-black mb-2">Stabilité Professionnelle</p>
+                    <p className="text-lg font-semibold text-black">12/15</p>
+                    <p className="text-sm text-black mt-1">Points obtenus</p>
                   </div>
                 </div>
               </div>
 
               {/* Risk Analysis */}
               <div className="bg-white border border-gray-200 rounded-lg p-6">
-                <h4 className="font-semibold text-gray-900 mb-4">Analyse du Risque</h4>
+                <h4 className="font-semibold text-black mb-4">Analyse du Risque</h4>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm text-gray-600">Niveau de risque</span>
+                    <span className="text-sm text-black">Niveau de risque</span>
                     {getRiskBadge(solvency.riskLevel)}
                   </div>
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm text-gray-600">Score total</span>
-                    <span className="font-semibold text-gray-900">{solvency.score}/{solvency.maxScore}</span>
+                    <span className="text-sm text-black">Score total</span>
+                    <span className="font-semibold text-black">{solvency.score}/{solvency.maxScore}</span>
                   </div>
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm text-gray-600">Recommandation</span>
+                    <span className="text-sm text-black">Recommandation</span>
                     <span className={`font-medium ${
                       solvency.riskLevel === 'LOW' ? 'text-green-600' :
                       solvency.riskLevel === 'MEDIUM' ? 'text-yellow-600' : 'text-red-600'
@@ -945,20 +945,20 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                         <div className="flex-1 bg-gray-50 rounded-lg p-4 border border-gray-200">
                           <div className="flex items-start justify-between mb-2">
                             <div>
-                              <p className="font-semibold text-gray-900">{level.title}</p>
-                              <p className="text-sm text-gray-600">Niveau {level.level} - {level.approver}</p>
+                              <p className="font-semibold text-black">{level.title}</p>
+                              <p className="text-sm text-black">Niveau {level.level} - {level.approver}</p>
                             </div>
                             {getStatusBadge(level.status)}
                           </div>
                           
                           {level.decidedAt && (
                             <div className="mt-3 pt-3 border-t border-gray-200">
-                              <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                              <div className="flex items-center gap-2 text-sm text-black mb-2">
                                 <Calendar className="w-4 h-4" />
                                 <span>{level.decidedAt} par {level.decidedBy}</span>
                               </div>
                               {level.comment && (
-                                <p className="text-sm text-gray-700 bg-white p-3 rounded border border-gray-200">
+                                <p className="text-sm text-black bg-white p-3 rounded border border-gray-200">
                                   {level.comment}
                                 </p>
                               )}
@@ -979,7 +979,7 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                   <div className="space-y-6">
                     {/* Decision Radio Buttons */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                      <label className="block text-sm font-medium text-black mb-3">
                         Décision <span className="text-red-500">*</span>
                       </label>
                       <div className="grid grid-cols-2 gap-4">
@@ -995,7 +995,7 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                             className="w-5 h-5 text-green-600"
                           />
                           <CheckCircle className="w-6 h-6 text-green-600" />
-                          <span className="font-medium text-gray-900">Approuver</span>
+                          <span className="font-medium text-black">Approuver</span>
                         </label>
                         
                         <label className={`flex items-center justify-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
@@ -1010,7 +1010,7 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                             className="w-5 h-5 text-red-600"
                           />
                           <XCircle className="w-6 h-6 text-red-600" />
-                          <span className="font-medium text-gray-900">Rejeter</span>
+                          <span className="font-medium text-black">Rejeter</span>
                         </label>
                       </div>
                     </div>
@@ -1018,7 +1018,7 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                     {/* Approved Amount - Only shown if APPROVE is selected */}
                     {decision === 'APPROVE' && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-black mb-2">
                           <DollarSign className="w-4 h-4 inline-block mr-2" />
                           Montant approuvé <span className="text-red-500">*</span>
                         </label>
@@ -1031,11 +1031,11 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                             onChange={(e) => setApprovedAmountInput(Number(e.target.value))}
                             className="w-1/2 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                           />
-                          <span className="text-sm text-gray-600">
+                          <span className="text-sm text-black">
                             Montant demandé: {formatCurrency(requestedAmount, (application as any).currency || application.currency)}
                           </span>
                         </div>
-                        <p className="mt-2 text-sm text-gray-500">
+                        <p className="mt-2 text-sm text-black">
                           Vous pouvez ajuster le montant approuvé. Les mensualités estimées seront mises à jour.
                         </p>
                       </div>
@@ -1044,7 +1044,7 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                     {/* Disbursement Date - Only shown if APPROVE is selected */}
                     {decision === 'APPROVE' && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-black mb-2">
                           <Calendar className="w-4 h-4 inline-block mr-2" />
                           Date de Décaissement <span className="text-red-500">*</span>
                         </label>
@@ -1054,7 +1054,7 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                           min={new Date().toISOString().split('T')[0]}
                           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                         />
-                        <p className="mt-2 text-sm text-gray-500">
+                        <p className="mt-2 text-sm text-black">
                           📅 Sélectionnez la date à laquelle les fonds seront décaissés au client
                         </p>
                       </div>
@@ -1062,7 +1062,7 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
 
                     {/* Comment */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-black mb-2">
                         Commentaire / Justification <span className="text-red-500">*</span>
                       </label>
                       <textarea
@@ -1074,7 +1074,7 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                           : "Expliquez les raisons du rejet..."}
                       />
                       {!errors.comment && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-black mt-1">
                           Minimum 10 caractères. Ce commentaire sera visible dans l'historique.
                         </p>
                       )}
@@ -1108,7 +1108,7 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
                         type="button"
                         onClick={onClose}
                         disabled={isSubmitting}
-                        className="px-6 py-2.5 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                        className="px-6 py-2.5 border border-gray-300 rounded-lg font-medium text-black hover:bg-gray-50 transition-colors disabled:opacity-50"
                       >
                         Annuler
                       </button>
@@ -1141,10 +1141,10 @@ const LoanApprovalWorkflow: React.FC<LoanApprovalWorkflowProps> = ({
               {application.status !== ApplicationStatus.SUBMITTED && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
                   <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  <h3 className="text-lg font-semibold text-black mb-2">
                     Demande {application.status === ApplicationStatus.APPROVED ? 'Approuvée' : 'Rejetée'}
                   </h3>
-                  <p className="text-gray-600">
+                  <p className="text-black">
                     Cette demande a déjà été traitée et ne peut plus être modifiée.
                   </p>
                 </div>

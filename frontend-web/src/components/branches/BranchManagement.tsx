@@ -800,21 +800,21 @@ const BranchManagement: React.FC<BranchManagementProps> = () => {
         {filteredBranches.length > 0 && (
           <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="text-sm text-gray-700">
+              <div className="text-sm text-black">
                 Affichage de {startIndex + 1} à {Math.min(endIndex, sortedBranches.length)} sur {sortedBranches.length} résultats
               </div>
               
               <div className="flex items-center gap-4">
                 {/* Page Size Selector */}
                 <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-600">Afficher:</label>
+                  <label className="text-sm text-black">Afficher:</label>
                   <select
                     value={pageSize}
                     onChange={(e) => {
                       setPageSize(Number(e.target.value));
                       setCurrentPage(1);
                     }}
-                    className="px-3 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    className="px-3 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-black"
                   >
                     <option value={10}>10</option>
                     <option value={25}>25</option>
@@ -828,7 +828,7 @@ const BranchManagement: React.FC<BranchManagementProps> = () => {
                   <button
                     onClick={() => setCurrentPage(1)}
                     disabled={currentPage === 1}
-                    className="px-2 py-1 border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    className="px-2 py-1 border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm text-black"
                     title="Première page"
                   >
                     «
@@ -836,26 +836,26 @@ const BranchManagement: React.FC<BranchManagementProps> = () => {
                   <button
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
-                    className="px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    className="px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm text-black"
                   >
                     Préc
                   </button>
                   
-                  <div className="px-3 py-1 text-sm text-gray-700">
+                  <div className="px-3 py-1 text-sm text-black">
                     Page {currentPage} / {totalPages}
                   </div>
                   
                   <button
                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}
-                    className="px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    className="px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm text-black"
                   >
                     Suiv
                   </button>
                   <button
                     onClick={() => setCurrentPage(totalPages)}
                     disabled={currentPage === totalPages}
-                    className="px-2 py-1 border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    className="px-2 py-1 border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm text-black"
                     title="Dernière page"
                   >
                     »

@@ -466,14 +466,14 @@ const AdminManagement: React.FC<AdminManagementProps> = () => {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200">
-            <div className="text-sm text-gray-700">
+            <div className="text-sm text-black">
               Affichage de {((currentPage - 1) * itemsPerPage) + 1} à {Math.min(currentPage * itemsPerPage, filteredAdmins.length)} sur {filteredAdmins.length} résultats
             </div>
             <div className="flex space-x-1">
               <button
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-black"
               >
                 Précédent
               </button>
@@ -484,7 +484,7 @@ const AdminManagement: React.FC<AdminManagementProps> = () => {
                   className={`px-3 py-2 text-sm border border-gray-300 rounded-md ${
                     page === currentPage
                       ? 'bg-blue-600 text-white border-blue-600'
-                      : 'hover:bg-gray-50'
+                      : 'hover:bg-gray-50 text-black'
                   }`}
                 >
                   {page}
@@ -493,7 +493,7 @@ const AdminManagement: React.FC<AdminManagementProps> = () => {
               <button
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={currentPage === totalPages}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-black"
               >
                 Suivant
               </button>
