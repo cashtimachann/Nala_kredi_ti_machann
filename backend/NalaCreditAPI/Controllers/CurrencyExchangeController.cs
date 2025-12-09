@@ -152,6 +152,30 @@ namespace NalaCreditAPI.Controllers
             }
         }
 
+        [HttpDelete("rates/{rateId}/permanent")]
+        [Authorize(Policy = "BranchPolicy")]
+        public async Task<IActionResult> DeleteExchangeRate(Guid rateId)
+        {
+            try
+            {
+                var deleted = await _currencyExchangeService.DeleteExchangeRateAsync(rateId);
+                if (deleted)
+                {
+                    return Ok(new { success = true, message = "Exchange rate deleted successfully" });
+                }
+                return NotFound(new { success = false, message = "Exchange rate not found" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting exchange rate {RateId}", rateId);
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
         #endregion
 
         #region Exchange Calculations & Transactions
@@ -220,12 +244,12 @@ namespace NalaCreditAPI.Controllers
             try
             {
                 // If no branch specified, use current user's branch
-                if (!searchDto.BranchId.HasValue)
+                if (!searchDto.BranchGuid.HasValue)
                 {
                     var branchId = GetCurrentBranchId();
                     if (branchId != Guid.Empty)
                     {
-                        searchDto.BranchId = branchId;
+                        searchDto.BranchId = branchId.ToString();
                     }
                 }
 

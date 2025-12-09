@@ -442,7 +442,7 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
   userRole,
   branchId: initialBranchId
 }) => {
-  const [activeTab, setActiveTab] = useState<'daily' | 'monthly'>('daily');
+  const [activeTab, setActiveTab] = useState<'daily' | 'monthly' | 'period'>('daily');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -470,6 +470,45 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
   const [monthlyReport, setMonthlyReport] = useState<MonthlyBranchReportDto | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+
+  // Custom period report state
+  const [customReport, setCustomReport] = useState<DailyBranchReportDto | null>(null);
+  const [customReportRange, setCustomReportRange] = useState<{ start: string; end: string } | null>(null);
+
+  const formatInputDateForDisplay = (value: string): string => {
+    if (!value) {
+      return 'N/A';
+    }
+
+    const segments = value.split('-');
+    if (segments.length !== 3) {
+      return value;
+    }
+
+    const [yearStr, monthStr, dayStr] = segments;
+    const year = Number(yearStr);
+    const month = Number(monthStr) - 1;
+    const day = Number(dayStr);
+
+    if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+      return value;
+    }
+
+    const date = new Date(year, month, day);
+    return new Intl.DateTimeFormat('fr-HT', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }).format(date);
+  };
+  const [periodStartDate, setPeriodStartDate] = useState<string>(() => {
+    const start = new Date();
+    start.setDate(start.getDate() - 7);
+    return start.toISOString().split('T')[0];
+  });
+  const [periodEndDate, setPeriodEndDate] = useState<string>(
+    () => new Date().toISOString().split('T')[0]
+  );
 
   // Load daily report
   const loadDailyReport = async () => {
@@ -529,6 +568,50 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
       setLoading(false);
     }
   };
+
+  // Load custom period report
+  const loadPeriodReport = async () => {
+    const targetBranchId = selectedBranchId
+      ?? dailyReport?.branchId
+      ?? monthlyReport?.branchId
+      ?? initialBranchId;
+
+    if (!targetBranchId) {
+      setError('Impossible de déterminer la succursale pour le rapport personnalisé');
+      return;
+    }
+
+    if (!periodStartDate || !periodEndDate) {
+      setError('Veuillez choisir une date de début et une date de fin');
+      return;
+    }
+
+    if (new Date(periodEndDate) <= new Date(periodStartDate)) {
+      setError('La date de fin doit être après la date de début');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setCustomReportRange(null);
+    setCustomReport(null);
+    try {
+      const report = await branchReportService.getCustomPeriodReport({
+        branchId: Number(targetBranchId),
+        startDate: periodStartDate,
+        endDate: periodEndDate
+      });
+      setCustomReport(report);
+      setCustomReportRange({ start: periodStartDate, end: periodEndDate });
+    } catch (err: any) {
+      console.error('Error loading custom period report:', err);
+      setCustomReport(null);
+      setCustomReportRange(null);
+      setError(err.response?.data?.message || 'Erreur lors du chargement du rapport personnalisé');
+    } finally {
+      setLoading(false);
+    }
+  };
   
   // Load branches for SuperAdmin/Director
   const loadBranches = async () => {
@@ -570,16 +653,33 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
   useEffect(() => {
     if (activeTab === 'daily') {
       loadDailyReport();
-    } else {
+    } else if (activeTab === 'monthly') {
       loadMonthlyReport();
+    } else {
+      loadPeriodReport();
     }
-  }, [activeTab, selectedDate, selectedMonth, selectedYear, selectedBranchId, isSuperAdminOrDirector]);
+  }, [
+    activeTab,
+    selectedDate,
+    selectedMonth,
+    selectedYear,
+    periodStartDate,
+    periodEndDate,
+    selectedBranchId,
+    isSuperAdminOrDirector
+  ]);
 
   const loadFinancialSummary = async (branchIdOverride?: number) => {
+    const fallbackBranchId = selectedBranchId
+      || dailyReport?.branchId
+      || monthlyReport?.branchId
+      || customReport?.branchId
+      || initialBranchId;
+
     const targetBranchId = branchIdOverride
       ?? (isSuperAdminOrDirector
         ? selectedBranchId
-        : selectedBranchId || dailyReport?.branchId || monthlyReport?.branchId || initialBranchId);
+        : fallbackBranchId);
 
     if (!targetBranchId) {
       setSummaryError(
@@ -593,7 +693,7 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
       return;
     }
 
-    const summaryKey = `${targetBranchId}-${activeTab}-${selectedDate}-${selectedMonth}-${selectedYear}`;
+    const summaryKey = `${targetBranchId}-${activeTab}-${selectedDate}-${selectedMonth}-${selectedYear}-${periodStartDate}-${periodEndDate}`;
     if (branchIdOverride === undefined && summaryKey !== lastSummaryKeyRef.current) {
       lastSummaryKeyRef.current = summaryKey;
     }
@@ -620,7 +720,7 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
 
   useEffect(() => {
     const branchIdFromSelection = selectedBranchId ?? initialBranchId;
-    const branchIdFromReports = dailyReport?.branchId || monthlyReport?.branchId;
+    const branchIdFromReports = dailyReport?.branchId || monthlyReport?.branchId || customReport?.branchId;
 
     const targetBranchId = isSuperAdminOrDirector
       ? selectedBranchId
@@ -638,7 +738,7 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
       return;
     }
 
-    const summaryKey = `${targetBranchId}-${activeTab}-${selectedDate}-${selectedMonth}-${selectedYear}`;
+    const summaryKey = `${targetBranchId}-${activeTab}-${selectedDate}-${selectedMonth}-${selectedYear}-${periodStartDate}-${periodEndDate}`;
     if (summaryKey === lastSummaryKeyRef.current) {
       return;
     }
@@ -654,7 +754,10 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
     initialBranchId,
     isSuperAdminOrDirector,
     dailyReport?.branchId,
-    monthlyReport?.branchId
+    monthlyReport?.branchId,
+    customReport?.branchId,
+    periodStartDate,
+    periodEndDate
   ]);
 
   const escapeHtml = (value: string) =>
@@ -1189,6 +1292,13 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
     openPdfWindow(buildMonthlyPdfHtml(monthlyReport));
   };
 
+  const handleExportCustomPDF = () => {
+    if (!customReport || !customReportRange) {
+      return;
+    }
+    openPdfWindow(buildDailyPdfHtml(customReport));
+  };
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
@@ -1198,7 +1308,7 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
             📊 Rapport de Succursale
           </h1>
           <p className="text-black">
-            Consulter les rapports journaliers et mensuels de la succursale
+            Consulter les rapports journaliers, mensuels ou par période de la succursale
           </p>
         </div>
 
@@ -1247,13 +1357,23 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
               >
                 📆 Rapport Mensuel
               </button>
+              <button
+                onClick={() => setActiveTab('period')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 ${
+                  activeTab === 'period'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-black hover:text-black hover:border-gray-300'
+                }`}
+              >
+                🗓️ Rapport par Période
+              </button>
             </nav>
           </div>
 
           {/* Filters */}
           <div className="p-4 bg-gray-50 border-b border-gray-200">
             {activeTab === 'daily' ? (
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-4">
                 <label className="text-sm font-medium text-black">
                   Date:
                 </label>
@@ -1287,8 +1407,8 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
                   </>
                 )}
               </div>
-            ) : (
-              <div className="flex items-center gap-4">
+            ) : activeTab === 'monthly' ? (
+              <div className="flex flex-wrap items-center gap-4">
                 <label className="text-sm font-medium text-black">
                   Mois:
                 </label>
@@ -1339,6 +1459,44 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
                       📄 Exporter PDF
                     </button>
                   </>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-4">
+                <label className="text-sm font-medium text-black">
+                  Début:
+                </label>
+                <input
+                  type="date"
+                  value={periodStartDate}
+                  max={periodEndDate}
+                  onChange={(e) => setPeriodStartDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <label className="text-sm font-medium text-black">
+                  Fin:
+                </label>
+                <input
+                  type="date"
+                  value={periodEndDate}
+                  min={periodStartDate}
+                  onChange={(e) => setPeriodEndDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={loadPeriodReport}
+                  disabled={loading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+                >
+                  🔄 Générer
+                </button>
+                {customReport && customReportRange && (
+                  <button
+                    onClick={handleExportCustomPDF}
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                  >
+                    📄 Exporter PDF
+                  </button>
                 )}
               </div>
             )}
@@ -1442,13 +1600,23 @@ export const BranchReportDashboard: React.FC<BranchReportDashboardProps> = ({
         {!loading && activeTab === 'monthly' && monthlyReport && (
           <MonthlyReportView report={monthlyReport} />
         )}
+
+        {/* Custom Period Report Display */}
+        {!loading && activeTab === 'period' && customReport && (
+          <DailyReportView
+            report={customReport}
+            customRangeLabel={customReportRange
+              ? `Du ${formatInputDateForDisplay(customReportRange.start)} au ${formatInputDateForDisplay(customReportRange.end)}`
+              : undefined}
+          />
+        )}
       </div>
     </div>
   );
 };
 
 // Daily Report View Component
-const DailyReportView: React.FC<{ report: DailyBranchReportDto }> = ({ report }) => {
+const DailyReportView: React.FC<{ report: DailyBranchReportDto; customRangeLabel?: string }> = ({ report, customRangeLabel }) => {
   const summary = computeDailyTotals(report);
   const creditsTotalHTG = summary.credits.totalHTG;
   const creditsTotalUSD = summary.credits.totalUSD;
@@ -1478,9 +1646,9 @@ const DailyReportView: React.FC<{ report: DailyBranchReportDto }> = ({ report })
         </h2>
           <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
-            <span className="text-gray-600">Date:</span>
+            <span className="text-gray-600">{customRangeLabel ? 'Période:' : 'Date:'}</span>
             <span className="ml-2 font-medium">
-              {branchReportService.formatDate(report.reportDate)}
+              {customRangeLabel ?? branchReportService.formatDate(report.reportDate)}
             </span>
           </div>
           {report.branchRegion && (

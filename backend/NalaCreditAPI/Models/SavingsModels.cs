@@ -388,6 +388,11 @@ namespace NalaCreditAPI.Models
         public string? ClosedBy { get; set; }
         public string? ClosureReason { get; set; }
 
+        // Suspension du compte
+        public DateTime? SuspendedAt { get; set; }
+        public string? SuspendedBy { get; set; }
+        public string? SuspensionReason { get; set; }
+
         // Relations
         [ForeignKey("CustomerId")]
         public virtual SavingsCustomer Customer { get; set; } = null!;

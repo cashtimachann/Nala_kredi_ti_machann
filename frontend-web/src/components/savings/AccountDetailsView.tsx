@@ -57,6 +57,9 @@ interface AccountDetails {
   lastTransactionDate?: string;
   minimumBalance: number;
   withdrawalLimit?: number;
+  suspendedAt?: string;
+  suspendedBy?: string;
+  suspensionReason?: string;
   accountLimits?: {
     dailyDepositLimit?: number;
     dailyWithdrawalLimit?: number;
@@ -135,6 +138,10 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
   const [showStatementModal, setShowStatementModal] = useState(false);
   const [statementFrom, setStatementFrom] = useState<string>('');
   const [statementTo, setStatementTo] = useState<string>('');
+  const [showSuspendModal, setShowSuspendModal] = useState(false);
+  const [suspensionReason, setSuspensionReason] = useState('');
+  const [suspending, setSuspending] = useState(false);
+  const [reactivating, setReactivating] = useState(false);
 
   // Normalize currency values from backend (e.g., 0/1 -> HTG/USD)
   const displayCurrency = (c: any): 'HTG' | 'USD' | '' => {
@@ -169,6 +176,26 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
       TERMSAVINGS: "Épargne à Terme"
     };
     return map[s] || t;
+  };
+
+  const normalizeStatus = (raw: any): 'Active' | 'Inactive' | 'Closed' | 'Suspended' | string => {
+    if (raw === null || raw === undefined) return '';
+    if (typeof raw === 'number') {
+      const numericMap: Record<number, 'Active' | 'Inactive' | 'Closed' | 'Suspended'> = {
+        0: 'Active',
+        1: 'Inactive',
+        2: 'Closed',
+        3: 'Suspended'
+      };
+      return numericMap[raw as 0 | 1 | 2 | 3] ?? String(raw);
+    }
+    const value = String(raw).trim();
+    const upper = value.toUpperCase();
+    if (upper === 'ACTIVE') return 'Active';
+    if (upper === 'INACTIVE') return 'Inactive';
+    if (upper === 'CLOSED') return 'Closed';
+    if (upper === 'SUSPENDED') return 'Suspended';
+    return value;
   };
 
   // Determine if a transaction is a credit (adds to balance) or debit (reduces balance)
@@ -346,9 +373,7 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
   const estimateInterest = () => {
     const reasons: string[] = [];
     if (!account) return { amount: 0, days: 0, from: '', to: '', eligible: false, reasons: ['Compte introuvable'] };
-    const statusMap = { 0: 'Active', 1: 'Inactive', 2: 'Closed', 3: 'Suspended' } as const;
-    const raw: any = account.status;
-    const statusStr = typeof raw === 'number' ? statusMap[raw as 0|1|2|3] : raw;
+    const statusStr = normalizeStatus(account.status);
     if (statusStr !== 'Active') reasons.push('Le compte doit être actif');
     const rate = Number(account.interestRate || 0);
     if (!rate || rate <= 0) reasons.push("Taux d'intérêt absent ou nul");
@@ -382,20 +407,35 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
     }
   };
 
-  const handleSuspendAccount = async () => {
-    const reason = prompt('Raison de la suspension:');
-    if (!reason) return;
+  const handleSuspendAccount = () => {
+    setSuspensionReason('');
+    setShowSuspendModal(true);
+  };
+
+  const confirmSuspendAccount = async () => {
+    const reason = suspensionReason.trim();
+    if (!reason) {
+      toast.error('Veuillez fournir une raison de suspension');
+      return;
+    }
+
+    setSuspending(true);
     try {
       await apiService.updateSavingsAccount(accountId, { status: 'Suspended', notes: reason });
       toast.success('Compte suspendu avec succès');
+      setShowSuspendModal(false);
+      setSuspensionReason('');
       loadAccountDetails();
       onUpdate?.();
     } catch (error) {
       toast.error('Erreur lors de la suspension');
+    } finally {
+      setSuspending(false);
     }
   };
 
   const handleReactivateAccount = async () => {
+    setReactivating(true);
     try {
       await apiService.updateSavingsAccount(accountId, { status: 'Active' });
       toast.success('Compte réactivé avec succès');
@@ -403,6 +443,8 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
       onUpdate?.();
     } catch (error) {
       toast.error('Erreur lors de la réactivation');
+    } finally {
+      setReactivating(false);
     }
   };
 
@@ -776,6 +818,36 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
         </div>
       )}
       {/* Calculate Interest Modal */}
+      {showSuspendModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4 accounts-contrast-fix">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="mb-4">
+              <h2 className="text-xl font-bold text-black mb-2">Suspendre le compte</h2>
+              <p className="text-black">Indiquez la raison de la suspension. Le compte ne pourra pas effectuer de transactions tant qu'il restera suspendu.</p>
+              <textarea
+                className="w-full mt-3 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500"
+                rows={3}
+                value={suspensionReason}
+                onChange={e => setSuspensionReason(e.target.value)}
+                placeholder="Ex: Fraude suspectée, documents manquants, etc."
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => { setShowSuspendModal(false); setSuspensionReason(''); }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-black rounded-lg hover:bg-gray-50"
+              >Annuler</button>
+              <button
+                type="button"
+                onClick={confirmSuspendAccount}
+                disabled={suspending}
+                className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >{suspending ? 'Suspension…' : 'Confirmer'}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showInterestModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4 accounts-contrast-fix">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
@@ -922,14 +994,21 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
               <div>
                 <div className="text-black">Statut</div>
                 {(() => {
-                  const statusMap = { 0: 'Active', 1: 'Inactive', 2: 'Closed', 3: 'Suspended' } as const;
-                  const raw: any = account.status;
-                  const statusStr = typeof raw === 'number' ? statusMap[raw as 0|1|2|3] : raw;
+                  const statusStr = normalizeStatus(account.status);
                   return (
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(statusStr)}`}>
-                      {getStatusIcon(statusStr)}
-                      {statusStr}
-                    </span>
+                    <>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(statusStr)}`}>
+                        {getStatusIcon(statusStr)}
+                        {statusStr}
+                      </span>
+                      {statusStr === 'Suspended' && (
+                        <div className="mt-1 text-xs text-yellow-700">
+                          {`Suspendu${account.suspendedAt ? ` le ${new Date(account.suspendedAt).toLocaleString('fr-FR')}` : ''}`}
+                          {account.suspensionReason ? ` · ${account.suspensionReason}` : ''}
+                          {account.suspendedBy ? ` (par ${account.suspendedBy})` : ''}
+                        </div>
+                      )}
+                    </>
                   );
                 })()}
               </div>
@@ -1400,9 +1479,7 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
           <div className="border-t border-gray-200 bg-gray-50 p-4">
             <div className="flex flex-wrap gap-2">
               {(() => {
-                const statusMap = { 0: 'Active', 1: 'Inactive', 2: 'Closed', 3: 'Suspended' } as const;
-                const raw: any = account.status;
-                const statusStr = typeof raw === 'number' ? statusMap[raw as 0|1|2|3] : raw;
+                const statusStr = normalizeStatus(account.status);
                 const isActive = statusStr === 'Active';
                 const isSuspended = statusStr === 'Suspended';
                 const isInactive = statusStr === 'Inactive';
@@ -1434,9 +1511,9 @@ const AccountDetailsView: React.FC<AccountDetailsViewProps> = ({ accountId, onCl
                       </button>
                     )}
                     {isSuspended && (
-                      <button onClick={handleReactivateAccount} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors flex items-center gap-2 text-sm">
+                      <button onClick={handleReactivateAccount} disabled={reactivating} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed">
                         <Unlock className="h-4 w-4" />
-                        Réactiver
+                        {reactivating ? 'Réactivation…' : 'Réactiver'}
                       </button>
                     )}
                     {(isActive || isInactive) && (

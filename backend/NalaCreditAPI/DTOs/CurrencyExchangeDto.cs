@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using NalaCreditAPI.Models;
+using NalaCreditAPI.Utilities;
 
 namespace NalaCreditAPI.DTOs
 {
@@ -172,7 +173,7 @@ namespace NalaCreditAPI.DTOs
 
     public class ExchangeTransactionSearchDto
     {
-        public Guid? BranchId { get; set; }
+        public string? BranchId { get; set; }
         public ExchangeType? ExchangeType { get; set; }
         public CurrencyType? FromCurrency { get; set; }
         public CurrencyType? ToCurrency { get; set; }
@@ -183,6 +184,16 @@ namespace NalaCreditAPI.DTOs
         public string? TransactionNumber { get; set; }
         public int Page { get; set; } = 1;
         public int PageSize { get; set; } = 20;
+
+        public Guid? BranchGuid
+        {
+            get
+            {
+                return BranchIntegrationHelper.TryParseBranchGuid(BranchId, out var branchGuid, out _)
+                    ? branchGuid
+                    : null;
+            }
+        }
     }
 
     public class CurrencyReserveDto

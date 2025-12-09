@@ -11,7 +11,9 @@ import {
   DollarSign,
   RefreshCw,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  Trash2,
+  FileDown
 } from 'lucide-react';
 import {
   CurrencyExchangeRate,
@@ -229,6 +231,25 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
     }
   };
 
+  const handleDeleteRate = async (rate: CurrencyExchangeRate) => {
+    if (!window.confirm(`Êtes-vous sûr de vouloir supprimer définitivement ce taux de change? Cette action est irréversible.`)) {
+      return;
+    }
+
+    try {
+      await apiService.deleteExchangeRate(rate.id);
+      toast.success('Taux supprimé avec succès');
+      if (selectedRate?.id === rate.id) {
+        setSelectedRate(null);
+      }
+      loadExchangeRates();
+    } catch (error: unknown) {
+      console.error('Error deleting rate:', error);
+      const message = (error as any)?.response?.data?.message || 'Erreur lors de la suppression';
+      toast.error(message);
+    }
+  };
+
   const handleRateSubmit = async (rateData: CreateExchangeRateDto | UpdateExchangeRateDto) => {
     try {
       if (editingRate) {
@@ -291,6 +312,167 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
     });
   };
 
+  const formatDisplayDateTime = (value?: string) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString('fr-HT', {
+      dateStyle: 'full',
+      timeStyle: 'short'
+    });
+  };
+
+  const formatAmount = (value: number) => {
+    return value.toLocaleString('fr-HT', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+
+  const buildTransactionsHtml = () => {
+    const generatedAt = new Date().toLocaleString('fr-HT', {
+      dateStyle: 'full',
+      timeStyle: 'short'
+    });
+
+    const rows = transactions
+      .map((transaction, index) => {
+        const fromAmount = formatAmount(transaction.fromAmount);
+        const toAmount = formatAmount(transaction.toAmount);
+        const commission = formatAmount(transaction.commissionAmount ?? 0);
+        const netAmount = formatAmount(transaction.netAmount ?? 0);
+        const statusColor = getStatusBadgeClass(transaction.status as ExchangeTransactionStatus | string);
+        const statusLabel = getStatusLabel(transaction.statusName, transaction.status);
+
+        return `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${transaction.transactionNumber}</td>
+            <td>${transaction.branchName ?? '—'}</td>
+            <td>${transaction.exchangeTypeName || formatExchangeType(transaction.exchangeType)}</td>
+            <td>${fromAmount} ${transaction.fromCurrencyName || formatCurrencyType(transaction.fromCurrency)}</td>
+            <td>${toAmount} ${transaction.toCurrencyName || formatCurrencyType(transaction.toCurrency)}</td>
+            <td>${formatRate(transaction.exchangeRate)}</td>
+            <td>${commission}</td>
+            <td>${netAmount}</td>
+            <td><span class="status ${statusColor}">${statusLabel}</span></td>
+            <td>${transaction.customerName ?? '—'}</td>
+            <td>${formatDisplayDateTime(transaction.transactionDate)}</td>
+            <td>${transaction.processedByName || transaction.processedBy || '—'}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    const filters: string[] = [];
+    if (baseCurrencyFilter) {
+      filters.push(`Devise source: ${formatCurrencyType(baseCurrencyFilter as CurrencyType)}`);
+    }
+    if (targetCurrencyFilter) {
+      filters.push(`Devise cible: ${formatCurrencyType(targetCurrencyFilter as CurrencyType)}`);
+    }
+    if (exchangeTypeFilter) {
+      filters.push(`Type de change: ${formatExchangeType(exchangeTypeFilter as ExchangeType)}`);
+    }
+    if (statusFilter) {
+      filters.push(`Statut: ${getStatusLabel(undefined, statusFilter)}`);
+    }
+    if (branchFilter) {
+      const branchName = branches.find((b) => String(b.id) === String(branchFilter))?.name;
+      filters.push(`Succursale: ${branchName ?? branchFilter}`);
+    }
+    if (startDateFilter || endDateFilter) {
+      filters.push(`Période: ${startDateFilter || '—'} → ${endDateFilter || '—'}`);
+    }
+
+    return `<!DOCTYPE html>
+    <html lang="fr">
+      <head>
+        <meta charset="UTF-8" />
+        <title>Historique des changes</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+          h1 { margin-bottom: 0; }
+          h2 { margin-top: 32px; }
+          .meta { margin-top: 8px; color: #4b5563; }
+          .filters { margin: 16px 0; padding: 12px; background: #f9fafb; border-radius: 8px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+          th, td { border: 1px solid #e5e7eb; padding: 8px; font-size: 12px; text-align: left; }
+          th { background: #f3f4f6; }
+          tr:nth-child(even) { background: #f9fafb; }
+          .status { display: inline-block; padding: 2px 6px; border-radius: 9999px; font-size: 10px; text-transform: uppercase; }
+          .bg-green-100 { background: #dcfce7; color: #065f46; }
+          .bg-yellow-100 { background: #fef3c7; color: #92400e; }
+          .bg-gray-100 { background: #f3f4f6; color: #374151; }
+          .bg-red-100 { background: #fee2e2; color: #991b1b; }
+          .footer { margin-top: 40px; font-size: 12px; color: #6b7280; }
+        </style>
+      </head>
+      <body>
+        <h1>Historique des changes</h1>
+        <div class="meta">Généré le ${generatedAt}</div>
+        ${filters.length ? `<div class="filters"><strong>Filtres appliqués :</strong><br/>${filters.join('<br/>')}</div>` : ''}
+        <h2>Total des transactions : ${transactions.length}</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>N° Transaction</th>
+              <th>Succursale</th>
+              <th>Type</th>
+              <th>Montant source</th>
+              <th>Montant converti</th>
+              <th>Taux</th>
+              <th>Commission</th>
+              <th>Montant net</th>
+              <th>Statut</th>
+              <th>Client</th>
+              <th>Date</th>
+              <th>Traité par</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows || '<tr><td colspan="13" style="text-align:center;">Aucune transaction</td></tr>'}
+          </tbody>
+        </table>
+        <div class="footer">Rapport généré par Nala Crédit · ${generatedAt}</div>
+      </body>
+    </html>`;
+  };
+
+  const openReportWindow = (html: string, autoPrint = false) => {
+    const reportWindow = window.open('', '_blank');
+    if (!reportWindow) {
+      toast.error('Impossible d\'ouvrir la fenêtre de rapport');
+      return;
+    }
+    reportWindow.document.write(html);
+    reportWindow.document.close();
+    reportWindow.focus();
+    if (autoPrint) {
+      setTimeout(() => {
+        reportWindow.print();
+        reportWindow.close();
+      }, 150);
+    }
+  };
+
+  const handleExportTransactionsPdf = () => {
+    if (transactions.length === 0) {
+      toast.error('Aucune transaction à exporter');
+      return;
+    }
+    openReportWindow(buildTransactionsHtml(), true);
+  };
+
+  const handleViewTransactionsHtml = () => {
+    if (transactions.length === 0) {
+      toast.error('Aucune transaction à afficher');
+      return;
+    }
+    openReportWindow(buildTransactionsHtml());
+  };
+
   const isExpiringSoon = (expiryDate?: string) => {
     if (!expiryDate) return false;
     const expiry = new Date(expiryDate);
@@ -345,6 +527,20 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
               >
                 <DollarSign className="w-5 h-5 mr-2" />
                 Nouvelle Transaction
+              </button>
+              <button
+                onClick={handleViewTransactionsHtml}
+                className="bg-gray-100 text-black px-4 py-2 rounded-lg hover:bg-gray-200 flex items-center"
+              >
+                <Eye className="w-5 h-5 mr-2" />
+                Voir HTML
+              </button>
+              <button
+                onClick={handleExportTransactionsPdf}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center"
+              >
+                <FileDown className="w-5 h-5 mr-2" />
+                Exporter PDF
               </button>
             </>
           )}
@@ -685,6 +881,13 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
                               <AlertTriangle className="w-4 h-4" />
                             </button>
                           )}
+                          <button
+                            onClick={() => handleDeleteRate(rate)}
+                            className="text-red-600 hover:text-red-900"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>

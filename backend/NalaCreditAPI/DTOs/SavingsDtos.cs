@@ -311,7 +311,7 @@ namespace NalaCreditAPI.DTOs.Savings
         public SavingsAccountLimitsDto? AccountLimits { get; set; }
 
         [StringLength(500)]
-        public string? Notes { get; set; }
+        public string? Notes { get; set; } // Raison fournie pour suspension ou fermeture
 
         // Signataires autorisés (pour mise à jour)
         public List<SavingsAccountAuthorizedSignerDto>? AuthorizedSigners { get; set; }
@@ -343,6 +343,9 @@ namespace NalaCreditAPI.DTOs.Savings
         public DateTime? ClosedAt { get; set; }
         public string? ClosedBy { get; set; }
         public string? ClosureReason { get; set; }
+        public DateTime? SuspendedAt { get; set; }
+        public string? SuspendedBy { get; set; }
+        public string? SuspensionReason { get; set; }
         public List<SavingsAccountAuthorizedSignerResponseDto> AuthorizedSigners { get; set; } = new();
     }
 

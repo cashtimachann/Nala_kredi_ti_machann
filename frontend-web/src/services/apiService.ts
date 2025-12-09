@@ -841,6 +841,10 @@ class ApiService {
     await this.api.delete(`/currency-exchange/rates/${id}`);
   }
 
+  async deleteExchangeRate(id: string): Promise<void> {
+    await this.api.delete(`/currency-exchange/rates/${id}/permanent`);
+  }
+
   // Exchange Transaction Management
   async calculateExchange(calculation: ExchangeCalculationDto): Promise<ExchangeCalculationResult> {
     const response: AxiosResponse<any> = await this.api.post('/currency-exchange/calculate', calculation);

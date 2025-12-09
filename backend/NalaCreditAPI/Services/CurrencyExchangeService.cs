@@ -18,6 +18,7 @@ namespace NalaCreditAPI.Services
         Task<CurrencyExchangeRateDto> GetCurrentExchangeRateAsync(CurrencyType baseCurrency, CurrencyType targetCurrency);
         Task<List<CurrencyExchangeRateDto>> GetExchangeRatesAsync(ExchangeRateSearchDto searchDto);
         Task<bool> DeactivateExchangeRateAsync(Guid rateId, string updatedBy);
+        Task<bool> DeleteExchangeRateAsync(Guid rateId);
 
         // Exchange Calculations
         Task<ExchangeCalculationResultDto> CalculateExchangeAsync(ExchangeCalculationDto dto, Guid branchId);
@@ -189,6 +190,23 @@ namespace NalaCreditAPI.Services
             exchangeRate.UpdatedBy = updatedBy;
             exchangeRate.UpdatedAt = DateTime.Now;
 
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> DeleteExchangeRateAsync(Guid rateId)
+        {
+            var exchangeRate = await _context.CurrencyExchangeRates
+                .Include(r => r.Transactions)
+                .FirstOrDefaultAsync(r => r.Id == rateId);
+
+            if (exchangeRate == null)
+                return false;
+
+            if (exchangeRate.Transactions.Any())
+                throw new InvalidOperationException("Cannot delete exchange rate with associated transactions");
+
+            _context.CurrencyExchangeRates.Remove(exchangeRate);
             await _context.SaveChangesAsync();
             return true;
         }
@@ -378,8 +396,9 @@ namespace NalaCreditAPI.Services
                 .Include(t => t.CurrencyRate)
                 .AsQueryable();
 
-            if (searchDto.BranchId.HasValue)
-                query = query.Where(t => t.BranchId == searchDto.BranchId.Value);
+            var branchGuid = searchDto.BranchGuid;
+            if (branchGuid.HasValue)
+                query = query.Where(t => t.BranchId == branchGuid.Value);
 
             if (searchDto.ExchangeType.HasValue)
                 query = query.Where(t => t.ExchangeType == searchDto.ExchangeType.Value);

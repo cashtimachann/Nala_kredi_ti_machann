@@ -283,7 +283,31 @@ namespace NalaCreditAPI.Services.Savings
             var account = await _context.SavingsAccounts.FindAsync(accountId)
                 ?? throw new ArgumentException("Compte introuvable");
 
-            account.Status = dto.Status;
+            var previousStatus = account.Status;
+            var trimmedNotes = dto.Notes?.Trim();
+
+            if (dto.Status == SavingsAccountStatus.Suspended)
+            {
+                if (string.IsNullOrWhiteSpace(trimmedNotes))
+                    throw new InvalidOperationException("Une raison est requise pour suspendre le compte.");
+
+                account.Status = SavingsAccountStatus.Suspended;
+                account.SuspendedAt = DateTime.UtcNow;
+                account.SuspendedBy = userId;
+                account.SuspensionReason = trimmedNotes;
+            }
+            else
+            {
+                account.Status = dto.Status;
+
+                if (previousStatus == SavingsAccountStatus.Suspended)
+                {
+                    account.SuspendedAt = null;
+                    account.SuspendedBy = null;
+                    account.SuspensionReason = null;
+                }
+            }
+
             if (dto.InterestRate.HasValue)
                 account.InterestRate = dto.InterestRate.Value;
 
@@ -337,7 +361,7 @@ namespace NalaCreditAPI.Services.Savings
             {
                 account.ClosedAt = DateTime.UtcNow;
                 account.ClosedBy = userId;
-                account.ClosureReason = dto.Notes;
+                account.ClosureReason = trimmedNotes;
             }
 
             await _context.SaveChangesAsync();
@@ -359,6 +383,9 @@ namespace NalaCreditAPI.Services.Savings
             account.ClosedBy = userId;
             account.ClosureReason = reason;
             account.UpdatedAt = DateTime.UtcNow;
+            account.SuspendedAt = null;
+            account.SuspendedBy = null;
+            account.SuspensionReason = null;
 
             await _context.SaveChangesAsync();
             return true;
@@ -682,6 +709,9 @@ namespace NalaCreditAPI.Services.Savings
                 ClosedAt = account.ClosedAt,
                 ClosedBy = account.ClosedBy,
                 ClosureReason = account.ClosureReason,
+                SuspendedAt = account.SuspendedAt,
+                SuspendedBy = account.SuspendedBy,
+                SuspensionReason = account.SuspensionReason,
                 AuthorizedSigners = account.AuthorizedSigners?.Select(s => new SavingsAccountAuthorizedSignerResponseDto
                 {
                     Id = s.Id,
