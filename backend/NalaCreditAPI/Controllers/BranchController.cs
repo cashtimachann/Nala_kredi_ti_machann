@@ -306,10 +306,11 @@ namespace NalaCreditAPI.Controllers
 
                 var branchId = user.BranchId.Value;
                 var today = DateTime.UtcNow.Date;
+                var tomorrow = today.AddDays(1);
 
                 // Get today's transaction count
                 var todayTransactions = await _context.Transactions
-                    .Where(t => t.BranchId == branchId && t.CreatedAt.Date == today)
+                    .Where(t => t.BranchId == branchId && t.CreatedAt >= today && t.CreatedAt < tomorrow)
                     .CountAsync();
 
                 // Get active cashiers count
@@ -318,7 +319,7 @@ namespace NalaCreditAPI.Controllers
                     .CountAsync();
 
                 var activeCashiers = await _context.CashSessions
-                    .Where(cs => cs.BranchId == branchId && cs.Status == CashSessionStatus.Open && cs.SessionStart.Date == today)
+                    .Where(cs => cs.BranchId == branchId && cs.Status == CashSessionStatus.Open && cs.SessionStart >= today && cs.SessionStart < tomorrow)
                     .Select(cs => cs.UserId)
                     .Distinct()
                     .CountAsync();
@@ -335,7 +336,7 @@ namespace NalaCreditAPI.Controllers
 
                 // Get new accounts today
                 var newAccountsToday = await _context.CurrentAccounts
-                    .Where(ca => ca.BranchId == branchId && ca.CreatedAt.Date == today)
+                    .Where(ca => ca.BranchId == branchId && ca.CreatedAt >= today && ca.CreatedAt < tomorrow)
                     .CountAsync();
 
                 // Get active loans
@@ -440,17 +441,18 @@ namespace NalaCreditAPI.Controllers
 
                 var branchId = user.BranchId.Value;
                 var today = DateTime.UtcNow.Date;
+                var tomorrow = today.AddDays(1);
 
                 var activeSessions = await _context.CashSessions
                     .Include(cs => cs.User)
-                    .Where(cs => cs.BranchId == branchId && cs.Status == CashSessionStatus.Open && cs.SessionStart.Date == today)
+                    .Where(cs => cs.BranchId == branchId && cs.Status == CashSessionStatus.Open && cs.SessionStart >= today && cs.SessionStart < tomorrow)
                     .Select(cs => new
                     {
                         cashier = $"{cs.User.FirstName} {cs.User.LastName}",
                         startTime = cs.SessionStart.ToString("HH:mm"),
                         transCount = _context.Transactions
                             .Count(t => t.UserId == cs.UserId && 
-                                       t.CreatedAt.Date == today &&
+                                       t.CreatedAt >= today && t.CreatedAt < tomorrow &&
                                        t.BranchId == branchId)
                             .ToString()
                     })

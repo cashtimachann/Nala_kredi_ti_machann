@@ -14,14 +14,31 @@ namespace NalaCreditAPI.Services
     public class CacheService : ICacheService
     {
         private readonly IDatabase _database;
-        private readonly IServer _server;
+        private readonly IServer? _server;
         private readonly ILogger<CacheService> _logger;
 
         public CacheService(IConnectionMultiplexer redis, ILogger<CacheService> logger)
         {
-            _database = redis.GetDatabase();
-            _server = redis.GetServer(redis.GetEndPoints()[0]);
             _logger = logger;
+
+            _database = redis.GetDatabase();
+
+            var endpoints = redis.GetEndPoints();
+            if (endpoints.Length > 0)
+            {
+                try
+                {
+                    _server = redis.GetServer(endpoints[0]);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Redis server endpoint indisponib – certaines opérations cache yo ap limite");
+                }
+            }
+            else
+            {
+                _logger.LogWarning("Redis paret pa gen okenn endpoints – mode degrade");
+            }
         }
 
         public async Task<T?> GetAsync<T>(string key) where T : class
@@ -70,6 +87,12 @@ namespace NalaCreditAPI.Services
         {
             try
             {
+                if (_server == null)
+                {
+                    _logger.LogDebug("Redis server non inicialize – skip remove pattern {Pattern}", pattern);
+                    return;
+                }
+
                 var keys = _server.Keys(pattern: pattern).ToArray();
                 if (keys.Length > 0)
                 {
@@ -80,6 +103,41 @@ namespace NalaCreditAPI.Services
             {
                 _logger.LogError(ex, "Error removing cache values for pattern: {Pattern}", pattern);
             }
+        }
+    }
+
+    public sealed class NoOpCacheService : ICacheService
+    {
+        private readonly ILogger _logger;
+
+        public NoOpCacheService(ILogger logger)
+        {
+            _logger = logger;
+            _logger.LogWarning("ICacheService ap kouri san Redis (mode degrade)");
+        }
+
+        public Task<T?> GetAsync<T>(string key) where T : class
+        {
+            _logger.LogDebug("Cache disabled – Get {Key}", key);
+            return Task.FromResult<T?>(null);
+        }
+
+        public Task SetAsync<T>(string key, T value, TimeSpan? expiration = null) where T : class
+        {
+            _logger.LogDebug("Cache disabled – Set {Key}", key);
+            return Task.CompletedTask;
+        }
+
+        public Task RemoveAsync(string key)
+        {
+            _logger.LogDebug("Cache disabled – Remove {Key}", key);
+            return Task.CompletedTask;
+        }
+
+        public Task RemovePatternAsync(string pattern)
+        {
+            _logger.LogDebug("Cache disabled – RemovePattern {Pattern}", pattern);
+            return Task.CompletedTask;
         }
     }
 }

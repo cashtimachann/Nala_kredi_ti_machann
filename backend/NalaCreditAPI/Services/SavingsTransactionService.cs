@@ -49,6 +49,7 @@ namespace NalaCreditAPI.Services.Savings
                 {
                     Id = Guid.NewGuid().ToString(),
                     AccountId = account.Id,
+                    AccountNumber = account.AccountNumber,
                     Type = dto.Type,
                     Amount = dto.Amount,
                     Currency = account.Currency,

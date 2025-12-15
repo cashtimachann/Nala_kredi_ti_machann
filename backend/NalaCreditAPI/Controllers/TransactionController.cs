@@ -125,9 +125,11 @@ public class TransactionController : ControllerBase
     [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor")]
     public async Task<ActionResult> GetBranchTransactionsToday(int branchId)
     {
-        var today = DateTime.Today;
+        // Use UTC date for comparison to match transaction CreatedAt (stored in UTC)
+        var today = DateTime.UtcNow.Date;
+        var tomorrow = today.AddDays(1);
         var transactions = await _context.Transactions
-            .Where(t => t.BranchId == branchId && t.CreatedAt.Date == today)
+            .Where(t => t.BranchId == branchId && t.CreatedAt >= today && t.CreatedAt < tomorrow)
             .Include(t => t.User)
             .Include(t => t.Account)
                 .ThenInclude(a => a.Customer)
@@ -255,10 +257,13 @@ public class TransactionController : ControllerBase
             {
                 t.Id,
                 t.TransactionNumber,
+                t.AccountId,
+                AccountNumber = t.Account.AccountNumber,
                 t.Type,
                 t.Currency,
                 t.Amount,
                 t.CreatedAt,
+                Status = t.Status.ToString(),
                 Customer = $"{t.Account.Customer.FirstName} {t.Account.Customer.LastName}",
                 Cashier = $"{t.User.FirstName} {t.User.LastName}",
                 t.Description,

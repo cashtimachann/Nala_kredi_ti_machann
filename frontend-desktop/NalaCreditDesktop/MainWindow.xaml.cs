@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using NalaCreditDesktop.Views;
 using NalaCreditDesktop.ViewModels;
 using NalaCreditDesktop.Models;
+using NalaCreditDesktop.Services;
 
 namespace NalaCreditDesktop;
 
@@ -14,6 +15,7 @@ public partial class MainWindow : Window
 {
     private DispatcherTimer? _timer;
     private CashierDashboardViewModel? _viewModel;
+    private ApiService? _apiService;
 
     public MainWindow()
     {
@@ -27,8 +29,9 @@ public partial class MainWindow : Window
     {
         try
         {
+            _apiService = AppServices.GetRequiredApiService();
             // Initialiser le ViewModel
-            _viewModel = new CashierDashboardViewModel();
+            _viewModel = new CashierDashboardViewModel(_apiService);
 
             // Initialiser le timer pour les mises à jour temps réel
             _timer = new DispatcherTimer
@@ -49,7 +52,21 @@ public partial class MainWindow : Window
         {
             // Données initiales pour les tests - seulement les contrôles qui existent
             var cashierNameText = FindName("CashierNameText") as TextBlock;
-            if (cashierNameText != null) cashierNameText.Text = "Marie Dupont";
+            if (cashierNameText != null)
+            {
+                var user = _apiService?.CurrentUser;
+                if (user != null)
+                {
+                    var fullName = string.IsNullOrWhiteSpace(user.FirstName)
+                        ? user.Email
+                        : (string.IsNullOrWhiteSpace(user.LastName) ? user.FirstName : $"{user.FirstName} {user.LastName}");
+                    cashierNameText.Text = fullName;
+                }
+                else
+                {
+                    cashierNameText.Text = "Marie Dupont";
+                }
+            }
 
             var sessionStartTimeText = FindName("SessionStartTimeText") as TextBlock;
             if (sessionStartTimeText != null) sessionStartTimeText.Text = "Ouvert à 08:30";
@@ -437,7 +454,14 @@ public partial class MainWindow : Window
     {
         try
         {
-            var depotWindow = new NouveauDepotWindow();
+            if (_apiService == null)
+            {
+                MessageBox.Show("Le service API n'est pas disponible. Veuillez vous reconnecter.",
+                    "Service indisponible", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var depotWindow = new NouveauDepotWindow(_apiService);
             depotWindow.Owner = this;
 
             if (depotWindow.ShowDialog() == true)
@@ -449,7 +473,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Erreur lors de l'ouverture du module de dépôt: {ex.Message}",
+            MessageBox.Show($"Erreur lors de l'ouverture du module de dépôt:\n\n{ex}",
                 "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -458,7 +482,14 @@ public partial class MainWindow : Window
     {
         try
         {
-            var retraitWindow = new NouveauRetraitWindow();
+            if (_apiService == null)
+            {
+                MessageBox.Show("Le service API n'est pas disponible. Veuillez vous reconnecter.",
+                    "Service indisponible", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var retraitWindow = new NouveauRetraitWindow(_apiService);
             retraitWindow.Owner = this;
 
             if (retraitWindow.ShowDialog() == true)
@@ -470,7 +501,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Erreur lors de l'ouverture du module de retrait: {ex.Message}",
+            MessageBox.Show($"Erreur lors de l'ouverture du module de retrait:\n\n{ex}",
                 "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }

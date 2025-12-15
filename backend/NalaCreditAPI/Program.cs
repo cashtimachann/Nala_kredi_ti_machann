@@ -122,19 +122,43 @@ builder.Services.AddScoped<IInterBranchTransferService, InterBranchTransferServi
 builder.Services.AddScoped<IBranchReportService, BranchReportService>();
 
 // Redis Configuration
-builder.Services.AddSingleton<IConnectionMultiplexer>(provider =>
+builder.Services.AddSingleton<ICacheService>(provider =>
 {
     var configuration = provider.GetRequiredService<IConfiguration>();
+    var logger = provider.GetRequiredService<ILogger<CacheService>>();
+    var enabled = configuration.GetValue<bool?>("Redis:Enabled") ?? true;
+
+    if (!enabled)
+    {
+        return new NoOpCacheService(logger);
+    }
+
     var connectionString = configuration.GetConnectionString("Redis") ?? "localhost:6379";
-    return ConnectionMultiplexer.Connect(connectionString);
+    var options = ConfigurationOptions.Parse(connectionString);
+    options.AbortOnConnectFail = false;
+    options.ConnectRetry = 2;
+    options.ConnectTimeout = 5000;
+    options.SyncTimeout = 5000;
+
+    try
+    {
+        var multiplexer = ConnectionMultiplexer.Connect(options);
+        return new CacheService(multiplexer, logger);
+    }
+    catch (Exception ex)
+    {
+        var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
+        loggerFactory.CreateLogger("RedisStartup").LogWarning(ex, "Redis indisponib – cache an mode degrade");
+        return new NoOpCacheService(logger);
+    }
 });
-builder.Services.AddScoped<ICacheService, CacheService>();
 
 // RabbitMQ Configuration
 builder.Services.AddSingleton<IMessageQueueService, MessageQueueService>();
 
 // SignalR
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<INotificationService, NotificationService>();
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Program));

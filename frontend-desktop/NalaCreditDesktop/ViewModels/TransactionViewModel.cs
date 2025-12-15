@@ -82,6 +82,21 @@ namespace NalaCreditDesktop.ViewModels
         public TransactionViewModel()
         {
             _transactionService = new TransactionService();
+
+            try
+            {
+                AppServices.TransactionProcessed += OnExternalTransactionProcessed;
+            }
+            catch
+            {
+                // Ignore subscription failures
+            }
+
+            _ = LoadTransactionsAsync();
+        }
+
+        private void OnExternalTransactionProcessed()
+        {
             _ = LoadTransactionsAsync();
         }
 
@@ -91,8 +106,24 @@ namespace NalaCreditDesktop.ViewModels
             IsLoading = true;
             try
             {
-                var transactions = await _transactionService.GetRecentTransactionsAsync(100);
+                var transactions = await _transactionService.GetRecentTransactionsAsync(
+                    200,
+                    DateFrom,
+                    DateTo,
+                    SelectedType);
                 Transactions = new ObservableCollection<TransactionSummary>(transactions);
+                // DEBUG: show how many transactions were loaded to help debug missing list issue
+                try { MessageBox.Show($"[DEBUG] Loaded {transactions.Count} transactions", "Debug - Transactions Loaded", MessageBoxButton.OK, MessageBoxImage.Information); } catch { }
+                try
+                {
+                    var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "nala_transactions_debug.log");
+                    var lines = $"{DateTime.Now:o} - Loaded {transactions.Count} transactions - Types: {string.Join(',', transactions.Select(t => t.TransactionType).Distinct())}\n";
+                    System.IO.File.AppendAllText(logPath, lines);
+                }
+                catch
+                {
+                    // Ignore logging failures
+                }
                 ApplyFilters();
                 UpdateStatistics();
             }
@@ -214,8 +245,12 @@ namespace NalaCreditDesktop.ViewModels
             try
             {
                 IsLoading = true;
+                var apiService = AppServices.GetRequiredApiService();
+                var branchId = apiService?.CurrentUser?.BranchId;
+                var cashierName = apiService?.CurrentUser == null ? null : string.IsNullOrWhiteSpace(apiService.CurrentUser.FirstName) ? apiService.CurrentUser.Email : (string.IsNullOrWhiteSpace(apiService.CurrentUser.LastName) ? apiService.CurrentUser.FirstName : apiService.CurrentUser.FirstName + " " + apiService.CurrentUser.LastName);
+
                 var success = await _transactionService.ProcessDepositAsync(
-                    QuickAccountNumber, QuickAmount, QuickCurrency);
+                    QuickAccountNumber, QuickAmount, QuickCurrency, branchId, cashierName, null);
 
                 if (success)
                 {
@@ -226,6 +261,8 @@ namespace NalaCreditDesktop.ViewModels
                     ShowQuickDepositDialog = false;
                     ClearQuickForm();
                     await LoadTransactionsAsync();
+                    // Notify dashboard and other components to refresh
+                    try { AppServices.RaiseTransactionProcessed(); } catch { }
                 }
                 else
                 {
@@ -253,8 +290,12 @@ namespace NalaCreditDesktop.ViewModels
             try
             {
                 IsLoading = true;
+                var apiService = AppServices.GetRequiredApiService();
+                var branchId = apiService?.CurrentUser?.BranchId;
+                var cashierName = apiService?.CurrentUser == null ? null : string.IsNullOrWhiteSpace(apiService.CurrentUser.FirstName) ? apiService.CurrentUser.Email : (string.IsNullOrWhiteSpace(apiService.CurrentUser.LastName) ? apiService.CurrentUser.FirstName : apiService.CurrentUser.FirstName + " " + apiService.CurrentUser.LastName);
+
                 var success = await _transactionService.ProcessWithdrawalAsync(
-                    QuickAccountNumber, QuickAmount, QuickCurrency);
+                    QuickAccountNumber, QuickAmount, QuickCurrency, branchId, cashierName, null);
 
                 if (success)
                 {
@@ -265,6 +306,8 @@ namespace NalaCreditDesktop.ViewModels
                     ShowQuickWithdrawalDialog = false;
                     ClearQuickForm();
                     await LoadTransactionsAsync();
+                    // Notify dashboard and other components to refresh
+                    try { AppServices.RaiseTransactionProcessed(); } catch { }
                 }
                 else
                 {

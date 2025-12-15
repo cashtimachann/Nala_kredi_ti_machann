@@ -1,0 +1,29 @@
+<Window x:Class="NalaCreditDesktop.Views.OpenCashSessionDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Ouverture de session" Height="240" Width="360"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Saisir les soldes d'ouverture" FontWeight="Bold" FontSize="16"/>
+
+        <StackPanel Grid.Row="1" Margin="0,12,0,0">
+            <TextBlock Text="Solde HTG" Margin="0,0,0,4"/>
+            <TextBox x:Name="HtgTextBox" Padding="8"/>
+            <TextBlock Text="Solde USD" Margin="0,10,0,4"/>
+            <TextBox x:Name="UsdTextBox" Padding="8"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Annuler" Width="80" Margin="0,0,8,0" Click="Cancel_Click"/>
+            <Button Content="Valider" Width="90" Background="#2D9CDB" Foreground="White" Click="Validate_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

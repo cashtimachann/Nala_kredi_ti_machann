@@ -13,15 +13,24 @@ namespace NalaCreditAPI.Services
 
     public class MessageQueueService : IMessageQueueService, IDisposable
     {
-        private readonly IConnection _connection;
-        private readonly IModel _channel;
+        private readonly IConnection? _connection;
+        private readonly IModel? _channel;
         private readonly ILogger<MessageQueueService> _logger;
         private readonly Dictionary<string, IModel> _channels = new();
+        private readonly bool _isEnabled;
 
         public MessageQueueService(IConfiguration configuration, ILogger<MessageQueueService> logger)
         {
             _logger = logger;
             
+            var messagingEnabled = configuration.GetValue<bool?>("Messaging:Enabled") ?? true;
+            if (!messagingEnabled)
+            {
+                _logger.LogWarning("RabbitMQ messaging disabled via configuration (Messaging:Enabled = false)");
+                _isEnabled = false;
+                return;
+            }
+
             var factory = new ConnectionFactory()
             {
                 HostName = configuration.GetConnectionString("RabbitMQ") ?? "localhost",
@@ -36,16 +45,24 @@ namespace NalaCreditAPI.Services
                 _connection = factory.CreateConnection();
                 _channel = _connection.CreateModel();
                 _logger.LogInformation("Connected to RabbitMQ successfully");
+                _isEnabled = true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to connect to RabbitMQ");
-                throw;
+                _isEnabled = false;
+                _logger.LogWarning(ex, "RabbitMQ indisponib – messaging ap kontinye san queue (mode degrade)");
             }
         }
 
         public async Task PublishAsync<T>(string queueName, T message) where T : class
         {
+            if (!_isEnabled || _channel == null)
+            {
+                _logger.LogDebug("RabbitMQ pa disponib – message '{QueueName}' pa voye (mode degrade)", queueName);
+                await Task.CompletedTask;
+                return;
+            }
+
             try
             {
                 _channel.QueueDeclare(
@@ -80,6 +97,12 @@ namespace NalaCreditAPI.Services
 
         public void Subscribe<T>(string queueName, Func<T, Task> handler) where T : class
         {
+            if (!_isEnabled || _connection == null)
+            {
+                _logger.LogDebug("RabbitMQ pa disponib – subscription '{QueueName}' inyore (mode degrade)", queueName);
+                return;
+            }
+
             try
             {
                 var channel = _connection.CreateModel();
@@ -130,17 +153,20 @@ namespace NalaCreditAPI.Services
 
         public void Dispose()
         {
-            foreach (var channel in _channels.Values)
+            if (_isEnabled)
             {
-                channel?.Close();
-                channel?.Dispose();
+                foreach (var channel in _channels.Values)
+                {
+                    channel?.Close();
+                    channel?.Dispose();
+                }
+                _channels.Clear();
+
+                _channel?.Close();
+                _channel?.Dispose();
+                _connection?.Close();
+                _connection?.Dispose();
             }
-            _channels.Clear();
-            
-            _channel?.Close();
-            _channel?.Dispose();
-            _connection?.Close();
-            _connection?.Dispose();
         }
     }
 

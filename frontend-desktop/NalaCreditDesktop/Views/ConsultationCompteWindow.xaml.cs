@@ -5,20 +5,43 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using NalaCreditDesktop.Models;
+using NalaCreditDesktop.Services;
 using NalaCreditDesktop.Views;
 
 namespace NalaCreditDesktop.Views
 {
     public partial class ConsultationCompteWindow : Window
     {
+        private readonly ApiService _apiService;
         private ConsultationModel _consultation;
         private ObservableCollection<ClientModel> _baseDonneesClients;
         private ClientModel? _clientSelectionne;
 
-        public ConsultationCompteWindow()
+        public ConsultationCompteWindow(ApiService apiService)
         {
             InitializeComponent();
+            _apiService = apiService ?? throw new ArgumentNullException(nameof(apiService));
             InitialiserConsultation();
+        }
+
+        public void PrefillSearch(string terme)
+        {
+            if (string.IsNullOrWhiteSpace(terme))
+            {
+                return;
+            }
+
+            // Ensure controls are initialized before use
+            if (RechercheTextBox == null)
+            {
+                return;
+            }
+
+            var value = terme.Trim();
+            RechercheTextBox.Text = value;
+            // Force layout to create bindings before search
+            RechercheTextBox.UpdateLayout();
+            EffectuerRecherche(value);
         }
 
         private void InitialiserConsultation()
@@ -267,13 +290,21 @@ namespace NalaCreditDesktop.Views
         {
             if (_clientSelectionne != null)
             {
-                var depotWindow = new NouveauDepotWindow();
-                // Pré-remplir avec le numéro de compte du client
-                // depotWindow.PreRemplirClient(_clientSelectionne.NumeroCompte);
-                depotWindow.ShowDialog();
-                
-                // Actualiser les informations après fermeture
-                ActualiserInformationsClient();
+                try
+                {
+                    var depotWindow = new NouveauDepotWindow(_apiService);
+                    // Pré-remplir avec le numéro de compte du client
+                    // depotWindow.PreRemplirClient(_clientSelectionne.NumeroCompte);
+                    depotWindow.ShowDialog();
+
+                    // Actualiser les informations après fermeture
+                    ActualiserInformationsClient();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Erreur lors de l'ouverture du module de dépôt:\n\n{ex}",
+                        "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
         }
 
@@ -281,13 +312,21 @@ namespace NalaCreditDesktop.Views
         {
             if (_clientSelectionne != null)
             {
-                var retraitWindow = new NouveauRetraitWindow();
-                // Pré-remplir avec le numéro de compte du client
-                // retraitWindow.PreRemplirClient(_clientSelectionne.NumeroCompte);
-                retraitWindow.ShowDialog();
-                
-                // Actualiser les informations après fermeture
-                ActualiserInformationsClient();
+                try
+                {
+                    var retraitWindow = new NouveauRetraitWindow(_apiService);
+                    // Pré-remplir avec le numéro de compte du client
+                    // retraitWindow.PreRemplirClient(_clientSelectionne.NumeroCompte);
+                    retraitWindow.ShowDialog();
+
+                    // Actualiser les informations après fermeture
+                    ActualiserInformationsClient();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Erreur lors de l'ouverture du module de retrait:\n\n{ex}",
+                        "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
         }
 

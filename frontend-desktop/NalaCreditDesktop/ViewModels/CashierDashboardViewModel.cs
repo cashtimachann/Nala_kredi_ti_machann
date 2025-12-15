@@ -1,300 +1,257 @@
 using System;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
-using System.Windows.Input;
-using System.Windows.Threading;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Media;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using NalaCreditDesktop.Models;
 using NalaCreditDesktop.Services;
-using System.Linq;
-using System.Threading.Tasks;
-using ScottPlot;
-using System.Windows;
+using NalaCreditDesktop.Views;
+using CashierDashboardDto = NalaCreditDesktop.Services.CashierDashboard;
 
 namespace NalaCreditDesktop.ViewModels
 {
     public partial class CashierDashboardViewModel : ObservableObject
     {
         private readonly DispatcherTimer _timer;
-        private readonly ICashierService _cashierService;
-        private readonly ITransactionService _transactionService;
-        private readonly IAlertService _alertService;
+        private readonly ApiService _apiService;
+        private readonly TimeSpan _refreshInterval = TimeSpan.FromSeconds(30);
+        private DateTime _lastRefresh = DateTime.MinValue;
+        private bool _isRefreshing;
+        private bool _branchLoaded;
+        private bool _branchLoading;
 
         #region Properties - Session Info
 
         [ObservableProperty]
-        private string cashierName = "Marie Dupont";
+        private string cashierName = string.Empty;
 
         [ObservableProperty]
-        private DateTime sessionStartTime = DateTime.Now.AddHours(-4);
+        private DateTime sessionStartTime = DateTime.Now;
 
         [ObservableProperty]
         private DateTime currentTime = DateTime.Now;
 
         [ObservableProperty]
-        private string sessionStatusText = "CAISSE OUVERTE";
+        private string sessionStatusText = "INCONNUE";
 
         [ObservableProperty]
-        private Brush sessionStatusColor = new SolidColorBrush(Colors.Green);
+        private Brush sessionStatusColor = new SolidColorBrush(Colors.Gray);
 
         [ObservableProperty]
-        private string sessionId = "CS-2025-001";
+        private string sessionId = "--";
 
         [ObservableProperty]
-        private string branchName = "Succursale Centre-Ville";
+        private string branchName = string.Empty;
 
         [ObservableProperty]
-        private string connectionStatus = "Connecté";
+        private string connectionStatus = "Déconnecté";
 
         [ObservableProperty]
-        private Brush connectionStatusColor = new SolidColorBrush(Colors.LimeGreen);
+        private Brush connectionStatusColor = new SolidColorBrush(Colors.Firebrick);
 
         [ObservableProperty]
-        private DateTime lastTransactionTime = DateTime.Now.AddMinutes(-5);
+        private DateTime lastTransactionTime = DateTime.Now;
 
         #endregion
 
         #region Properties - Cash Balances
 
         [ObservableProperty]
-        private decimal currentBalanceHTG = 2_580_750m;
+        private decimal currentBalanceHTG;
 
         [ObservableProperty]
-        private decimal currentBalanceUSD = 12_450.75m;
+        private decimal currentBalanceUSD;
 
         [ObservableProperty]
-        private decimal openingBalanceHTG = 1_500_000m;
+        private decimal openingBalanceHTG;
 
         [ObservableProperty]
-        private decimal openingBalanceUSD = 8_000m;
+        private decimal openingBalanceUSD;
 
         [ObservableProperty]
-        private decimal totalIncoming = 1_850_000m;
+        private decimal totalIncoming;
 
         [ObservableProperty]
-        private decimal totalOutgoing = 769_250m;
+        private decimal totalOutgoing;
 
         [ObservableProperty]
-        private string balanceIndicatorText = "Caisse équilibrée";
+        private string balanceIndicatorText = string.Empty;
 
         [ObservableProperty]
-        private Brush balanceIndicatorColor = new SolidColorBrush(Colors.Orange);
+        private Brush balanceIndicatorColor = new SolidColorBrush(Colors.Gray);
 
         #endregion
 
         #region Properties - Transaction Summary
 
         [ObservableProperty]
-        private int depositsCount = 23;
+        private decimal todayDeposits;
 
         [ObservableProperty]
-        private decimal depositsAmountHTG = 1_250_000m;
+        private decimal todayWithdrawals;
 
         [ObservableProperty]
-        private decimal depositsAmountUSD = 3_200m;
+        private int todayExchanges;
 
         [ObservableProperty]
-        private int withdrawalsCount = 18;
+        private int depositsCount;
 
         [ObservableProperty]
-        private decimal withdrawalsAmountHTG = 560_000m;
+        private decimal depositsAmountHTG;
 
         [ObservableProperty]
-        private decimal withdrawalsAmountUSD = 1_850m;
+        private decimal depositsAmountUSD;
 
         [ObservableProperty]
-        private decimal usdSalesAmount = 600_000m;
+        private int withdrawalsCount;
 
         [ObservableProperty]
-        private decimal usdPurchaseAmount = 1_450.75m;
+        private decimal withdrawalsAmountHTG;
+
+        [ObservableProperty]
+        private decimal withdrawalsAmountUSD;
+
+        [ObservableProperty]
+        private decimal usdSalesAmount;
+
+        [ObservableProperty]
+        private decimal usdPurchaseAmount;
+
+        // Raw dashboard model for XAML bindings that expect a single DashboardData object
+        [ObservableProperty]
+        private CashierDashboardDto? dashboardData;
 
         #endregion
 
         #region Properties - Personal Statistics
 
         [ObservableProperty]
-        private int clientsServedCount = 41;
+        private int clientsServedCount;
 
         [ObservableProperty]
-        private int transactionsProcessedCount = 47;
+        private int transactionsProcessedCount;
 
         [ObservableProperty]
-        private string averageTransactionTime = "2m 15s";
+        private string averageTransactionTime = string.Empty;
 
         [ObservableProperty]
-        private double errorRate = 0.021;
+        private double errorRate;
 
         [ObservableProperty]
         private Brush errorRateColor = new SolidColorBrush(Colors.Green);
 
         [ObservableProperty]
-        private double dailyGoalProgress = 78.5;
+        private double dailyGoalProgress;
 
         [ObservableProperty]
-        private string dailyGoalText = "Vous avez atteint 78.5% de votre objectif journalier";
+        private string dailyGoalText = string.Empty;
 
         #endregion
 
         #region Properties - Alerts
 
         [ObservableProperty]
-        private bool hasWarningAlerts = true;
+        private bool hasWarningAlerts;
 
         [ObservableProperty]
-        private string warningMessage = "Le solde HTG approche de la limite (>80% du seuil)";
+        private string warningMessage = string.Empty;
 
         [ObservableProperty]
-        private bool hasCriticalAlerts = false;
+        private bool hasCriticalAlerts;
 
         [ObservableProperty]
-        private string criticalMessage = "";
+        private string criticalMessage = string.Empty;
 
         #endregion
 
         #region Properties - Account Search
 
         [ObservableProperty]
-        private string accountSearchText = "";
+        private string accountSearchText = string.Empty;
 
         #endregion
 
         #region Recent Transactions
 
         [ObservableProperty]
-        private ObservableCollection<TransactionSummary> recentTransactions;
+        private ObservableCollection<TransactionSummary> recentTransactions = new();
 
         #endregion
 
-        public CashierDashboardViewModel()
-        {
-            // Initialiser les services (normalement injectés)
-            _cashierService = new CashierService();
-            _transactionService = new TransactionService();
-            _alertService = new AlertService();
+        #region State Management
 
-            // Initialiser le timer
+        [ObservableProperty]
+        private bool isLoading;
+
+        [ObservableProperty]
+        private string errorMessage = string.Empty;
+
+        [ObservableProperty]
+        private bool isTransactionModuleVisible = true;
+
+        #endregion
+
+        public string TransactionModuleToggleLabel => IsTransactionModuleVisible
+            ? "Masquer Transactions"
+            : "Afficher Transactions";
+
+        partial void OnIsTransactionModuleVisibleChanged(bool value)
+        {
+            OnPropertyChanged(nameof(TransactionModuleToggleLabel));
+        }
+
+        public CashierDashboardViewModel(ApiService apiService)
+        {
+            _apiService = apiService ?? throw new ArgumentNullException(nameof(apiService));
+
             _timer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(1)
             };
             _timer.Tick += Timer_Tick;
 
-            // Initialiser les données
-            InitializeRecentTransactions();
             UpdateBalanceIndicator();
             CheckAlerts();
+            // Subscribe to transaction processed events so the dashboard refreshes immediately
+            AppServices.TransactionProcessed += OnTransactionProcessed;
         }
 
-        private void Timer_Tick(object sender, EventArgs e)
+        private async void OnTransactionProcessed()
+        {
+            try
+            {
+                await RefreshDashboardAsync(force: true);
+            }
+            catch
+            {
+                // Ignore; refresh will be retried by timer
+            }
+        }
+
+        private async void Timer_Tick(object? sender, EventArgs e)
         {
             CurrentTime = DateTime.Now;
             
-            // Vérifier les alertes périodiquement
-            if (DateTime.Now.Second % 30 == 0)
+            if (!_isRefreshing && DateTime.Now - _lastRefresh >= _refreshInterval)
             {
-                CheckAlerts();
+                await RefreshDashboardAsync();
             }
-
-            // Simuler des mises à jour de données
-            if (DateTime.Now.Second % 10 == 0)
-            {
-                SimulateDataUpdates();
-            }
-        }
-
-        private void InitializeRecentTransactions()
-        {
-            RecentTransactions = new ObservableCollection<TransactionSummary>
-            {
-                new TransactionSummary
-                {
-                    Time = DateTime.Now.AddMinutes(-2),
-                    CreatedAt = DateTime.Now.AddMinutes(-2),
-                    Type = "Dépôt",
-                    TransactionType = "Dépôt",
-                    ClientAccount = "Jean Baptiste (AC-001)",
-                    AccountId = "200100000001",
-                    CustomerName = "Jean Baptiste",
-                    Amount = 25000,
-                    Currency = "HTG",
-                    Status = "Complété",
-                    ReferenceNumber = "TRX-001",
-                    ProcessedBy = "Caissier",
-                    StatusColor = new SolidColorBrush(Colors.Green)
-                },
-                new TransactionSummary
-                {
-                    Time = DateTime.Now.AddMinutes(-8),
-                    CreatedAt = DateTime.Now.AddMinutes(-8),
-                    Type = "Change",
-                    TransactionType = "Change",
-                    ClientAccount = "Marie Claire (AC-045)",
-                    AccountId = "200100000045",
-                    CustomerName = "Marie Claire",
-                    Amount = 32000,
-                    Currency = "HTG",
-                    Status = "Complété",
-                    ReferenceNumber = "TRX-002",
-                    ProcessedBy = "Caissier",
-                    StatusColor = new SolidColorBrush(Colors.Green)
-                },
-                new TransactionSummary
-                {
-                    Time = DateTime.Now.AddMinutes(-15),
-                    CreatedAt = DateTime.Now.AddMinutes(-15),
-                    Type = "Retrait",
-                    TransactionType = "Retrait",
-                    ClientAccount = "Pierre Moïse (AC-123)",
-                    AccountId = "200100000123",
-                    CustomerName = "Pierre Moïse",
-                    Amount = 15000,
-                    Currency = "HTG",
-                    Status = "Complété",
-                    ReferenceNumber = "TRX-003",
-                    ProcessedBy = "Caissier",
-                    StatusColor = new SolidColorBrush(Colors.Green)
-                },
-                new TransactionSummary
-                {
-                    Time = DateTime.Now.AddMinutes(-22),
-                    CreatedAt = DateTime.Now.AddMinutes(-22),
-                    Type = "Dépôt",
-                    TransactionType = "Dépôt",
-                    ClientAccount = "Rose Marie (AC-089)",
-                    AccountId = "200100000089",
-                    CustomerName = "Rose Marie",
-                    Amount = 150,
-                    Currency = "USD",
-                    Status = "En attente",
-                    ReferenceNumber = "TRX-004",
-                    ProcessedBy = "Caissier",
-                    StatusColor = new SolidColorBrush(Colors.Orange)
-                },
-                new TransactionSummary
-                {
-                    Time = DateTime.Now.AddMinutes(-28),
-                    CreatedAt = DateTime.Now.AddMinutes(-28),
-                    Type = "Change",
-                    TransactionType = "Change",
-                    ClientAccount = "Joseph Excellent (AC-067)",
-                    AccountId = "200100000067",
-                    CustomerName = "Joseph Excellent",
-                    Amount = 50000,
-                    Currency = "HTG",
-                    Status = "Complété",
-                    ReferenceNumber = "TRX-005",
-                    ProcessedBy = "Caissier",
-                    StatusColor = new SolidColorBrush(Colors.Green)
-                }
-            };
         }
 
         private void UpdateBalanceIndicator()
         {
-            var totalBalance = CurrentBalanceHTG + (CurrentBalanceUSD * 160); // Taux approximatif
+            var totalBalance = CurrentBalanceHTG + (CurrentBalanceUSD * 160);
+
+            if (CurrentBalanceHTG <= 0 && CurrentBalanceUSD <= 0)
+            {
+                BalanceIndicatorText = "Aucun mouvement enregistré";
+                BalanceIndicatorColor = new SolidColorBrush(Colors.Gray);
+                return;
+            }
 
             if (CurrentBalanceHTG > CurrentBalanceUSD * 150)
             {
@@ -315,13 +272,13 @@ namespace NalaCreditDesktop.ViewModels
 
         private void CheckAlerts()
         {
-            // Seuils configurables (normalement depuis la configuration)
             const decimal htgThreshold = 2_500_000m;
             const decimal usdThreshold = 15_000m;
 
-            // Vérifier les alertes HTG
             HasWarningAlerts = false;
             HasCriticalAlerts = false;
+            WarningMessage = string.Empty;
+            CriticalMessage = string.Empty;
 
             if (CurrentBalanceHTG > htgThreshold * 0.8m && CurrentBalanceHTG < htgThreshold)
             {
@@ -345,7 +302,6 @@ namespace NalaCreditDesktop.ViewModels
                 CriticalMessage = "ALERTE: Solde USD au-dessus du seuil de sécurité!";
             }
 
-            // Vérifier les soldes trop bas
             if (CurrentBalanceHTG < 100_000m)
             {
                 HasCriticalAlerts = true;
@@ -359,23 +315,240 @@ namespace NalaCreditDesktop.ViewModels
             }
         }
 
-        private void SimulateDataUpdates()
+        private async Task RefreshDashboardAsync(bool force = false)
         {
-            // Simulation de légères variations dans les données
-            var random = new Random();
-            
-            // Mettre à jour occasionnellement les statistiques
-            if (random.Next(1, 100) <= 10) // 10% de chance
+            if (_isRefreshing)
             {
-                TransactionsProcessedCount++;
-                ClientsServedCount = Math.Max(ClientsServedCount, TransactionsProcessedCount - 6);
-                
-                // Recalculer le taux d'objectif
-                DailyGoalProgress = Math.Min(100, DailyGoalProgress + random.NextDouble() * 2);
-                DailyGoalText = $"Vous avez atteint {DailyGoalProgress:F1}% de votre objectif journalier";
-                
-                LastTransactionTime = DateTime.Now;
+                return;
             }
+
+            if (!force && DateTime.Now - _lastRefresh < TimeSpan.FromSeconds(5))
+            {
+                return;
+            }
+
+            try
+            {
+                _isRefreshing = true;
+                IsLoading = true;
+                ErrorMessage = string.Empty;
+                UpdateConnectionStatus(false, "Synchronisation...");
+
+                await EnsureUserContextAsync();
+
+                var dashboardResult = await _apiService.GetCashierDashboardAsync();
+                if (!dashboardResult.IsSuccess)
+                {
+                    ErrorMessage = string.IsNullOrWhiteSpace(dashboardResult.ErrorMessage)
+                        ? "Impossible de charger les données du dashboard."
+                        : dashboardResult.ErrorMessage;
+                    UpdateConnectionStatus(false, "Erreur de connexion");
+                    return;
+                }
+
+                if (dashboardResult.Data == null)
+                {
+                    ErrorMessage = "Réponse vide reçue pour le dashboard caissier.";
+                    UpdateConnectionStatus(false, "En attente de données");
+                    return;
+                }
+
+                ApplyDashboardData(dashboardResult.Data);
+                await EnsureBranchInfoAsync();
+
+                _lastRefresh = DateTime.Now;
+                UpdateConnectionStatus(true, "Connecté");
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = ex.Message;
+                UpdateConnectionStatus(false, "Erreur de connexion");
+            }
+            finally
+            {
+                IsLoading = false;
+                _isRefreshing = false;
+            }
+        }
+
+        private void ApplyDashboardData(CashierDashboardDto dashboard)
+        {
+            // Make the raw dashboard model available for XAML bindings that reference DashboardData
+            DashboardData = dashboard;
+            SessionStatusText = FormatSessionStatus(dashboard.CashSessionStatus);
+            SessionStatusColor = GetSessionBrush(dashboard.CashSessionStatus);
+            SessionId = dashboard.CashSessionId?.ToString() ?? "--";
+            SessionStartTime = dashboard.SessionStartTime ?? SessionStartTime;
+
+            CurrentBalanceHTG = dashboard.CashBalanceHTG;
+            CurrentBalanceUSD = dashboard.CashBalanceUSD;
+            OpeningBalanceHTG = dashboard.OpeningBalanceHTG;
+            OpeningBalanceUSD = dashboard.OpeningBalanceUSD;
+            TotalIncoming = dashboard.TotalIncoming;
+            TotalOutgoing = dashboard.TotalOutgoing;
+
+            TodayDeposits = dashboard.TodayDeposits;
+            TodayWithdrawals = dashboard.TodayWithdrawals;
+            TodayExchanges = dashboard.TodayExchanges;
+            DepositsCount = dashboard.DepositsCount;
+            DepositsAmountHTG = dashboard.DepositsAmountHTG;
+            DepositsAmountUSD = dashboard.DepositsAmountUSD;
+            WithdrawalsCount = dashboard.WithdrawalsCount;
+            WithdrawalsAmountHTG = dashboard.WithdrawalsAmountHTG;
+            WithdrawalsAmountUSD = dashboard.WithdrawalsAmountUSD;
+            UsdSalesAmount = dashboard.UsdSalesAmount;
+            UsdPurchaseAmount = dashboard.UsdPurchaseAmount;
+
+            ClientsServedCount = dashboard.ClientsServed;
+            TransactionsProcessedCount = dashboard.TransactionCount;
+            LastTransactionTime = dashboard.LastTransactionTime ?? LastTransactionTime;
+
+            AverageTransactionTime = string.Empty;
+            ErrorRate = 0;
+            ErrorRateColor = new SolidColorBrush(Colors.Green);
+            DailyGoalProgress = 0;
+            DailyGoalText = string.Empty;
+
+            var transactions = dashboard.RecentTransactions?
+                .OrderByDescending(t => t.CreatedAt)
+                .Select(t => new TransactionSummary
+                {
+                    Id = t.Id.ToString(),
+                    Time = t.CreatedAt,
+                    CreatedAt = t.CreatedAt,
+                    Type = GetTransactionLabel(t.Type),
+                    TransactionType = t.Type,
+                    ClientAccount = !string.IsNullOrWhiteSpace(t.CustomerName) ? $"{t.CustomerName} ({t.AccountNumber})"
+                        : (!string.IsNullOrWhiteSpace(t.AccountLabel) ? t.AccountLabel : (!string.IsNullOrWhiteSpace(t.AccountNumber) ? t.AccountNumber : string.Empty)),
+                    AccountId = t.AccountNumber,
+                    CustomerName = t.CustomerName,
+                    Amount = t.Amount,
+                    Currency = t.Currency,
+                    Status = t.Status,
+                    ReferenceNumber = t.TransactionNumber,
+                    ProcessedBy = t.ProcessedBy,
+                    Description = string.Empty,
+                    StatusColor = GetStatusBrush(t.Status)
+                })
+                .ToList() ?? new();
+
+            RecentTransactions = new ObservableCollection<TransactionSummary>(transactions);
+
+            UpdateBalanceIndicator();
+            CheckAlerts();
+        }
+
+        private async Task EnsureUserContextAsync()
+        {
+            var user = _apiService.CurrentUser;
+            if (user == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(CashierName))
+            {
+                var fullName = $"{user.FirstName} {user.LastName}".Trim();
+                CashierName = string.IsNullOrWhiteSpace(fullName) ? user.Email : fullName;
+            }
+        }
+
+        private async Task EnsureBranchInfoAsync()
+        {
+            if (_branchLoaded || _branchLoading)
+            {
+                return;
+            }
+
+            var branchId = _apiService.CurrentUser?.BranchId;
+            if (branchId == null)
+            {
+                return;
+            }
+
+            _branchLoading = true;
+            try
+            {
+                var branch = await _apiService.GetBranchAsync(branchId.Value);
+                if (branch != null)
+                {
+                    BranchName = string.IsNullOrWhiteSpace(branch.Name)
+                        ? $"Succursale #{branch.Id}"
+                        : branch.Name;
+                    _branchLoaded = true;
+                }
+            }
+            catch
+            {
+                // Ignorer les erreurs, sera retenté lors du prochain rafraîchissement
+            }
+            finally
+            {
+                _branchLoading = false;
+            }
+        }
+
+        private void UpdateConnectionStatus(bool isConnected, string message)
+        {
+            ConnectionStatus = message;
+
+            if (isConnected)
+            {
+                ConnectionStatusColor = new SolidColorBrush(Colors.LimeGreen);
+            }
+            else if (message.Contains("Synchronisation", StringComparison.OrdinalIgnoreCase))
+            {
+                ConnectionStatusColor = new SolidColorBrush(Colors.Goldenrod);
+            }
+            else
+            {
+                ConnectionStatusColor = new SolidColorBrush(Colors.Firebrick);
+            }
+        }
+
+        private static Brush GetStatusBrush(string status)
+        {
+            return status?.ToLowerInvariant() switch
+            {
+                "complété" or "completed" or "success" => new SolidColorBrush(Colors.Green),
+                "en attente" or "pending" => new SolidColorBrush(Colors.Orange),
+                "échoué" or "failed" or "rejected" => new SolidColorBrush(Colors.IndianRed),
+                _ => new SolidColorBrush(Colors.Gray)
+            };
+        }
+
+        private static Brush GetSessionBrush(string? status)
+        {
+            return status?.ToLowerInvariant() switch
+            {
+                "open" or "ouverte" => new SolidColorBrush(Colors.Green),
+                "closing" or "closingpending" or "pending" => new SolidColorBrush(Colors.Orange),
+                _ => new SolidColorBrush(Colors.Firebrick)
+            };
+        }
+
+        private static string FormatSessionStatus(string? status)
+        {
+            return status?.ToLowerInvariant() switch
+            {
+                "open" or "ouverte" => "CAISSE OUVERTE",
+                "closing" or "closingpending" or "pending" => "EN COURS",
+                "closed" or "fermee" or "fermée" => "CAISSE FERMÉE",
+                _ => "STATUT INCONNU"
+            };
+        }
+
+        private static string GetTransactionLabel(string type)
+        {
+            return type?.ToLowerInvariant() switch
+            {
+                "deposit" => "Dépôt",
+                "withdrawal" => "Retrait",
+                "currencyexchange" or "change" => "Change",
+                "creditpayment" => "Paiement Crédit",
+                "creditdisbursement" => "Décaissement Crédit",
+                _ => type ?? string.Empty
+            };
         }
 
         #region Commands
@@ -427,6 +600,50 @@ namespace NalaCreditDesktop.ViewModels
         }
 
         [RelayCommand]
+        private async Task OpenCashSession()
+        {
+            try
+            {
+                var dialog = new OpenCashSessionDialog
+                {
+                    Owner = Application.Current?.MainWindow
+                };
+
+                dialog.InitializeBalances(
+                    OpeningBalanceHTG > 0 ? OpeningBalanceHTG : 0m,
+                    OpeningBalanceUSD > 0 ? OpeningBalanceUSD : 0m);
+
+                var result = dialog.ShowDialog();
+                if (result != true)
+                {
+                    return;
+                }
+
+                var resultOpen = await _apiService.OpenCashSessionAsync(dialog.OpeningBalanceHTG, dialog.OpeningBalanceUSD);
+                if (resultOpen.IsSuccess)
+                {
+                    MessageBox.Show("Session de caisse ouverte avec succès!", "Succès", 
+                                   MessageBoxButton.OK, MessageBoxImage.Information);
+                    await RefreshDashboardAsync(force: true);
+                }
+                else
+                {
+                    var error = string.IsNullOrWhiteSpace(resultOpen.ErrorMessage)
+                        ? "Erreur lors de l'ouverture de la session."
+                        : resultOpen.ErrorMessage;
+
+                    MessageBox.Show(error, "Erreur", 
+                                   MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Erreur: {ex.Message}", "Erreur", 
+                               MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        [RelayCommand]
         private async Task CloseCashier()
         {
             try
@@ -439,8 +656,25 @@ namespace NalaCreditDesktop.ViewModels
 
                 if (result == MessageBoxResult.Yes)
                 {
-                    MessageBox.Show("Processus de clôture de caisse initié...", "Info", 
-                                   MessageBoxButton.OK, MessageBoxImage.Information);
+                    var closeResult = await _apiService.CloseCashSessionAsync(
+                        CurrentBalanceHTG,
+                        CurrentBalanceUSD,
+                        "Clôture initiée depuis le dashboard caissier");
+
+                    if (closeResult.IsSuccess)
+                    {
+                        MessageBox.Show("Caisse fermée avec succès.", "Succès", 
+                                       MessageBoxButton.OK, MessageBoxImage.Information);
+                        await RefreshDashboardAsync(force: true);
+                    }
+                    else
+                    {
+                        var error = string.IsNullOrWhiteSpace(closeResult.ErrorMessage)
+                            ? "Erreur lors de la fermeture de la caisse."
+                            : closeResult.ErrorMessage;
+
+                        MessageBox.Show(error, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
                 }
             }
             catch (Exception ex)
@@ -462,8 +696,13 @@ namespace NalaCreditDesktop.ViewModels
                     return;
                 }
 
-                MessageBox.Show($"Consultation du compte: {AccountSearchText}", "Info", 
-                               MessageBoxButton.OK, MessageBoxImage.Information);
+                var window = new ConsultationCompteWindow(_apiService)
+                {
+                    Owner = Application.Current?.MainWindow
+                };
+
+                window.PrefillSearch(AccountSearchText);
+                window.ShowDialog();
             }
             catch (Exception ex)
             {
@@ -507,39 +746,7 @@ namespace NalaCreditDesktop.ViewModels
         {
             try
             {
-                // Simuler un rafraîchissement
-                await Task.Delay(500);
-                
-                // Ajouter une nouvelle transaction simulée
-                var random = new Random();
-                var accountNum = random.Next(100, 999);
-                var amount = random.Next(5000, 50000);
-                var newTransaction = new TransactionSummary
-                {
-                    Time = DateTime.Now,
-                    CreatedAt = DateTime.Now,
-                    Type = "Dépôt",
-                    TransactionType = "Dépôt",
-                    ClientAccount = $"Client-{accountNum} (AC-{accountNum})",
-                    AccountId = $"2001000000{accountNum}",
-                    CustomerName = $"Client-{accountNum}",
-                    Amount = amount,
-                    Currency = "HTG",
-                    Status = "Complété",
-                    ReferenceNumber = $"TRX-{DateTime.Now:yyyyMMddHHmmss}",
-                    ProcessedBy = "Caissier",
-                    StatusColor = new SolidColorBrush(Colors.Green)
-                };
-
-                RecentTransactions.Insert(0, newTransaction);
-                
-                // Garder seulement les 10 dernières
-                while (RecentTransactions.Count > 10)
-                {
-                    RecentTransactions.RemoveAt(RecentTransactions.Count - 1);
-                }
-
-                LastTransactionTime = DateTime.Now;
+                await RefreshDashboardAsync(force: true);
             }
             catch (Exception ex)
             {
@@ -578,6 +785,12 @@ namespace NalaCreditDesktop.ViewModels
             }
         }
 
+        [RelayCommand]
+        private void ToggleTransactionModule()
+        {
+            IsTransactionModuleVisible = !IsTransactionModuleVisible;
+        }
+
         #endregion
 
         #region Public Methods
@@ -585,6 +798,7 @@ namespace NalaCreditDesktop.ViewModels
         public void StartTimer()
         {
             _timer.Start();
+            CurrentTime = DateTime.Now;
         }
 
         public void StopTimer()
@@ -592,16 +806,11 @@ namespace NalaCreditDesktop.ViewModels
             _timer?.Stop();
         }
 
-        public async Task LoadInitialData()
+        public async Task LoadInitialDataAsync()
         {
             try
             {
-                // Charger les données initiales depuis les services
-                await Task.Delay(1000); // Simulation
-                
-                // Mettre à jour les indicateurs
-                UpdateBalanceIndicator();
-                CheckAlerts();
+                await RefreshDashboardAsync(force: true);
             }
             catch (Exception ex)
             {

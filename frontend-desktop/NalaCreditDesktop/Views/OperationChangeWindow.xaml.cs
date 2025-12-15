@@ -4,18 +4,21 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using NalaCreditDesktop.Models;
+using NalaCreditDesktop.Services;
 
 namespace NalaCreditDesktop.Views
 {
     public partial class OperationChangeWindow : Window
     {
+        private readonly ApiService _apiService;
         private ChangeModel _change;
         private TauxChangeModel _taux;
         private decimal _totalChangeJour = 0;
 
-        public OperationChangeWindow()
+        public OperationChangeWindow(ApiService? apiService = null)
         {
             InitializeComponent();
+            _apiService = apiService ?? AppServices.GetRequiredApiService();
             Loaded += OperationChangeWindow_Loaded;
         }
 
@@ -28,6 +31,16 @@ namespace NalaCreditDesktop.Views
         {
             _change = new ChangeModel();
             _taux = new TauxChangeModel();
+            // If we have an authenticated user, use their name as caissier
+            try
+            {
+                var user = _apiService?.CurrentUser;
+                if (user != null)
+                {
+                    _change.Caissier = string.IsNullOrWhiteSpace(user.FirstName) ? user.Email : (string.IsNullOrWhiteSpace(user.LastName) ? user.FirstName : $"{user.FirstName} {user.LastName}");
+                }
+            }
+            catch { }
             
             // Afficher les informations par défaut
             if (NumeroOperationText != null)

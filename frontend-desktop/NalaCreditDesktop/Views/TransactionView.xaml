@@ -56,22 +56,15 @@
                         <TextBlock Text="{Binding TotalTransactions}" FontWeight="Bold" Foreground="#3b82f6" Margin="5,0"/>
                         <TextBlock Text="transactions" Foreground="#64748b" Margin="5,0"/>
                     </StackPanel>
-                </StackPanel>
-                
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="💰 Nouveau Dépôt" 
-                           Command="{Binding OpenQuickDepositCommand}"
-                           Background="#22c55e" 
-                           Style="{StaticResource ActionButtonStyle}"/>
-                    <Button Content="💸 Nouveau Retrait" 
-                           Command="{Binding OpenQuickWithdrawalCommand}"
-                           Background="#ef4444" 
-                           Style="{StaticResource ActionButtonStyle}"/>
-                    <Button Content="🔄 Actualiser" 
-                           Command="{Binding RefreshTransactionsCommand}"
-                           Background="#3b82f6" 
-                           Style="{StaticResource ActionButtonStyle}"/>
-                </StackPanel>
+                  </StackPanel>
+
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                        Visibility="{Binding ShowHeaderQuickActions, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
+                      <Button Content="🔄 Actualiser"
+                        Command="{Binding RefreshTransactionsCommand}"
+                        Background="#3b82f6"
+                        Style="{StaticResource ActionButtonStyle}"/>
+                  </StackPanel>
             </Grid>
         </Border>
 

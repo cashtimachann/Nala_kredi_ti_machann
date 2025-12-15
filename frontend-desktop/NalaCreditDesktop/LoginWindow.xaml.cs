@@ -14,6 +14,7 @@ namespace NalaCreditDesktop
             // Initialize ApiService with HttpClient
             var httpClient = new System.Net.Http.HttpClient();
             _apiService = new ApiService(httpClient);
+            AppServices.InitializeApi(_apiService);
         }
 
         private async void LoginButton_Click(object sender, RoutedEventArgs e)
@@ -51,7 +52,7 @@ namespace NalaCreditDesktop
                 Window? dashboardWindow = userRole switch
                 {
                     // Backend Role: Cashier (0)
-                    "Cashier" or "Caissier" => new MainWindow(),
+                    "Cashier" or "Caissier" => new Views.CashierDashboard(_apiService),
                     
                     // Backend Role: Employee (1) → Secrétaire or Agent de Crédit
                     "Employee" or "Secretary" or "Secrétaire" or "SecretaireAdministratif" => new Views.SecretaryDashboard(),
