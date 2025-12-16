@@ -45,7 +45,7 @@ namespace NalaCreditAPI.Services
     public class CurrencyExchangeService : ICurrencyExchangeService
     {
         private readonly ApplicationDbContext _context;
-        private const decimal DefaultCommissionRate = 0.005m; // 0.5%
+        private const decimal DefaultCommissionRate = 0.0m; // Commission disabled
         private static readonly ConcurrentDictionary<Guid, (int LegacyId, string BranchName)> BranchContextCache = new();
         private static readonly ConcurrentDictionary<Guid, BranchSummaryCacheEntry> BranchSummaryCache = new();
         private static readonly TimeSpan BranchSummaryCacheDuration = TimeSpan.FromSeconds(30);
@@ -264,9 +264,9 @@ namespace NalaCreditAPI.Services
                     result.ToAmount = dto.Amount * exchangeRate.SellingRate;
                 }
 
-                // Calculate commission
-                result.CommissionAmount = result.ToAmount * DefaultCommissionRate;
-                result.NetAmount = result.ToAmount - result.CommissionAmount;
+                // Commission disabled: net equals gross
+                result.CommissionAmount = 0m;
+                result.NetAmount = result.ToAmount;
 
                 var summary = await GetBranchFinancialSummaryCachedAsync(branchId, legacyBranchId, branchName);
 
@@ -302,6 +302,12 @@ namespace NalaCreditAPI.Services
 
         public async Task<ExchangeTransactionDto> ProcessExchangeTransactionAsync(CreateExchangeTransactionDto dto, Guid branchId, string processedBy)
         {
+            // Ensure CustomerName is not empty
+            if (string.IsNullOrWhiteSpace(dto.CustomerName))
+            {
+                dto.CustomerName = "Client";
+            }
+
             // Calculate exchange first
             var calculation = await CalculateExchangeAsync(new ExchangeCalculationDto 
             { 
@@ -345,9 +351,9 @@ namespace NalaCreditAPI.Services
                 FromAmount = calculation.FromAmount,
                 ToAmount = calculation.ToAmount,
                 ExchangeRate = calculation.ExchangeRate,
-                CommissionAmount = calculation.CommissionAmount,
-                CommissionRate = calculation.CommissionRate,
-                NetAmount = calculation.NetAmount,
+                CommissionAmount = 0m,
+                CommissionRate = 0m,
+                NetAmount = calculation.ToAmount,
                 CustomerName = dto.CustomerName,
                 CustomerDocument = dto.CustomerDocument,
                 CustomerPhone = dto.CustomerPhone,
@@ -479,7 +485,6 @@ Type: {transaction.ExchangeTypeName}
 From: {transaction.FromAmount:F2} {transaction.FromCurrencyName}
 Rate: {transaction.ExchangeRate:F6}
 To: {transaction.ToAmount:F2} {transaction.ToCurrencyName}
-Commission ({transaction.CommissionRate:P2}): {transaction.CommissionAmount:F2} {transaction.ToCurrencyName}
 Net Amount: {transaction.NetAmount:F2} {transaction.ToCurrencyName}
 
 Processed by: {transaction.ProcessedByName}

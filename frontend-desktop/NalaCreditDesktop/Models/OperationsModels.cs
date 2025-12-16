@@ -18,7 +18,8 @@ namespace NalaCreditDesktop.Models
         Retrait,
         Change,
         Consultation,
-        Cloture
+        Cloture,
+        Other
     }
 
     public enum StatutTransaction
@@ -152,7 +153,7 @@ namespace NalaCreditDesktop.Models
         public string TypePiece { get; set; } = string.Empty; // Passeport, CIN, etc.
         public bool JustificatifValide { get; set; } = false;
         
-        public bool RespecteLimite => (TotalChangeJour + MontantDestination) <= LimiteJournaliere;
+        public bool RespecteLimite { get; set; } = true;
     }
 
     // Modèle pour la consultation de compte

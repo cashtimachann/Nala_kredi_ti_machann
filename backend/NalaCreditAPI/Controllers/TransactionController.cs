@@ -219,7 +219,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpGet("branch/{branchId}/history")]
-    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor,Cashier")]
     public async Task<ActionResult> GetBranchTransactionHistory(
         int branchId,
         [FromQuery] DateTime? startDate,
@@ -229,6 +229,18 @@ public class TransactionController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
+        // If caller is a Cashier, restrict access to their own branch only
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (User.IsInRole("Cashier"))
+        {
+            var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+            if (user?.BranchId == null)
+                return Forbid();
+
+            // Override requested branchId to the cashier's assigned branch
+            branchId = user.BranchId.Value;
+        }
+
         var query = _context.Transactions
             .Where(t => t.BranchId == branchId)
             .Include(t => t.User)

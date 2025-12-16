@@ -11,26 +11,34 @@ namespace NalaCreditDesktop.Views
     public partial class OperationChangeWindow : Window
     {
         private readonly ApiService _apiService;
-        private ChangeModel _change;
-        private TauxChangeModel _taux;
+        private ChangeModel _change = new();
+        private TauxChangeModel _taux = new();
         private decimal _totalChangeJour = 0;
+        private bool _operationReussie;
+
+        public bool OperationReussie => _operationReussie;
 
         public OperationChangeWindow(ApiService? apiService = null)
         {
-            InitializeComponent();
             _apiService = apiService ?? AppServices.GetRequiredApiService();
+            InitializeComponent();
             Loaded += OperationChangeWindow_Loaded;
         }
 
         private void OperationChangeWindow_Loaded(object sender, RoutedEventArgs e)
         {
             InitialiserOperation();
+            // Assurer ke direksyon devises yo matche ak seleksyon vizyèl yo
+            MettreAJourDevises();
+            // Charger les taux du jour depuis l'API (asynchrone, sans bloquer l'UI)
+            _ = ChargerTauxDuJourAsync();
         }
 
         private void InitialiserOperation()
         {
             _change = new ChangeModel();
             _taux = new TauxChangeModel();
+            _operationReussie = false;
             // If we have an authenticated user, use their name as caissier
             try
             {
@@ -65,6 +73,42 @@ namespace NalaCreditDesktop.Views
             // Focus sur le nom du client
             if (NomClientTextBox != null)
                 NomClientTextBox.Focus();
+        }
+
+        private async Task ChargerTauxDuJourAsync()
+        {
+            try
+            {
+                var rate = await _apiService.GetCurrentExchangeRateAsync();
+                if (rate == null)
+                {
+                    return;
+                }
+
+                // Mettre à jour les taux appliqués
+                _taux.TauxAcheteur = rate.BuyingRate; // Nous achetons USD du client
+                _taux.TauxVendeur = rate.SellingRate; // Nous vendons USD au client
+                _taux.DerniereMiseAJour = rate.UpdatedAt != default ? rate.UpdatedAt : rate.EffectiveDate;
+                _taux.Source = "Superadmin";
+
+                // Rafraîchir l'affichage si les contrôles existent
+                if (TauxAcheteurText != null)
+                    TauxAcheteurText.Text = $"{_taux.TauxAcheteur:N2} HTG";
+                if (TauxVendeurText != null)
+                    TauxVendeurText.Text = $"{_taux.TauxVendeur:N2} HTG";
+                if (DerniereMiseAJourText != null)
+                    DerniereMiseAJourText.Text = _taux.DerniereMiseAJour.ToString("dd/MM/yyyy HH:mm");
+
+                // Mettre à jour le texte de taux appliqué selon sélection courante
+                MettreAJourTauxApplique();
+
+                // Recalculer si un montant est saisi
+                CalculerMontants();
+            }
+            catch (Exception)
+            {
+                // Garder silencieux pour éviter les interruptions; l'utilisateur peut réessayer
+            }
         }
 
         private void VerifierIdentite(object sender, TextChangedEventArgs e)
@@ -123,8 +167,18 @@ namespace NalaCreditDesktop.Views
 
         private void MettreAJourDevises()
         {
-            string deviseSource = ((ComboBoxItem)DeviseSourceComboBox.SelectedItem)?.Content?.ToString() ?? "USD";
-            string deviseDestination = ((ComboBoxItem)DeviseDestinationComboBox.SelectedItem)?.Content?.ToString() ?? "HTG";
+            if (DeviseSourceComboBox == null || DeviseDestinationComboBox == null)
+            {
+                // The XAML may trigger SelectionChanged before every control is connected.
+                // Defer logic until both combo boxes are ready to avoid null references.
+                return;
+            }
+
+            var sourceItem = DeviseSourceComboBox.SelectedItem as ComboBoxItem;
+            var destinationItem = DeviseDestinationComboBox.SelectedItem as ComboBoxItem;
+
+            string deviseSource = sourceItem?.Content?.ToString() ?? "USD";
+            string deviseDestination = destinationItem?.Content?.ToString() ?? "HTG";
 
             _change.DeviseSource = deviseSource == "USD" ? DeviseType.USD : DeviseType.HTG;
             _change.DeviseDestination = deviseDestination == "USD" ? DeviseType.USD : DeviseType.HTG;
@@ -153,6 +207,11 @@ namespace NalaCreditDesktop.Views
 
         private void MettreAJourTauxApplique()
         {
+            if (TauxApliqueText == null)
+            {
+                return;
+            }
+
             if (_change.DeviseSource == DeviseType.USD && _change.DeviseDestination == DeviseType.HTG)
             {
                 // USD vers HTG - utiliser taux acheteur (nous achetons les USD du client)
@@ -176,6 +235,12 @@ namespace NalaCreditDesktop.Views
 
         private void CalculerMontants()
         {
+            // Guard against early event firing before controls are ready
+            if (MontantSourceTextBox == null || MontantDestinationTextBox == null || EquivalentText == null || ResumeTransactionText == null)
+            {
+                return;
+            }
+
             if (!decimal.TryParse(MontantSourceTextBox.Text, out decimal montantSource) || montantSource <= 0)
             {
                 MontantDestinationTextBox.Text = "";
@@ -187,17 +252,26 @@ namespace NalaCreditDesktop.Views
 
             _change.MontantSource = montantSource;
 
-            // Calculer le montant destination
+            // Essayer calcul serveur pou enkli komisyon ak règ branch
+            _ = CalculerMontantDepuisServeurAsync(montantSource);
+
+            // Fallback lokal si API pa disponib (pa gen komisyon)
             if (_change.DeviseSource == DeviseType.USD && _change.DeviseDestination == DeviseType.HTG)
             {
-                // USD vers HTG
                 _change.MontantDestination = montantSource * _taux.TauxAcheteur;
                 EquivalentText.Text = $"Au taux de {_taux.TauxAcheteur:N2} HTG par USD";
                 ResumeTransactionText.Text = $"{montantSource:N2} USD\n→ {_change.MontantDestination:N2} HTG";
             }
             else if (_change.DeviseSource == DeviseType.HTG && _change.DeviseDestination == DeviseType.USD)
             {
-                // HTG vers USD
+                if (_taux.TauxVendeur <= 0)
+                {
+                    EquivalentText.Text = "Taux vendeur invalide";
+                    ResumeTransactionText.Text = "";
+                    MontantDestinationTextBox.Text = "";
+                    MettreAJourValidationGlobale();
+                    return;
+                }
                 _change.MontantDestination = montantSource / _taux.TauxVendeur;
                 EquivalentText.Text = $"Au taux de {_taux.TauxVendeur:N2} HTG par USD";
                 ResumeTransactionText.Text = $"{montantSource:N2} HTG\n→ {_change.MontantDestination:N2} USD";
@@ -208,6 +282,55 @@ namespace NalaCreditDesktop.Views
             // Vérifier les limites
             VerifierLimites();
             MettreAJourValidationGlobale();
+        }
+
+        private async Task CalculerMontantDepuisServeurAsync(decimal montantSource)
+        {
+            try
+            {
+                var exchangeType = (_change.DeviseSource == DeviseType.HTG && _change.DeviseDestination == DeviseType.USD)
+                    ? "Purchase" // Client achte USD ak HTG
+                    : "Sale";     // Client vann USD pou HTG
+
+                var request = new ApiService.ExchangeCalculationRequest
+                {
+                    BranchId = null,
+                    ExchangeType = exchangeType,
+                    Amount = montantSource
+                };
+
+                var result = await _apiService.CalculateExchangeAsync(request);
+                if (result == null || !result.IsValid)
+                {
+                    return; // fallback lokal deja fèt
+                }
+
+                // Mete ajou selon repons API (inclure komisyon)
+                _change.TauxApplique = result.ExchangeRate;
+
+                var isUsdToHtg = _change.DeviseSource == DeviseType.USD && _change.DeviseDestination == DeviseType.HTG;
+                var deviseLabelSource = isUsdToHtg ? "USD" : "HTG";
+                var deviseLabelDest = isUsdToHtg ? "HTG" : "USD";
+
+                // Montan resevwa: net apre komisyon
+                _change.MontantDestination = result.NetAmount;
+                MontantDestinationTextBox.Text = result.NetAmount.ToString("N2");
+
+                EquivalentText.Text = $"Taux: {result.ExchangeRate:N2} HTG/USD • Commission: {result.CommissionRate:P2}";
+                ResumeTransactionText.Text = $"{montantSource:N2} {deviseLabelSource}\n→ {result.NetAmount:N2} {deviseLabelDest}";
+
+                // Rafrechi bann taux aplike vizyèl
+                if (TauxApliqueText != null)
+                {
+                    TauxApliqueText.Text = isUsdToHtg
+                        ? $"Taux acheteur: {result.ExchangeRate:N2} HTG"
+                        : $"Taux vendeur: {result.ExchangeRate:N2} HTG";
+                }
+            }
+            catch
+            {
+                // Silans: si API echwe nou rete sou kalkil lokal
+            }
         }
 
         private void VerifierLimites()
@@ -232,6 +355,7 @@ namespace NalaCreditDesktop.Views
 
             // Mettre à jour la propriété du modèle
             _change.TotalChangeJour = _totalChangeJour;
+            _change.RespecteLimite = respecteLimite;
         }
 
         private void InverserDevises_Click(object sender, RoutedEventArgs e)
@@ -252,6 +376,11 @@ namespace NalaCreditDesktop.Views
 
         private void MettreAJourValidationGlobale()
         {
+            if (ValiderChangeButton == null || NomClientTextBox == null || NumeroIdentiteTextBox == null)
+            {
+                return;
+            }
+
             bool peutValider = _change.JustificatifValide &&
                               _change.MontantSource > 0 &&
                               _change.RespecteLimite &&
@@ -266,7 +395,7 @@ namespace NalaCreditDesktop.Views
             }
         }
 
-        private void ValiderChange_Click(object sender, RoutedEventArgs e)
+        private async void ValiderChange_Click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -281,6 +410,48 @@ namespace NalaCreditDesktop.Views
                 if (!_change.RespecteLimite)
                 {
                     MessageBox.Show("Le montant dépasse la limite journalière autorisée.", "Erreur", 
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                // Désactiver le bouton pendant le traitement
+                if (ValiderChangeButton != null)
+                {
+                    ValiderChangeButton.IsEnabled = false;
+                    ValiderChangeButton.Content = "⏳ Traitement...";
+                }
+
+                // Poster la transaction au backend pour l'historique
+                var exchangeType = (_change.DeviseSource == DeviseType.HTG && _change.DeviseDestination == DeviseType.USD)
+                    ? "Purchase" // Client achte USD ak HTG
+                    : "Sale";     // Client vann USD pou HTG
+
+                // S'assurer que CustomerName n'est jamais vide ou null pour satisfaire la validation backend
+                var customerName = string.IsNullOrWhiteSpace(_change.NomClient) ? "Client" : _change.NomClient.Trim();
+                var customerDocument = string.IsNullOrWhiteSpace(_change.NumeroIdentite) ? "" : _change.NumeroIdentite.Trim();
+
+                var txRequest = new ApiService.ExchangeTransactionRequest
+                {
+                    // Laisser le backend résoud branch via le JWT claim
+                    BranchId = null,
+                    ExchangeType = exchangeType,
+                    Amount = _change.MontantSource,
+                    CustomerName = customerName,
+                    CustomerDocument = customerDocument,
+                    CustomerPhone = null,
+                    Notes = "Opération de change via Desktop"
+                };
+
+                var txResult = await _apiService.ProcessExchangeTransactionAsync(txRequest);
+                if (!txResult.IsSuccess)
+                {
+                    // Réactiver le bouton et afficher l'erreur
+                    if (ValiderChangeButton != null)
+                    {
+                        ValiderChangeButton.IsEnabled = true;
+                        ValiderChangeButton.Content = "✅ Valider Change";
+                    }
+                    MessageBox.Show($"Erreur lors de l'enregistrement de la transaction: {txResult.ErrorMessage}", "Erreur", 
                         MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
@@ -310,12 +481,18 @@ namespace NalaCreditDesktop.Views
                 ImprimerJustificatifButton.IsEnabled = true;
                 ValiderChangeButton.IsEnabled = false;
                 ValiderChangeButton.Content = "✅ Change Validé";
+                _operationReussie = true;
 
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Erreur lors de la validation: {ex.Message}", "Erreur", 
                     MessageBoxButton.OK, MessageBoxImage.Error);
+                if (ValiderChangeButton != null)
+                {
+                    ValiderChangeButton.IsEnabled = true;
+                    ValiderChangeButton.Content = "✅ Valider Change";
+                }
             }
         }
 

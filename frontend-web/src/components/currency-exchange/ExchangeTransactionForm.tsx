@@ -371,19 +371,12 @@ const ExchangeTransactionForm: React.FC<ExchangeTransactionFormProps> = ({
                     {calculationResult.toAmount.toFixed(2)}
                   </p>
                 </div>
-                <div>
-                  <span className="text-black">Commission ({(calculationResult.commissionRate * 100).toFixed(2)}%):</span>
-                  <p className="font-medium text-black">
-                    {formatCurrencySymbol(calculationResult.toCurrency)}{' '}
-                    {calculationResult.commissionAmount.toFixed(2)}
-                  </p>
-                </div>
                 <div className="col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-green-300">
                   <div>
-                    <span className="text-black">Montant net à remettre:</span>
+                    <span className="text-black">Montant à remettre:</span>
                     <p className="text-xl font-bold text-green-700">
                       {formatCurrencySymbol(calculationResult.toCurrency)}{' '}
-                      {calculationResult.netAmount.toFixed(2)}
+                      {calculationResult.toAmount.toFixed(2)}
                     </p>
                   </div>
                   <div>

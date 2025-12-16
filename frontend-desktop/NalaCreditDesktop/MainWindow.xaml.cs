@@ -510,10 +510,12 @@ public partial class MainWindow : Window
     {
         try
         {
-            var changeWindow = new OperationChangeWindow();
+            var changeWindow = new OperationChangeWindow(_apiService);
             changeWindow.Owner = this;
 
-            if (changeWindow.ShowDialog() == true)
+            changeWindow.ShowDialog();
+
+            if (changeWindow.OperationReussie)
             {
                 // Actualiser le dashboard après un change réussi
                 ActualiserDashboard();

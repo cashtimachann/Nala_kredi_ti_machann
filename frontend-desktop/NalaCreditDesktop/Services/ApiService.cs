@@ -131,6 +131,11 @@ public class ApiService
     public async Task<BranchSupervisorDashboard?> GetBranchSupervisorDashboardAsync() =>
         await GetAsync<BranchSupervisorDashboard>("dashboard/branch-supervisor");
 
+        // NOTE: Client account DTOs (transaction history and item) were previously
+        // nested inside the ApiService class which made them unavailable to other
+        // files that reference them (they must be referenced as ApiService.T). Move
+        // them to top-level types below so other views can reference them directly.
+
     public async Task<BranchDto?> GetBranchAsync(int branchId) =>
         await GetAsync<BranchDto>($"branch/{branchId}");
 
@@ -428,6 +433,290 @@ public class ApiService
         }
     }
 
+    // --- Currency Exchange Rates ---
+    public class ApiEnvelope<T>
+    {
+        [JsonProperty("success")] public bool Success { get; set; }
+        [JsonProperty("data")] public T? Data { get; set; }
+        [JsonProperty("message")] public string? Message { get; set; }
+    }
+
+    public class CurrencyExchangeRateInfo
+    {
+        [JsonProperty("id")] public Guid Id { get; set; }
+        [JsonProperty("buyingRate")] public decimal BuyingRate { get; set; }
+        [JsonProperty("sellingRate")] public decimal SellingRate { get; set; }
+        [JsonProperty("effectiveDate")] public DateTime EffectiveDate { get; set; }
+        [JsonProperty("updatedAt")] public DateTime UpdatedAt { get; set; }
+        [JsonProperty("baseCurrencyName")] public string? BaseCurrencyName { get; set; }
+        [JsonProperty("targetCurrencyName")] public string? TargetCurrencyName { get; set; }
+        [JsonProperty("isActive")] public bool IsActive { get; set; }
+        [JsonProperty("notes")] public string? Notes { get; set; }
+    }
+
+    public async Task<CurrencyExchangeRateInfo?> GetCurrentExchangeRateAsync()
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync("currency-exchange/rates/current");
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var envelope = JsonConvert.DeserializeObject<ApiEnvelope<CurrencyExchangeRateInfo>>(raw);
+            if (envelope != null && envelope.Success)
+            {
+                return envelope.Data;
+            }
+
+            // Sometimes the API may return the DTO directly without envelope
+            var dto = JsonConvert.DeserializeObject<CurrencyExchangeRateInfo>(raw);
+            return dto;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public class ExchangeCalculationRequest
+    {
+        [JsonProperty("branchId")] public string? BranchId { get; set; }
+        // Send enum name strings ("Purchase" or "Sale") for compatibility
+        [JsonProperty("exchangeType")] public string ExchangeType { get; set; } = "Sale";
+        [JsonProperty("amount")] public decimal Amount { get; set; }
+    }
+
+    public class ExchangeCalculationResult
+    {
+        [JsonProperty("exchangeType")] public string? ExchangeType { get; set; }
+        [JsonProperty("fromCurrency")] public int FromCurrency { get; set; }
+        [JsonProperty("fromCurrencyName")] public string? FromCurrencyName { get; set; }
+        [JsonProperty("toCurrency")] public int ToCurrency { get; set; }
+        [JsonProperty("toCurrencyName")] public string? ToCurrencyName { get; set; }
+        [JsonProperty("fromAmount")] public decimal FromAmount { get; set; }
+        [JsonProperty("exchangeRate")] public decimal ExchangeRate { get; set; }
+        [JsonProperty("toAmount")] public decimal ToAmount { get; set; }
+        [JsonProperty("commissionRate")] public decimal CommissionRate { get; set; }
+        [JsonProperty("commissionAmount")] public decimal CommissionAmount { get; set; }
+        [JsonProperty("netAmount")] public decimal NetAmount { get; set; }
+        [JsonProperty("availableBalance")] public decimal AvailableBalance { get; set; }
+        [JsonProperty("isValid")] public bool IsValid { get; set; }
+        [JsonProperty("errorMessage")] public string? ErrorMessage { get; set; }
+    }
+
+    public async Task<ExchangeCalculationResult?> CalculateExchangeAsync(ExchangeCalculationRequest request)
+    {
+        if (request == null) return null;
+
+        try
+        {
+            // Ensure branch context is provided when possible
+            if ((request.BranchId == null || string.IsNullOrWhiteSpace(request.BranchId)) && CurrentUser?.BranchId != null)
+            {
+                request.BranchId = CurrentUser.BranchId.Value.ToString();
+            }
+            var json = JsonConvert.SerializeObject(request);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("currency-exchange/calculate", content);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var envelope = JsonConvert.DeserializeObject<ApiEnvelope<ExchangeCalculationResult>>(raw);
+            if (envelope != null && envelope.Success)
+            {
+                return envelope.Data;
+            }
+
+            var dto = JsonConvert.DeserializeObject<ExchangeCalculationResult>(raw);
+            return dto;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // Exchange transaction DTOs and API call
+    public class ExchangeTransactionRequest
+    {
+        [JsonProperty("branchId")] public string? BranchId { get; set; }
+        // Send enum name strings ("Purchase" or "Sale") for compatibility
+        [JsonProperty("exchangeType")] public string ExchangeType { get; set; } = "Sale";
+        [JsonProperty("amount")] public decimal Amount { get; set; }
+        [JsonProperty("customerName")] public string CustomerName { get; set; } = string.Empty;
+        [JsonProperty("customerDocument")] public string? CustomerDocument { get; set; }
+        [JsonProperty("customerPhone")] public string? CustomerPhone { get; set; }
+        [JsonProperty("notes")] public string? Notes { get; set; }
+    }
+
+    public class ExchangeTransaction
+    {
+        [JsonProperty("id")] public Guid Id { get; set; }
+        [JsonProperty("transactionNumber")] public string? TransactionNumber { get; set; }
+        [JsonProperty("processedBy")] public string? ProcessedBy { get; set; }
+        [JsonProperty("processedByName")] public string? ProcessedByName { get; set; }
+        [JsonProperty("fromCurrencyName")] public string? FromCurrencyName { get; set; }
+        [JsonProperty("toCurrencyName")] public string? ToCurrencyName { get; set; }
+        [JsonProperty("exchangeTypeName")] public string? ExchangeTypeName { get; set; }
+        [JsonProperty("exchangeRate")] public decimal ExchangeRate { get; set; }
+        [JsonProperty("fromAmount")] public decimal FromAmount { get; set; }
+        [JsonProperty("toAmount")] public decimal ToAmount { get; set; }
+        [JsonProperty("commissionAmount")] public decimal CommissionAmount { get; set; }
+        [JsonProperty("commissionRate")] public decimal CommissionRate { get; set; }
+        [JsonProperty("netAmount")] public decimal NetAmount { get; set; }
+        [JsonProperty("customerName")] public string? CustomerName { get; set; }
+        [JsonProperty("customerDocument")] public string? CustomerDocument { get; set; }
+        [JsonProperty("statusName")] public string? StatusName { get; set; }
+        [JsonProperty("transactionDate")] public DateTime TransactionDate { get; set; }
+    }
+
+    public async Task<ApiResult<ExchangeTransaction?>> ProcessExchangeTransactionAsync(ExchangeTransactionRequest request)
+    {
+        if (request == null)
+        {
+            return ApiResult<ExchangeTransaction?>.Failure("Requête invalide");
+        }
+
+        try
+        {
+            // Ensure branch context is provided when possible
+            if ((request.BranchId == null || string.IsNullOrWhiteSpace(request.BranchId)) && CurrentUser?.BranchId != null)
+            {
+                request.BranchId = CurrentUser.BranchId.Value.ToString();
+            }
+            // Some API deployments treat non-nullable strings as implicitly required.
+            // Provide a safe placeholder when phone is not collected in the desktop UI.
+            if (string.IsNullOrWhiteSpace(request.CustomerPhone))
+            {
+                request.CustomerPhone = "N/A";
+            }
+            var json = JsonConvert.SerializeObject(request);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("currency-exchange/transactions", content);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                // Try envelope first
+                try
+                {
+                    var envelope = JsonConvert.DeserializeObject<ApiEnvelope<ExchangeTransaction>>(raw);
+                    if (envelope != null && envelope.Success)
+                    {
+                        return ApiResult<ExchangeTransaction?>.Success(envelope.Data);
+                    }
+                }
+                catch { /* fall back below */ }
+
+                // Direct DTO fallback
+                var dto = string.IsNullOrWhiteSpace(raw) ? null : JsonConvert.DeserializeObject<ExchangeTransaction>(raw);
+                return ApiResult<ExchangeTransaction?>.Success(dto);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<ExchangeTransaction?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<ExchangeTransaction?>.Failure(ex.Message);
+        }
+    }
+
+    public class ExchangeTransactionSearch
+    {
+        public string? BranchId { get; set; }
+        public string? ExchangeType { get; set; } // optional: "Purchase" or "Sale"
+        public int? FromCurrency { get; set; }
+        public int? ToCurrency { get; set; }
+        public string? Status { get; set; }
+        public DateTime? DateFrom { get; set; }
+        public DateTime? DateTo { get; set; }
+        public int Page { get; set; } = 1;
+        public int PageSize { get; set; } = 50;
+    }
+
+    public async Task<List<ExchangeTransaction>> GetExchangeTransactionsAsync(ExchangeTransactionSearch? search = null)
+    {
+        var qs = new StringBuilder("currency-exchange/transactions");
+        var sep = '?';
+
+        void AddParam(string key, string value)
+        {
+            qs.Append(sep).Append(key).Append('=').Append(Uri.EscapeDataString(value));
+            sep = '&';
+        }
+
+        search ??= new ExchangeTransactionSearch();
+
+        // Default to current user's branch if present, else let backend try from claims
+        if (!string.IsNullOrWhiteSpace(search.BranchId))
+        {
+            AddParam("branchId", search.BranchId);
+        }
+        else if (CurrentUser?.BranchId != null)
+        {
+            AddParam("branchId", CurrentUser.BranchId.Value.ToString());
+        }
+
+        if (!string.IsNullOrWhiteSpace(search.ExchangeType)) AddParam("exchangeType", search.ExchangeType);
+        if (search.FromCurrency.HasValue) AddParam("fromCurrency", search.FromCurrency.Value.ToString());
+        if (search.ToCurrency.HasValue) AddParam("toCurrency", search.ToCurrency.Value.ToString());
+        if (!string.IsNullOrWhiteSpace(search.Status)) AddParam("status", search.Status);
+
+        if (search.DateFrom.HasValue)
+        {
+            var iso = search.DateFrom.Value.ToString("o");
+            // Try both param names for compatibility
+            AddParam("transactionDateFrom", iso);
+            AddParam("startDate", iso);
+        }
+        if (search.DateTo.HasValue)
+        {
+            var iso = search.DateTo.Value.ToString("o");
+            AddParam("transactionDateTo", iso);
+            AddParam("endDate", iso);
+        }
+
+        AddParam("page", search.Page.ToString());
+        AddParam("pageSize", search.PageSize.ToString());
+
+        try
+        {
+            var response = await _httpClient.GetAsync(qs.ToString());
+            var raw = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                return new List<ExchangeTransaction>();
+            }
+
+            // Try envelope first
+            try
+            {
+                var env = JsonConvert.DeserializeObject<ApiEnvelope<List<ExchangeTransaction>>>(raw);
+                if (env != null && env.Success && env.Data != null)
+                {
+                    return env.Data;
+                }
+            }
+            catch { }
+
+            var list = JsonConvert.DeserializeObject<List<ExchangeTransaction>>(raw) ?? new List<ExchangeTransaction>();
+            return list;
+        }
+        catch
+        {
+            return new List<ExchangeTransaction>();
+        }
+    }
+
     public async Task<ApiResult<CurrentAccountTransactionResponse?>> ProcessCurrentAccountTransactionAsync(CurrentAccountTransactionRequest request)
     {
         if (request == null)
@@ -467,6 +756,86 @@ public class ApiService
         catch (Exception ex)
         {
             return ApiResult<CurrentAccountTransactionResponse?>.Failure(ex.Message);
+        }
+    }
+
+    // Client account helpers (unified for savings/current/term)
+    public async Task<ApiResult<ClientAccountResponse?>> GetClientAccountByNumberAsync(string accountNumber)
+    {
+        if (string.IsNullOrWhiteSpace(accountNumber))
+            return ApiResult<ClientAccountResponse?>.Failure("Numéro de compte requis");
+
+        try
+        {
+            var response = await _httpClient.GetAsync($"clientaccount/by-number/{Uri.EscapeDataString(accountNumber)}");
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var dto = string.IsNullOrWhiteSpace(raw) ? null : JsonConvert.DeserializeObject<ClientAccountResponse>(raw);
+                return ApiResult<ClientAccountResponse?>.Success(dto);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<ClientAccountResponse?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<ClientAccountResponse?>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ApiResult<ClientAccountTransactionHistory?>> GetClientAccountTransactionsAsync(string accountNumber, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 20)
+    {
+        if (string.IsNullOrWhiteSpace(accountNumber))
+            return ApiResult<ClientAccountTransactionHistory?>.Failure("Numéro de compte requis");
+
+        var query = new StringBuilder($"clientaccount/{Uri.EscapeDataString(accountNumber)}/transactions?page={page}&pageSize={pageSize}");
+        if (startDate.HasValue) query.Append("&dateFrom=").Append(Uri.EscapeDataString(startDate.Value.ToString("o")));
+        if (endDate.HasValue) query.Append("&dateTo=").Append(Uri.EscapeDataString(endDate.Value.ToString("o")));
+
+        try
+        {
+            var response = await _httpClient.GetAsync(query.ToString());
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var dto = string.IsNullOrWhiteSpace(raw) ? null : JsonConvert.DeserializeObject<ClientAccountTransactionHistory>(raw);
+                return ApiResult<ClientAccountTransactionHistory?>.Success(dto);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<ClientAccountTransactionHistory?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<ClientAccountTransactionHistory?>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ApiResult<ClientAccountSearchResponse?>> SearchClientAccountsAsync(string queryText, int maxResults = 50)
+    {
+        if (string.IsNullOrWhiteSpace(queryText))
+            return ApiResult<ClientAccountSearchResponse?>.Failure("Terme de recherche requis");
+
+        try
+        {
+            var response = await _httpClient.GetAsync($"clientaccount/search?query={Uri.EscapeDataString(queryText)}&maxResults={maxResults}");
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var dto = string.IsNullOrWhiteSpace(raw) ? null : JsonConvert.DeserializeObject<ClientAccountSearchResponse>(raw);
+                return ApiResult<ClientAccountSearchResponse?>.Success(dto);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<ClientAccountSearchResponse?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<ClientAccountSearchResponse?>.Failure(ex.Message);
         }
     }
 
@@ -541,6 +910,7 @@ public class ApiService
 
         try
         {
+            // Try to parse standard envelopes and ValidationProblemDetails
             var parsed = JsonConvert.DeserializeObject<Dictionary<string, object>>(raw);
             if (parsed == null)
             {
@@ -557,6 +927,40 @@ public class ApiService
                 return error.ToString();
             }
 
+            // ASP.NET Core ValidationProblemDetails: { title, status, errors: { field: [messages] } }
+            if (parsed.TryGetValue("errors", out var errorsObj) && errorsObj != null)
+            {
+                try
+                {
+                    var errorsJson = errorsObj.ToString();
+                    if (!string.IsNullOrWhiteSpace(errorsJson))
+                    {
+                        var errors = JsonConvert.DeserializeObject<Dictionary<string, string[]>>(errorsJson!);
+                        if (errors != null && errors.Count > 0)
+                        {
+                            var first = errors.First();
+                            var details = (first.Value != null && first.Value.Length > 0)
+                                ? string.Join("; ", first.Value)
+                                : first.Key;
+
+                            // Prefer detailed error, otherwise fall back to title
+                            if (parsed.TryGetValue("title", out var titleVal) && titleVal != null)
+                            {
+                                return string.IsNullOrWhiteSpace(details)
+                                    ? titleVal.ToString()
+                                    : details;
+                            }
+
+                            return details;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Ignore parsing errors and continue to other fallbacks
+                }
+            }
+
             if (parsed.TryGetValue("title", out var title) && title != null)
             {
                 return title.ToString();
@@ -569,6 +973,76 @@ public class ApiService
             return raw.Trim();
         }
     }
+}
+
+public class ClientAccountSearchResponse
+{
+    public List<ClientAccountResponse> Results { get; set; } = new();
+    public int TotalCount { get; set; }
+    public string Query { get; set; } = string.Empty;
+    public TimeSpan SearchTime { get; set; }
+}
+
+public class ClientAccountResponse
+{
+    public string Id { get; set; } = string.Empty;
+    public string AccountNumber { get; set; } = string.Empty;
+    public string AccountType { get; set; } = string.Empty; // server uses enum-as-string
+    public string CustomerId { get; set; } = string.Empty;
+    public string CustomerName { get; set; } = string.Empty;
+    public string? CustomerPhone { get; set; }
+    public int BranchId { get; set; }
+    public string BranchName { get; set; } = string.Empty;
+    public string Currency { get; set; } = string.Empty; // server sends "HTG" or "USD"
+    public decimal Balance { get; set; }
+    public decimal AvailableBalance { get; set; }
+    public DateTime OpeningDate { get; set; }
+    public DateTime? LastTransactionDate { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public DateTime? ClosedAt { get; set; }
+    public string? ClosedBy { get; set; }
+    public string? ClosureReason { get; set; }
+
+    // Optional / type-specific
+    public decimal? MinimumBalance { get; set; }
+    public decimal? DailyWithdrawalLimit { get; set; }
+    public decimal? MonthlyWithdrawalLimit { get; set; }
+    public decimal? DailyDepositLimit { get; set; }
+    public decimal? InterestRate { get; set; }
+    public DateTime? MaturityDate { get; set; }
+    public string? TermType { get; set; }
+}
+
+public class ClientAccountTransactionHistory
+{
+    public List<ClientAccountTransactionItem> Transactions { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages { get; set; }
+    public decimal TotalCredits { get; set; }
+    public decimal TotalDebits { get; set; }
+    public int TransactionCount { get; set; }
+}
+
+public class ClientAccountTransactionItem
+{
+    public string Id { get; set; } = string.Empty;
+    public string AccountId { get; set; } = string.Empty;
+    public string AccountNumber { get; set; } = string.Empty;
+    public string AccountType { get; set; } = string.Empty;
+    public string? Type { get; set; }
+    public decimal Amount { get; set; }
+    public string? Currency { get; set; }
+    public decimal BalanceBefore { get; set; }
+    public decimal BalanceAfter { get; set; }
+    public string? Description { get; set; }
+    public string? Reference { get; set; }
+    public string? ProcessedBy { get; set; }
+    public DateTime ProcessedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 }
 
 public sealed class ApiResult

@@ -60,11 +60,19 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         [HttpGet("by-number/{accountNumber}")]
         public async Task<ActionResult<CurrentAccountResponseDto>> GetAccountByNumber(string accountNumber)
         {
-            var account = await _accountService.GetAccountByNumberAsync(accountNumber);
-            if (account == null)
-                return NotFound(new { message = "Compte introuvable" });
+            try
+            {
+                var account = await _accountService.GetAccountByNumberAsync(accountNumber);
+                if (account == null)
+                    return NotFound(new { message = "Compte introuvable" });
 
-            return Ok(account);
+                return Ok(account);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ERROR] GetAccountByNumber failed for accountNumber={accountNumber}: {ex.Message}\n{ex.StackTrace}");
+                return StatusCode(500, new { message = "Erreur interne lors de la recherche du compte", error = "Erreur interne sur le serveur" });
+            }
         }
 
         /// <summary>

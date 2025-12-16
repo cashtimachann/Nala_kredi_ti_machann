@@ -75,6 +75,11 @@ namespace NalaCreditDesktop
 
                 if (dashboardWindow != null)
                 {
+                    if (Application.Current != null)
+                    {
+                        Application.Current.MainWindow = dashboardWindow;
+                    }
+
                     dashboardWindow.Show();
                     this.Close();
                 }

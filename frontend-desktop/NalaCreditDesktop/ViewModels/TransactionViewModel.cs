@@ -110,20 +110,8 @@ namespace NalaCreditDesktop.ViewModels
                     200,
                     DateFrom,
                     DateTo,
-                    SelectedType);
+                    SelectedType == "Tous" ? null : SelectedType);
                 Transactions = new ObservableCollection<TransactionSummary>(transactions);
-                // DEBUG: show how many transactions were loaded to help debug missing list issue
-                try { MessageBox.Show($"[DEBUG] Loaded {transactions.Count} transactions", "Debug - Transactions Loaded", MessageBoxButton.OK, MessageBoxImage.Information); } catch { }
-                try
-                {
-                    var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "nala_transactions_debug.log");
-                    var lines = $"{DateTime.Now:o} - Loaded {transactions.Count} transactions - Types: {string.Join(',', transactions.Select(t => t.TransactionType).Distinct())}\n";
-                    System.IO.File.AppendAllText(logPath, lines);
-                }
-                catch
-                {
-                    // Ignore logging failures
-                }
                 ApplyFilters();
                 UpdateStatistics();
             }
@@ -457,17 +445,31 @@ namespace NalaCreditDesktop.ViewModels
 
         partial void OnSelectedTypeChanged(string value)
         {
-            ApplyFilters();
+            // Reload from API to apply server-side filtering when type changes
+            _ = LoadTransactionsAsync();
         }
 
         partial void OnSelectedCurrencyChanged(string value)
         {
+            // Currency is applied client-side
             ApplyFilters();
         }
 
         partial void OnSelectedStatusChanged(string value)
         {
             ApplyFilters();
+        }
+
+        partial void OnDateFromChanged(DateTime? value)
+        {
+            // Reload from API so the selected date range fetches the right data
+            _ = LoadTransactionsAsync();
+        }
+
+        partial void OnDateToChanged(DateTime? value)
+        {
+            // Reload from API so the selected date range fetches the right data
+            _ = LoadTransactionsAsync();
         }
     }
 }

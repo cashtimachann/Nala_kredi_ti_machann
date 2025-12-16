@@ -597,6 +597,58 @@
                         Visibility="{Binding IsTransactionModuleVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <views:TransactionView ShowHeaderQuickActions="False"/>
                 </Border>
+
+                <!-- Historique des changes (caissier - aujourd'hui) -->
+                <Border Grid.Row="4" Style="{StaticResource CardStyle}">
+                    <StackPanel>
+                        <Grid>
+                            <TextBlock Text="🔄 Historique des Changes (Aujourd'hui)" Style="{StaticResource HeaderTextStyle}"/>
+                            <Button HorizontalAlignment="Right"
+                                    Content="Actualiser"
+                                    Padding="10,5"
+                                    Background="Transparent"
+                                    BorderBrush="#BDC3C7"
+                                    Command="{Binding RefreshTransactionsCommand}"/>
+                        </Grid>
+
+                        <DataGrid ItemsSource="{Binding ExchangeHistory}"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  Style="{StaticResource ModernDataGridStyle}"
+                                  Height="260"
+                                  Margin="0,10">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Heure"
+                                                    Binding="{Binding Time, StringFormat='{}{0:HH:mm:ss}'}"
+                                                    Width="90"/>
+                                <DataGridTextColumn Header="N°"
+                                                    Binding="{Binding TransactionNumber}"
+                                                    Width="120"/>
+                                <DataGridTextColumn Header="Paire"
+                                                    Binding="{Binding Pair}"
+                                                    Width="100"/>
+                                <DataGridTextColumn Header="Montant Source"
+                                                    Binding="{Binding FromAmount, StringFormat='{}{0:N2}'}"
+                                                    Width="140"/>
+                                <DataGridTextColumn Header="Taux"
+                                                    Binding="{Binding ExchangeRate, StringFormat='{}{0:N2}'}"
+                                                    Width="100"/>
+                                <DataGridTextColumn Header="Montant Dest."
+                                                    Binding="{Binding ToAmount, StringFormat='{}{0:N2}'}"
+                                                    Width="140"/>
+                                <DataGridTextColumn Header="Net"
+                                                    Binding="{Binding NetAmount, StringFormat='{}{0:N2}'}"
+                                                    Width="120"/>
+                                <DataGridTextColumn Header="Client"
+                                                    Binding="{Binding Customer}"
+                                                    Width="*"/>
+                                <DataGridTextColumn Header="Statut"
+                                                    Binding="{Binding Status}"
+                                                    Width="100"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+                </Border>
             </Grid>
         </ScrollViewer>
 

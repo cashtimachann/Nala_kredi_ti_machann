@@ -139,10 +139,26 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
       loadExchangeRates();
       setRatesCurrentPage(1);
     } else {
+      // Default to all branches (no branch filter) so history shows everything
+      if (branchFilter !== '') {
+        setBranchFilter('');
+      }
       loadTransactions();
       setTransactionsCurrentPage(1);
     }
   }, [activeTab, baseCurrencyFilter, targetCurrencyFilter, activeFilter, exchangeTypeFilter, statusFilter, branchFilter, startDateFilter, endDateFilter]);
+
+  const clearHistoryFilters = () => {
+    setSearchTerm('');
+    setBaseCurrencyFilter('');
+    setTargetCurrencyFilter('');
+    setExchangeTypeFilter('');
+    setStatusFilter('');
+    // Show all branches by default
+    setBranchFilter('');
+    setStartDateFilter('');
+    setEndDateFilter('');
+  };
 
   const loadBranches = async () => {
     try {
@@ -193,6 +209,7 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
         exchangeType: exchangeTypeFilter !== '' ? exchangeTypeFilter : undefined,
         status: statusFilter !== '' ? statusFilter : undefined,
         branchId: branchFilter !== '' ? branchFilter : undefined,
+        includeAll: branchFilter === '' ? true : undefined,
         startDate: startDateFilter !== '' ? startDateFilter : undefined,
         endDate: endDateFilter !== '' ? endDateFilter : undefined
       };
@@ -339,7 +356,6 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
       .map((transaction, index) => {
         const fromAmount = formatAmount(transaction.fromAmount);
         const toAmount = formatAmount(transaction.toAmount);
-        const commission = formatAmount(transaction.commissionAmount ?? 0);
         const netAmount = formatAmount(transaction.netAmount ?? 0);
         const statusColor = getStatusBadgeClass(transaction.status as ExchangeTransactionStatus | string);
         const statusLabel = getStatusLabel(transaction.statusName, transaction.status);
@@ -353,7 +369,6 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
             <td>${fromAmount} ${transaction.fromCurrencyName || formatCurrencyType(transaction.fromCurrency)}</td>
             <td>${toAmount} ${transaction.toCurrencyName || formatCurrencyType(transaction.toCurrency)}</td>
             <td>${formatRate(transaction.exchangeRate)}</td>
-            <td>${commission}</td>
             <td>${netAmount}</td>
             <td><span class="status ${statusColor}">${statusLabel}</span></td>
             <td>${transaction.customerName ?? '—'}</td>
@@ -423,7 +438,6 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
               <th>Montant source</th>
               <th>Montant converti</th>
               <th>Taux</th>
-              <th>Commission</th>
               <th>Montant net</th>
               <th>Statut</th>
               <th>Client</th>
@@ -432,7 +446,7 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
             </tr>
           </thead>
           <tbody>
-            ${rows || '<tr><td colspan="13" style="text-align:center;">Aucune transaction</td></tr>'}
+            ${rows || '<tr><td colspan="12" style="text-align:center;">Aucune transaction</td></tr>'}
           </tbody>
         </table>
         <div class="footer">Rapport généré par Nala Crédit · ${generatedAt}</div>
@@ -1254,12 +1268,7 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
                   </p>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Commission</label>
-                  <p className="text-sm text-gray-900 mt-1">
-                    {selectedTransaction.commissionAmount.toLocaleString('fr-HT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({selectedTransaction.commissionRate}%)
-                  </p>
-                </div>
+                {/* Commission removed as requested */}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Montant net</label>

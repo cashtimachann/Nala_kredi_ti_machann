@@ -243,8 +243,8 @@ namespace NalaCreditAPI.Controllers
         {
             try
             {
-                // If no branch specified, use current user's branch
-                if (!searchDto.BranchGuid.HasValue)
+                // If no branch specified and includeAll is not requested, use current user's branch
+                if (!searchDto.BranchGuid.HasValue && searchDto.IncludeAll != true)
                 {
                     var branchId = GetCurrentBranchId();
                     if (branchId != Guid.Empty)

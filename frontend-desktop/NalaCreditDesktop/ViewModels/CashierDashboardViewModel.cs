@@ -182,6 +182,27 @@ namespace NalaCreditDesktop.ViewModels
 
         #endregion
 
+        #region Exchange History
+
+        public class ExchangeHistoryItem
+        {
+            public DateTime Time { get; set; }
+            public string TransactionNumber { get; set; } = string.Empty;
+            public string Type { get; set; } = string.Empty; // Purchase/Sale
+            public string Pair { get; set; } = string.Empty; // e.g., USD→HTG
+            public decimal FromAmount { get; set; }
+            public decimal ToAmount { get; set; }
+            public decimal ExchangeRate { get; set; }
+            public decimal NetAmount { get; set; }
+            public string Status { get; set; } = string.Empty;
+            public string Customer { get; set; } = string.Empty;
+        }
+
+        [ObservableProperty]
+        private ObservableCollection<ExchangeHistoryItem> exchangeHistory = new();
+
+        #endregion
+
         #region State Management
 
         [ObservableProperty]
@@ -218,6 +239,8 @@ namespace NalaCreditDesktop.ViewModels
             CheckAlerts();
             // Subscribe to transaction processed events so the dashboard refreshes immediately
             AppServices.TransactionProcessed += OnTransactionProcessed;
+            // Initial load of exchange history
+            _ = LoadExchangeHistoryAsync();
         }
 
         private async void OnTransactionProcessed()
@@ -438,6 +461,49 @@ namespace NalaCreditDesktop.ViewModels
             CheckAlerts();
         }
 
+        private async Task LoadExchangeHistoryAsync()
+        {
+            try
+            {
+                var today = DateTime.Today;
+                var search = new ApiService.ExchangeTransactionSearch
+                {
+                    DateFrom = today,
+                    DateTo = today.AddDays(1).AddTicks(-1),
+                    Page = 1,
+                    PageSize = 100
+                };
+
+                var list = await _apiService.GetExchangeTransactionsAsync(search);
+
+                // Afficher l'historique du jour (toutes caisses de la succursale courante)
+                var rows = list
+                    .OrderByDescending(t => t.TransactionDate)
+                    .Select(t => new ExchangeHistoryItem
+                    {
+                        Time = t.TransactionDate,
+                        TransactionNumber = t.TransactionNumber ?? string.Empty,
+                        Type = t.ExchangeRate > 0 && t.FromAmount > 0 ? (t.FromCurrencyName + "→" + t.ToCurrencyName) : (t.ExchangeTypeName ?? ""),
+                        Pair = string.IsNullOrWhiteSpace(t.FromCurrencyName) || string.IsNullOrWhiteSpace(t.ToCurrencyName)
+                            ? ""
+                            : $"{t.FromCurrencyName}→{t.ToCurrencyName}",
+                        FromAmount = t.FromAmount,
+                        ToAmount = t.ToAmount,
+                        ExchangeRate = t.ExchangeRate,
+                        NetAmount = t.NetAmount,
+                        Status = t.StatusName ?? string.Empty,
+                        Customer = t.CustomerName ?? string.Empty
+                    })
+                    .ToList();
+
+                ExchangeHistory = new ObservableCollection<ExchangeHistoryItem>(rows);
+            }
+            catch
+            {
+                // Keep silent; the rest of dashboard remains functional
+            }
+        }
+
         private async Task EnsureUserContextAsync()
         {
             var user = _apiService.CurrentUser;
@@ -589,8 +655,30 @@ namespace NalaCreditDesktop.ViewModels
         {
             try
             {
-                MessageBox.Show("Ouverture de l'interface de change...", "Info", 
-                               MessageBoxButton.OK, MessageBoxImage.Information);
+                var owner = Application.Current?
+                    .Windows
+                    .OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive && w.IsVisible)
+                    ?? Application.Current?.MainWindow;
+
+                var changeWindow = new OperationChangeWindow(_apiService);
+
+                if (owner != null && owner.IsVisible)
+                {
+                    changeWindow.Owner = owner;
+                }
+                else
+                {
+                    changeWindow.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                }
+
+                changeWindow.ShowDialog();
+
+                if (changeWindow.OperationReussie)
+                {
+                    await RefreshDashboardAsync(force: true);
+                    await LoadExchangeHistoryAsync();
+                }
             }
             catch (Exception ex)
             {
@@ -696,17 +784,47 @@ namespace NalaCreditDesktop.ViewModels
                     return;
                 }
 
-                var window = new ConsultationCompteWindow(_apiService)
+                // Log the action
+                Console.WriteLine($"[INFO] Opening consultation window for: {AccountSearchText}");
+
+                var owner = Application.Current?
+                    .Windows
+                    .OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive && w.IsVisible)
+                    ?? Application.Current?.MainWindow;
+
+                var window = new ConsultationCompteWindow(_apiService);
+
+                if (owner != null && owner.IsVisible)
                 {
-                    Owner = Application.Current?.MainWindow
-                };
+                    window.Owner = owner;
+                }
+                else
+                {
+                    window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                    Console.WriteLine("[WARN] No active owner window found; centering consultation window on screen.");
+                }
 
                 window.PrefillSearch(AccountSearchText);
                 window.ShowDialog();
+                
+                Console.WriteLine("[INFO] Consultation window closed successfully");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur: {ex.Message}", "Erreur", 
+                // Log full exception for diagnostics
+                Console.Error.WriteLine($"[ERROR] ConsultAccount failed:");
+                Console.Error.WriteLine($"Message: {ex.Message}");
+                Console.Error.WriteLine($"Type: {ex.GetType().Name}");
+                Console.Error.WriteLine($"StackTrace: {ex.StackTrace}");
+                if (ex.InnerException != null)
+                {
+                    Console.Error.WriteLine($"Inner Exception: {ex.InnerException.Message}");
+                }
+                
+                // Show detailed error to user for debugging
+                MessageBox.Show($"Erreur lors de la consultation du compte:\n\n{ex.Message}\n\nType: {ex.GetType().Name}\n\nVeuillez réessayer ou contacter le support.", 
+                               "Erreur", 
                                MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -747,6 +865,7 @@ namespace NalaCreditDesktop.ViewModels
             try
             {
                 await RefreshDashboardAsync(force: true);
+                await LoadExchangeHistoryAsync();
             }
             catch (Exception ex)
             {
