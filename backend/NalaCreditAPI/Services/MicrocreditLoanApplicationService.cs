@@ -776,7 +776,7 @@ namespace NalaCreditAPI.Services
         private async Task GeneratePaymentScheduleAsync(MicrocreditLoan loan)
         {
             var scheduleItems = new List<MicrocreditPaymentSchedule>();
-            var currentDate = loan.FirstInstallmentDate;
+            var baseDate = loan.FirstInstallmentDate;
             var remainingPrincipal = Math.Round(loan.PrincipalAmount, 2);
             var monthlyRate = loan.InterestRate / 12;
             
@@ -807,12 +807,15 @@ namespace NalaCreditAPI.Services
                     }
                 }
                 
+                // Calculer la date d'échéance: baseDate + (i-1) mois pour avoir la première échéance à baseDate
+                var dueDate = baseDate.AddMonths(i - 1);
+                
                 var scheduleItem = new MicrocreditPaymentSchedule
                 {
                     Id = Guid.NewGuid(),
                     LoanId = loan.Id,
                     InstallmentNumber = i,
-                    DueDate = currentDate,
+                    DueDate = dueDate,
                     PrincipalAmount = principalPortion,
                     InterestAmount = interestPortion,
                     TotalAmount = totalAmount,
@@ -825,7 +828,6 @@ namespace NalaCreditAPI.Services
                 
                 // Nouveau solde après paiement du capital
                 remainingPrincipal = Math.Round(Math.Max(0, remainingPrincipal - principalPortion), 2);
-                currentDate = currentDate.AddMonths(1);
             }
             
             await _context.MicrocreditPaymentSchedules.AddRangeAsync(scheduleItems);
@@ -1436,9 +1438,9 @@ namespace NalaCreditAPI.Services
             if (loan == null)
                 return null;
 
-            // Get next payment due
+            // Get next payment due: choose the earliest UNPAID schedule (includes overdue)
             var nextPayment = loan.PaymentSchedule
-                .Where(ps => ps.Status == MicrocreditPaymentStatus.Pending)
+                .Where(ps => ps.Status != MicrocreditPaymentStatus.Completed)
                 .OrderBy(ps => ps.DueDate)
                 .FirstOrDefault();
 
@@ -1637,15 +1639,19 @@ namespace NalaCreditAPI.Services
             var totalInterest = 0m;
             var totalPenalty = 0m;
 
-            // First, apply to any overdue payments (penalties)
+            // First, apply to any overdue payments (penalties) as of the payment date
+            var asOfDate = payment.PaymentDate;
             var overdueSchedules = schedule
-                .Where(s => s.Status == MicrocreditPaymentStatus.Overdue || 
-                           (s.Status == MicrocreditPaymentStatus.Pending && s.DueDate < DateOnly.FromDateTime(DateTime.Now)))
+                .Where(s => (s.Status == MicrocreditPaymentStatus.Overdue 
+                             || s.Status == MicrocreditPaymentStatus.Partial 
+                             || s.Status == MicrocreditPaymentStatus.Pending)
+                            && s.DueDate < asOfDate)
+                .OrderBy(s => s.DueDate)
                 .ToList();
 
             foreach (var overdue in overdueSchedules)
             {
-                var daysLate = (DateOnly.FromDateTime(DateTime.Now).DayNumber - overdue.DueDate.DayNumber);
+                var daysLate = (asOfDate.DayNumber - overdue.DueDate.DayNumber);
                 if (daysLate > 0)
                 {
                     // Calculate penalty (e.g., 1% per month late = 0.033% per day)
@@ -1667,9 +1673,12 @@ namespace NalaCreditAPI.Services
                 }
             }
 
-            // Then apply to pending installments in order
-            foreach (var scheduleItem in schedule.Where(s => s.Status == MicrocreditPaymentStatus.Pending || 
-                                                              s.Status == MicrocreditPaymentStatus.Overdue))
+            // Then apply to installments in order (including Partial)
+            foreach (var scheduleItem in schedule
+                         .Where(s => s.Status == MicrocreditPaymentStatus.Pending 
+                                     || s.Status == MicrocreditPaymentStatus.Overdue 
+                                     || s.Status == MicrocreditPaymentStatus.Partial)
+                         .OrderBy(s => s.DueDate))
             {
                 if (remainingAmount <= 0) break;
 
@@ -1683,7 +1692,7 @@ namespace NalaCreditAPI.Services
                     // Full payment of this installment
                     scheduleItem.PaidAmount = scheduleItem.TotalAmount;
                     scheduleItem.Status = MicrocreditPaymentStatus.Completed;
-                    scheduleItem.PaidDate = DateOnly.FromDateTime(DateTime.Now);
+                    scheduleItem.PaidDate = payment.PaymentDate;
                     
                     totalInterest += unpaidInterest;
                     totalPrincipal += unpaidPrincipal;

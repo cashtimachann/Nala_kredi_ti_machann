@@ -93,5 +93,23 @@ namespace NalaCreditDesktop.Views
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+        private void OpenRecouvrement_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var win = new RecouvrementWindow(_apiService)
+                {
+                    Owner = this
+                };
+                win.ShowDialog();
+                // Refresh after possible payment
+                _ = _viewModel.LoadInitialDataAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Erè lè w ap louvri fenèt Recouvrement:\n\n{ex}", "Erè", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
     }
 }

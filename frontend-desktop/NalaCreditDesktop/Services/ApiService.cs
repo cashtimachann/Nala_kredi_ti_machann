@@ -441,6 +441,138 @@ public class ApiService
         [JsonProperty("message")] public string? Message { get; set; }
     }
 
+    // --- Microcredit (Recouvrement) ---
+    public async Task<List<NalaCreditDesktop.Models.OverdueLoan>> GetOverdueLoansAsync(int daysOverdue = 1)
+    {
+        try
+        {
+            var endpoint = $"microcreditloan/overdue?daysOverdue={daysOverdue}";
+            var response = await _httpClient.GetAsync(endpoint);
+            var raw = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                return new List<NalaCreditDesktop.Models.OverdueLoan>();
+            }
+            var list = string.IsNullOrWhiteSpace(raw)
+                ? new List<NalaCreditDesktop.Models.OverdueLoan>()
+                : JsonConvert.DeserializeObject<List<NalaCreditDesktop.Models.OverdueLoan>>(raw) ?? new List<NalaCreditDesktop.Models.OverdueLoan>();
+            return list;
+        }
+        catch
+        {
+            return new List<NalaCreditDesktop.Models.OverdueLoan>();
+        }
+    }
+
+    public async Task<NalaCreditDesktop.Models.MicrocreditLoanListResponse?> GetLoansAsync(int page = 1, int pageSize = 100, string? status = null, int? branchId = null, bool? isOverdue = null)
+    {
+        var qs = new StringBuilder($"microcreditloan?page={page}&pageSize={pageSize}");
+        if (!string.IsNullOrWhiteSpace(status)) qs.Append("&status=").Append(Uri.EscapeDataString(status));
+        if (branchId.HasValue) qs.Append("&branchId=").Append(branchId.Value);
+        if (isOverdue.HasValue && isOverdue.Value) qs.Append("&isOverdue=true");
+
+        try
+        {
+            var resp = await _httpClient.GetAsync(qs.ToString());
+            var raw = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode) return null;
+            return string.IsNullOrWhiteSpace(raw)
+                ? null
+                : JsonConvert.DeserializeObject<NalaCreditDesktop.Models.MicrocreditLoanListResponse>(raw);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<NalaCreditDesktop.Models.MicrocreditLoan?> SearchLoanByNumberAsync(string loanNumber)
+    {
+        if (string.IsNullOrWhiteSpace(loanNumber)) return null;
+
+        // Try first page with a bigger pageSize to reduce round-trips
+        var result = await GetLoansAsync(1, 200);
+        var match = result?.Loans?.FirstOrDefault(l => string.Equals(l.LoanNumber, loanNumber, StringComparison.OrdinalIgnoreCase));
+        return match;
+    }
+
+    public async Task<NalaCreditDesktop.Models.LoanSummary?> GetLoanSummaryAsync(Guid loanId)
+    {
+        try
+        {
+            var resp = await _httpClient.GetAsync($"microcreditloan/{loanId}/summary");
+            var raw = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode) return null;
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            var settings = new JsonSerializerSettings
+            {
+                DateParseHandling = DateParseHandling.DateTime,
+                DateTimeZoneHandling = DateTimeZoneHandling.Unspecified
+            };
+            return JsonConvert.DeserializeObject<NalaCreditDesktop.Models.LoanSummary>(raw, settings);
+        }
+        catch { return null; }
+    }
+
+    public async Task<NalaCreditDesktop.Models.MicrocreditPayment?> RecordPaymentAsync(NalaCreditDesktop.Models.CreateMicrocreditPaymentRequest request)
+    {
+        if (request == null) return null;
+        try
+        {
+            // Backend expects DateOnly; send ISO date without time for compatibility
+            var payload = new
+            {
+                loanId = request.LoanId,
+                amount = request.Amount,
+                paymentDate = request.PaymentDate.ToString("yyyy-MM-dd"),
+                paymentMethod = (int)request.PaymentMethod,
+                reference = request.Reference,
+                notes = request.Notes
+            };
+            var json = JsonConvert.SerializeObject(payload);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var resp = await _httpClient.PostAsync("microcreditpayment", content);
+            var raw = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode) return null;
+            return string.IsNullOrWhiteSpace(raw) ? null : JsonConvert.DeserializeObject<NalaCreditDesktop.Models.MicrocreditPayment>(raw);
+        }
+        catch { return null; }
+    }
+
+    public async Task<NalaCreditDesktop.Models.MicrocreditPayment?> ConfirmPaymentAsync(Guid paymentId, string? notes = null)
+    {
+        try
+        {
+            var payload = new { notes };
+            var json = JsonConvert.SerializeObject(payload);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var resp = await _httpClient.PostAsync($"microcreditpayment/{paymentId}/confirm", content);
+            var raw = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode)
+            {
+                var message = ExtractErrorMessage(raw) ?? resp.ReasonPhrase ?? "Erreur inconnue";
+                throw new Exception(message);
+            }
+            return string.IsNullOrWhiteSpace(raw) ? null : JsonConvert.DeserializeObject<NalaCreditDesktop.Models.MicrocreditPayment>(raw);
+        }
+        catch (Exception)
+        {
+            throw;
+        }
+    }
+
+    public async Task<NalaCreditDesktop.Models.PaymentReceipt?> GetPaymentReceiptAsync(Guid paymentId)
+    {
+        try
+        {
+            var resp = await _httpClient.GetAsync($"microcreditpayment/{paymentId}/receipt");
+            var raw = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode) return null;
+            return string.IsNullOrWhiteSpace(raw) ? null : JsonConvert.DeserializeObject<NalaCreditDesktop.Models.PaymentReceipt>(raw);
+        }
+        catch { return null; }
+    }
+
     public class CurrencyExchangeRateInfo
     {
         [JsonProperty("id")] public Guid Id { get; set; }
