@@ -248,7 +248,7 @@
         </Border>
 
         <!-- Contenu principal -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="10">
+        <ScrollViewer x:Name="MainScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="10">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>

@@ -1,5 +1,7 @@
 using System;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 using NalaCreditDesktop.Services;
 using NalaCreditDesktop.ViewModels;
 
@@ -23,8 +25,29 @@ namespace NalaCreditDesktop.Views
 
         private async void CashierDashboard_Loaded(object sender, RoutedEventArgs e)
         {
+            // Reset scroll position to top as soon as the view loads
+            await ScrollToTopAfterLayoutAsync();
+
             _viewModel.StartTimer();
             await _viewModel.LoadInitialDataAsync();
+
+            // Some bindings/layout updates can shift focus and move the scroll.
+            // Ensure we remain at the top after data is loaded and layout settles.
+            await ScrollToTopAfterLayoutAsync();
+        }
+
+        private async Task ScrollToTopAfterLayoutAsync()
+        {
+            try
+            {
+                // Run after layout/loading to ensure the ScrollViewer can accept offsets
+                await Dispatcher.InvokeAsync(() => MainScrollViewer.ScrollToHome(), DispatcherPriority.Loaded);
+                await Dispatcher.InvokeAsync(() => MainScrollViewer.ScrollToHome(), DispatcherPriority.Background);
+            }
+            catch
+            {
+                // No-op: if anything goes wrong, avoid crashing the UI
+            }
         }
 
         private void InitializeChart()
