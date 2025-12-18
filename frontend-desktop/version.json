@@ -1,0 +1,14 @@
+{
+  "version": "1.0.1",
+  "downloadUrl": "https://admin.nalakreditimachann.com/downloads/desktop/NalaCreditDesktop-Lite.exe",
+  "fileHash": "75EA83C6BC562DD3F29BE03CA50A2CEF289E7CF521ABD0161FEBF1EFD483BDD5",
+  "fileSize": 4293549,
+  "mandatory": false,
+  "releaseNotes": "Version 1.0.1 - Backend API configured (admin.nalakreditimachann.com)",
+  "releaseDate": "2025-12-18",
+  "prerequisite": {
+    "name": ".NET 8.0 Desktop Runtime",
+    "downloadUrl": "https://dotnet.microsoft.com/download/dotnet/8.0/runtime",
+    "checkCommand": "dotnet --version"
+  }
+}

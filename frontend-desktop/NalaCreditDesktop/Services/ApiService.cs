@@ -33,6 +33,7 @@ public class ApiService
 
     private static string ResolveBaseUrl()
     {
+        // First check environment variable
         var configuredUrl = Environment.GetEnvironmentVariable("NALACREDIT_API_URL");
         if (!string.IsNullOrWhiteSpace(configuredUrl))
         {
@@ -40,6 +41,33 @@ public class ApiService
             return trimmed.Contains("/api", StringComparison.OrdinalIgnoreCase)
                 ? EnsureTrailingSlash(trimmed)
                 : EnsureApiBase(trimmed);
+        }
+
+        // Try to read from appsettings.json
+        try
+        {
+            var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            var appsettingsPath = System.IO.Path.Combine(appDirectory, "appsettings.json");
+            
+            if (System.IO.File.Exists(appsettingsPath))
+            {
+                var jsonContent = System.IO.File.ReadAllText(appsettingsPath);
+                var jsonDoc = System.Text.Json.JsonDocument.Parse(jsonContent);
+                
+                if (jsonDoc.RootElement.TryGetProperty("ApiSettings", out var apiSettings) &&
+                    apiSettings.TryGetProperty("BaseUrl", out var baseUrl))
+                {
+                    var url = baseUrl.GetString();
+                    if (!string.IsNullOrWhiteSpace(url))
+                    {
+                        return EnsureTrailingSlash(url);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // If reading config fails, fall through to defaults
         }
 
         var aspnetUrls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
@@ -95,16 +123,47 @@ public class ApiService
 
     public async Task<LoginResponse?> LoginAsync(string email, string password)
     {
-        var request = new LoginRequest { Email = email, Password = password };
-        var response = await PostAsync<LoginResponse>("auth/login", request);
-
-        if (response != null)
+        try
         {
-            SetAuthToken(response.Token);
-            CurrentUser = response.User;
-        }
+            var request = new LoginRequest { Email = email, Password = password };
+            
+            var json = JsonConvert.SerializeObject(request);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            
+            var response = await _httpClient.PostAsync("auth/login", content);
+            var responseBody = await response.Content.ReadAsStringAsync();
 
-        return response;
+            if (!response.IsSuccessStatusCode)
+            {
+                // Log error for debugging
+                System.Diagnostics.Debug.WriteLine($"Login failed: {response.StatusCode}");
+                System.Diagnostics.Debug.WriteLine($"Response: {responseBody}");
+                
+                // If backend returns error message, we could parse it
+                // For now, just return null to indicate failure
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(responseBody))
+            {
+                return null;
+            }
+
+            var loginResponse = JsonConvert.DeserializeObject<LoginResponse>(responseBody);
+            
+            if (loginResponse != null && !string.IsNullOrEmpty(loginResponse.Token))
+            {
+                SetAuthToken(loginResponse.Token);
+                CurrentUser = loginResponse.User;
+            }
+
+            return loginResponse;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Login exception: {ex.Message}");
+            return null;
+        }
     }
 
     public async Task<bool> LogoutAsync()

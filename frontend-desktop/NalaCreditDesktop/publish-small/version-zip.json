@@ -1,0 +1,18 @@
+{
+  "version": "1.0.2",
+  "releaseDate": "2025-12-18",
+  "downloadUrl": "https://admin.nalakreditimachann.com/downloads/desktop/NalaCreditDesktop-v1.0.2.zip",
+  "fileSize": 271843,
+  "sha256": "C491049E85843D10AD618DD50970F584DDEED6155014CEA8FD8FD7ECA281EF69",
+  "releaseNotes": "Fixed: Login authentication now works correctly with backend API. Complete package with all required files.",
+  "minOSVersion": "Windows 10",
+  "requiredFramework": ".NET 8.0 Runtime",
+  "packageType": "zip",
+  "includes": [
+    "NalaCreditDesktop.exe",
+    "appsettings.json",
+    "NalaCreditDesktop.dll",
+    "NalaCreditDesktop.deps.json",
+    "NalaCreditDesktop.runtimeconfig.json"
+  ]
+}
