@@ -3,14 +3,44 @@ namespace NalaCreditAPI.DTOs;
 public class CashierDashboardDto
 {
     public string CashSessionStatus { get; set; } = string.Empty;
+    public int? CashSessionId { get; set; }
+    public DateTime? SessionStartTime { get; set; }
     public decimal CashBalanceHTG { get; set; }
     public decimal CashBalanceUSD { get; set; }
+    public decimal OpeningBalanceHTG { get; set; }
+    public decimal OpeningBalanceUSD { get; set; }
     public decimal TodayDeposits { get; set; }
     public decimal TodayWithdrawals { get; set; }
     public int TodayExchanges { get; set; }
     public int ClientsServed { get; set; }
     public int TransactionCount { get; set; }
+    public int DepositsCount { get; set; }
+    public decimal DepositsAmountHTG { get; set; }
+    public decimal DepositsAmountUSD { get; set; }
+    public int WithdrawalsCount { get; set; }
+    public decimal WithdrawalsAmountHTG { get; set; }
+    public decimal WithdrawalsAmountUSD { get; set; }
+    public decimal TotalIncoming { get; set; }
+    public decimal TotalOutgoing { get; set; }
+    public decimal UsdSalesAmount { get; set; }
+    public decimal UsdPurchaseAmount { get; set; }
     public DateTime? LastTransactionTime { get; set; }
+    public List<CashierTransactionDto> RecentTransactions { get; set; } = new();
+}
+
+public class CashierTransactionDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string TransactionNumber { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty;
+    public string Currency { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string AccountNumber { get; set; } = string.Empty;
+    public string AccountLabel { get; set; } = string.Empty;
+    public string CustomerName { get; set; } = string.Empty;
+    public string ProcessedBy { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
 }
 
 public class CreditAgentDashboardDto

@@ -1,0 +1,10 @@
+{
+  "version": "1.0.0",
+  "downloadUrl": "https://admin.nalakreditimachann.com/downloads/desktop/NalaCreditDesktop.exe",
+  "fileHash": "85B51448624918026942AD67820F2AFEBA824F2570EA22F6EB9608508A77D70C",
+  "fileSize": 157646555,
+  "mandatory": false,
+  "releaseNotes": "Premye vèsyon desktop app - Version konplè 150 MB (Pa bezwen .NET)",
+  "releaseDate": "2025-12-18",
+  "selfContained": true
+}

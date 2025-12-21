@@ -1,0 +1,294 @@
+<Window x:Class="NalaCreditDesktop.Views.RecouvrementWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
+    xmlns:conv="clr-namespace:NalaCreditDesktop.Converters"
+        Title="Recouvrement - Caissier" Height="600" Width="900"
+        WindowStartupLocation="CenterOwner">
+    <Grid Background="#F5F7FA" Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Search bar -->
+        <Border Padding="10" CornerRadius="8" Background="White" BorderBrush="#E1E8ED" BorderThickness="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0" Height="36" Margin="0,0,10,0" FontSize="14" 
+                     Text="{Binding SearchLoanNumber, UpdateSourceTrigger=PropertyChanged}"/>
+                <Button Grid.Column="1" Content="Rechercher" Width="120" Height="36"
+                        Command="{Binding SearchLoanCommand}"/>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="3*"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid.Resources>
+                <conv:NullOrZeroToVisibilityConverter x:Key="NullOrZeroToVisibilityConverter"/>
+            </Grid.Resources>
+
+            <!-- Overdue list -->
+            <Border Grid.Column="0" Background="White" BorderBrush="#E1E8ED" BorderThickness="1" CornerRadius="8" Padding="8" Margin="0,0,10,0">
+                <DockPanel>
+                    <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <TextBlock Text="Prêts en retard" FontWeight="Bold" FontSize="16"/>
+                        <Button Content="Rafraîchir" Margin="10,0,0,0" Command="{Binding LoadOverdueCommand}"/>
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding OverdueLoans}" AutoGenerateColumns="False" IsReadOnly="True" 
+                              SelectionMode="Single" SelectionUnit="FullRow"
+                              MouseDoubleClick="OverdueGrid_MouseDoubleClick">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Prêt" Binding="{Binding LoanNumber}" Width="*"/>
+                            <DataGridTextColumn Header="Client" Binding="{Binding BorrowerName}" Width="2*"/>
+                            <DataGridTextColumn Header="Montant dû" Binding="{Binding OutstandingAmount}" Width="*"/>
+                            <DataGridTextColumn Header="Retard (j)" Binding="{Binding DaysOverdue}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusMessage}" Margin="0,8,0,0" Foreground="#555"/>
+                </DockPanel>
+            </Border>
+
+            <!-- Loan details + payment form -->
+            <Border Grid.Column="1" Background="White" BorderBrush="#E1E8ED" BorderThickness="1" CornerRadius="8" Padding="12">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <TextBlock Text="Détails du prêt" FontSize="16" FontWeight="Bold"/>
+                        <Separator Margin="0,8"/>
+
+                    <Grid DataContext="{Binding LoanSummary}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="Client :" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Column="1" Text="{Binding BorrowerName}"/>
+                        <TextBlock Grid.Column="2" Text="Prêt n° :" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Column="3" Text="{Binding LoanNumber}"/>
+
+                        <TextBlock Grid.Row="1" Text="Solde total restant (+ Frais) :" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="{}{0:N2} {1}">
+                                    <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.RemainingWithFees"/>
+                                    <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.SelectedLoan.Currency"/>
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                        <TextBlock Grid.Row="1" Grid.Column="2" Text="Prochaine échéance :" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Row="1" Grid.Column="3">
+                            <TextBlock.Text>
+                                <Binding Path="NextPaymentDate" StringFormat="{}{0:dd/MM/yyyy}" TargetNullValue="N/A"/>
+                            </TextBlock.Text>
+                        </TextBlock>
+
+                        <TextBlock Grid.Row="2" Text="Capital restant dû :" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="{}{0:N2} {1}">
+                                    <Binding Path="OutstandingPrincipal"/>
+                                    <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.SelectedLoan.Currency"/>
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                        <TextBlock Grid.Row="2" Grid.Column="2" Text="Retard (j) :" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Row="2" Grid.Column="3" Text="{Binding DaysOverdue}"/>
+
+                            <TextBlock Grid.Row="3" Text="Mensualité + Frais :" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1">
+                                <TextBlock.Text>
+                                    <MultiBinding StringFormat="{}{0:N2} {1}">
+                                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.MonthlyPaymentWithFee"/>
+                                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.SelectedLoan.Currency" TargetNullValue="HTG"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+                            <TextBlock Grid.Row="3" Grid.Column="2" Text="Hors frais :" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Row="3" Grid.Column="3">
+                                <TextBlock.Text>
+                                    <MultiBinding StringFormat="{}{0:N2} {1}">
+                                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.MonthlyPaymentNoFee"/>
+                                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.SelectedLoan.Currency" TargetNullValue="HTG"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+
+                            <TextBlock Grid.Row="4" Text="Prochain Paiement :" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Row="4" Grid.Column="1">
+                                <TextBlock.Text>
+                                    <MultiBinding StringFormat="{}{0:N2} {1}">
+                                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.MonthlyPaymentWithFee"/>
+                                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.SelectedLoan.Currency" TargetNullValue="HTG"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+                            <TextBlock Grid.Row="4" Grid.Column="2" Text="Dû :" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Row="4" Grid.Column="3">
+                                <TextBlock.Text>
+                                    <Binding Path="NextPaymentDate" StringFormat="{}{0:dd/MM/yyyy}" TargetNullValue="N/A"/>
+                                </TextBlock.Text>
+                            </TextBlock>
+                    </Grid>
+
+                    <!-- Detailed loan info mirroring Superadmin -->
+                    <GroupBox Header="Détails du Prêt" Margin="0,8,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Montant approuvé :" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1">
+                                <TextBlock.Text>
+                                    <MultiBinding StringFormat="{}{0:N2} {1}">
+                                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.ApprovedAmountDisplay"/>
+                                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.SelectedLoan.Currency" TargetNullValue="HTG"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Frais dossier (5%) / mois :" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1">
+                                <TextBlock.Text>
+                                    <MultiBinding StringFormat="{}{0:N2} {1}">
+                                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.ProcessingFeeMonthly"/>
+                                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.SelectedLoan.Currency" TargetNullValue="HTG"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Mensualité + Frais :" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1">
+                                <TextBlock.Text>
+                                    <MultiBinding StringFormat="{}{0:N2} {1}">
+                                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.MonthlyPaymentWithFee"/>
+                                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.SelectedLoan.Currency" TargetNullValue="HTG"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Paiement Mensuel (hors frais) :" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1">
+                                <TextBlock.Text>
+                                    <MultiBinding StringFormat="{}{0:N2} {1}">
+                                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.MonthlyPaymentNoFee"/>
+                                        <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.SelectedLoan.Currency" TargetNullValue="HTG"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Taux mensuel (effectif) :" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding DataContext.MonthlyRatePercentDisplay, RelativeSource={RelativeSource AncestorType=Window}, StringFormat={}{0:N2}%}"/>
+                        </Grid>
+                    </GroupBox>
+
+                        <!-- Overdue Warning -->
+                        <Border DataContext="{Binding LoanSummary}"
+                                Margin="0,8,0,0"
+                                Padding="8"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Background="#FFF8F8"
+                                BorderBrush="#FFCDCD"
+                                Visibility="{Binding DaysOverdue, Converter={StaticResource NullOrZeroToVisibilityConverter}}">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
+                                <TextBlock Text="Paiement en Retard" FontWeight="SemiBold" Foreground="#B00020"/>
+                                <TextBlock>
+                                    <Run Text="Jours de retard : "/>
+                                    <Run Text="{Binding DaysOverdue}" FontWeight="Bold"/>
+                                </TextBlock>
+                                <TextBlock>
+                                    <Run Text="Pénalité applicable : "/>
+                                    <Run>
+                                        <Run.Text>
+                                            <MultiBinding StringFormat="{}{0:N2} {1}">
+                                                <Binding Path="PenaltyAmount"/>
+                                                <Binding RelativeSource="{RelativeSource AncestorType=Window}" Path="DataContext.SelectedLoan.Currency" TargetNullValue="HTG"/>
+                                            </MultiBinding>
+                                        </Run.Text>
+                                    </Run>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+
+                    <Separator Margin="0,12"/>
+                    <TextBlock Text="Saisir un paiement" FontSize="16" FontWeight="Bold"/>
+
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="Type de paiement :" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="1" Height="32" SelectedValue="{Binding PaymentType}" SelectedValuePath="Tag">
+                            <ComboBoxItem Content="Mensualité + Frais" Tag="0"/>
+                            <ComboBoxItem Content="Solde complet (+Frais)" Tag="1"/>
+                        </ComboBox>
+
+                        <TextBlock Grid.Row="1" Text="Montant :" VerticalAlignment="Center"/>
+                        <TextBox Grid.Row="1" Grid.Column="1" Height="32" Text="{Binding PaymentAmount, UpdateSourceTrigger=PropertyChanged}"/>
+
+                        <TextBlock Grid.Row="2" Text="Méthode :" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Row="2" Grid.Column="1" Height="32" SelectedValue="{Binding PaymentMethod}">
+                            <ComboBoxItem Content="Espèces" Tag="Cash"/>
+                            <ComboBoxItem Content="Virement bancaire" Tag="BankTransfer"/>
+                            <ComboBoxItem Content="Mobile Money" Tag="MobileMoney"/>
+                            <ComboBoxItem Content="Chèque" Tag="Check"/>
+                            <ComboBoxItem Content="Carte" Tag="Card"/>
+                        </ComboBox>
+
+                        <TextBlock Grid.Row="3" Text="Référence :" VerticalAlignment="Center"/>
+                        <TextBox Grid.Row="3" Grid.Column="1" Height="32" Text="{Binding PaymentReference}"/>
+
+                        <TextBlock Grid.Row="4" Text="Notes :" VerticalAlignment="Top"/>
+                        <TextBox Grid.Row="4" Grid.Column="1" Height="64" TextWrapping="Wrap" AcceptsReturn="True" Text="{Binding Notes}"/>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                        <Button Content="Enregistrer le paiement"
+                                Width="150"
+                                Height="36"
+                                Command="{Binding RecordPaymentCommand}"
+                                IsEnabled="{Binding IsRecordPaymentEnabled}"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding StatusMessage}" Margin="0,8,0,0" Foreground="#555"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

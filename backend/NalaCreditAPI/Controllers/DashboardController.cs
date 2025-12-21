@@ -16,11 +16,13 @@ public class DashboardController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<User> _userManager;
+    private readonly ILogger<DashboardController> _logger;
 
-    public DashboardController(ApplicationDbContext context, UserManager<User> userManager)
+    public DashboardController(ApplicationDbContext context, UserManager<User> userManager, ILogger<DashboardController> logger)
     {
         _context = context;
         _userManager = userManager;
+        _logger = logger;
     }
 
     [HttpGet("cashier")]
@@ -33,46 +35,292 @@ public class DashboardController : ControllerBase
         if (user?.BranchId == null)
             return BadRequest("User not assigned to a branch");
 
-        var today = DateTime.Today;
-        
+        // Use UTC date for comparison as transactions are stored with UTC timestamps
+        var today = DateTime.UtcNow.Date;
+        var tomorrow = today.AddDays(1);
+
         // Get active cash session
         var activeCashSession = await _context.CashSessions
+            .AsNoTracking()
             .FirstOrDefaultAsync(cs => cs.UserId == userId && cs.Status == CashSessionStatus.Open);
 
-        // Get today's transactions
+        // Get today's transactions with related data (generic Transactions table)
         var todayTransactions = await _context.Transactions
-            .Where(t => t.UserId == userId && t.CreatedAt.Date == today)
+            .AsNoTracking()
+            // Use UTC date range for CreatedAt comparison
+            .Where(t => t.UserId == userId && t.CreatedAt >= today && t.CreatedAt < tomorrow)
+            .Include(t => t.Account)
+                .ThenInclude(a => a.Customer)
+            .Include(t => t.User)
+            .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
 
-        // Calculate statistics
-        var totalDeposits = todayTransactions
+        // Get today's savings transactions processed by this user (savings module)
+        var todaySavings = await _context.SavingsTransactions
+            .AsNoTracking()
+            .Where(t => t.ProcessedBy == userId && t.ProcessedAt >= today && t.ProcessedAt < tomorrow)
+            .OrderByDescending(t => t.ProcessedAt)
+            .ToListAsync();
+
+        // Get today's current account transactions processed by this user
+        var todayCurrentAccountTransactions = await _context.CurrentAccountTransactions
+            .AsNoTracking()
+            .Where(t => t.ProcessedBy == userId && t.ProcessedAt >= today && t.ProcessedAt < tomorrow)
+            .OrderByDescending(t => t.ProcessedAt)
+            .ToListAsync();
+
+        // Preload account info to display client name + account number in recent list
+        var savingsAccountNumbers = todaySavings.Select(t => t.AccountNumber).Distinct().ToList();
+        var savingsAccounts = await _context.SavingsAccounts
+            .AsNoTracking()
+            .Where(a => savingsAccountNumbers.Contains(a.AccountNumber))
+            .Include(a => a.Customer)
+            .ToListAsync();
+
+        // Preload current account info
+        var currentAccountNumbers = todayCurrentAccountTransactions.Select(t => t.AccountNumber).Distinct().ToList();
+        var currentAccounts = await _context.CurrentAccounts
+            .AsNoTracking()
+            .Where(a => currentAccountNumbers.Contains(a.AccountNumber))
+            .Include(a => a.Customer)
+            .ToListAsync();
+
+        var depositTransactions = todayTransactions
             .Where(t => t.Type == TransactionType.Deposit)
-            .Sum(t => t.Currency == Currency.HTG ? t.Amount : t.Amount * (t.ExchangeRate ?? 1));
+            .ToList();
 
-        var totalWithdrawals = todayTransactions
+        var withdrawalTransactions = todayTransactions
             .Where(t => t.Type == TransactionType.Withdrawal)
-            .Sum(t => t.Currency == Currency.HTG ? t.Amount : t.Amount * (t.ExchangeRate ?? 1));
+            .ToList();
 
-        var totalExchanges = todayTransactions
+        var savingsDeposits = todaySavings
+            .Where(t => t.Type == SavingsTransactionType.Deposit)
+            .ToList();
+
+        var savingsWithdrawals = todaySavings
+            .Where(t => t.Type == SavingsTransactionType.Withdrawal)
+            .ToList();
+
+        var currentAccountDeposits = todayCurrentAccountTransactions
+            .Where(t => t.Type == SavingsTransactionType.Deposit)
+            .ToList();
+
+        var currentAccountWithdrawals = todayCurrentAccountTransactions
+            .Where(t => t.Type == SavingsTransactionType.Withdrawal)
+            .ToList();
+
+        var savingsDepositsUSD = savingsDeposits.Where(t => t.Currency == SavingsCurrency.USD).Sum(t => t.Amount);
+        var savingsDepositsHTG = savingsDeposits.Where(t => t.Currency == SavingsCurrency.HTG).Sum(t => t.Amount);
+        var savingsWithdrawalsUSD = savingsWithdrawals.Where(t => t.Currency == SavingsCurrency.USD).Sum(t => t.Amount);
+        var savingsWithdrawalsHTG = savingsWithdrawals.Where(t => t.Currency == SavingsCurrency.HTG).Sum(t => t.Amount);
+
+        var currentAccountDepositsUSD = currentAccountDeposits.Where(t => t.Currency == ClientCurrency.USD).Sum(t => t.Amount);
+        var currentAccountDepositsHTG = currentAccountDeposits.Where(t => t.Currency == ClientCurrency.HTG).Sum(t => t.Amount);
+        var currentAccountWithdrawalsUSD = currentAccountWithdrawals.Where(t => t.Currency == ClientCurrency.USD).Sum(t => t.Amount);
+        var currentAccountWithdrawalsHTG = currentAccountWithdrawals.Where(t => t.Currency == ClientCurrency.HTG).Sum(t => t.Amount);
+
+        var exchangeTransactions = todayTransactions
             .Where(t => t.Type == TransactionType.CurrencyExchange)
-            .Count();
+            .ToList();
+
+        // Diagnostic logging to help investigate missing dashboard totals
+        try
+        {
+            _logger?.LogInformation("Cashier dashboard for user {UserId} on {Date} - transactions: {Total}, deposits: {Deposits}, withdrawals: {Withdrawals}, exchanges: {Exchanges}",
+                userId, today.ToString("yyyy-MM-dd"), todayTransactions.Count, depositTransactions.Count, withdrawalTransactions.Count, exchangeTransactions.Count);
+        }
+        catch
+        {
+            // Swallow logging errors to avoid affecting response
+        }
+
+        decimal ConvertToHTG(Transaction transaction)
+        {
+            if (transaction.Currency == Currency.USD)
+            {
+                return transaction.Amount * (transaction.ExchangeRate ?? 1m);
+            }
+
+            return transaction.Amount;
+        }
+
+        var depositsAmountHTG = depositTransactions
+            .Where(t => t.Currency == Currency.HTG)
+            .Sum(t => t.Amount);
+
+        var depositsAmountUSD = depositTransactions
+            .Where(t => t.Currency == Currency.USD)
+            .Sum(t => t.Amount)
+            + savingsDepositsUSD
+            + currentAccountDepositsUSD;
+
+        var withdrawalsAmountHTG = withdrawalTransactions
+            .Where(t => t.Currency == Currency.HTG)
+            .Sum(t => t.Amount);
+
+        var withdrawalsAmountUSD = withdrawalTransactions
+            .Where(t => t.Currency == Currency.USD)
+            .Sum(t => t.Amount)
+            + savingsWithdrawalsUSD
+            + currentAccountWithdrawalsUSD;
+
+        var totalDepositsEquivalent = depositTransactions.Sum(ConvertToHTG)
+            + savingsDeposits.Sum(t => t.Currency == SavingsCurrency.USD && t.ExchangeRate.HasValue
+                ? t.Amount * t.ExchangeRate.Value
+                : t.Amount)
+            + currentAccountDeposits.Sum(t => t.Currency == ClientCurrency.USD && t.ExchangeRate.HasValue
+                ? t.Amount * t.ExchangeRate.Value
+                : t.Amount);
+
+        var totalWithdrawalsEquivalent = withdrawalTransactions.Sum(ConvertToHTG)
+            + savingsWithdrawals.Sum(t => t.Currency == SavingsCurrency.USD && t.ExchangeRate.HasValue
+                ? t.Amount * t.ExchangeRate.Value
+                : t.Amount)
+            + currentAccountWithdrawals.Sum(t => t.Currency == ClientCurrency.USD && t.ExchangeRate.HasValue
+                ? t.Amount * t.ExchangeRate.Value
+                : t.Amount);
+
+        var cashBalanceHTG = (activeCashSession?.OpeningBalanceHTG ?? 0)
+            + totalDepositsEquivalent
+            - totalWithdrawalsEquivalent;
+
+        var cashBalanceUSD = (activeCashSession?.OpeningBalanceUSD ?? 0)
+            + depositsAmountUSD
+            - withdrawalsAmountUSD;
 
         var clientsServed = todayTransactions
             .Select(t => t.AccountId)
             .Distinct()
             .Count();
 
+        var recentTransactions = todayTransactions
+            .Take(10)
+            .Select(t => new CashierTransactionDto
+            {
+                Id = t.Id.ToString(),
+                TransactionNumber = t.TransactionNumber,
+                Type = t.Type.ToString(),
+                Currency = t.Currency.ToString(),
+                Amount = t.Amount,
+                AccountNumber = t.Account?.AccountNumber ?? t.AccountId.ToString(),
+                AccountLabel = t.Account != null
+                    ? $"{t.Account.Customer.FirstName} {t.Account.Customer.LastName} ({t.Account.AccountNumber})"
+                    : $"Compte {t.AccountId}",
+                CustomerName = t.Account != null
+                    ? $"{t.Account.Customer.FirstName} {t.Account.Customer.LastName}"
+                    : string.Empty,
+                ProcessedBy = t.User != null
+                    ? $"{t.User.FirstName} {t.User.LastName}"
+                    : string.Empty,
+                Status = t.Status.ToString(),
+                CreatedAt = t.CreatedAt.ToLocalTime()
+            })
+            .ToList();
+
+        // Add savings transactions to recent list
+        var savingsRecent = todaySavings
+            .Take(10)
+            .Select(t =>
+            {
+                var acc = savingsAccounts.FirstOrDefault(a => a.AccountNumber == t.AccountNumber);
+                var accountNumber = string.IsNullOrWhiteSpace(t.AccountNumber)
+                    ? acc?.AccountNumber ?? string.Empty
+                    : t.AccountNumber;
+                var customerName = acc?.Customer != null
+                    ? $"{acc.Customer.FirstName} {acc.Customer.LastName}".Trim()
+                    : string.Empty;
+                var accountLabel = acc != null && acc.Customer != null
+                    ? $"{acc.Customer.FirstName} {acc.Customer.LastName} ({acc.AccountNumber})"
+                    : accountNumber;
+
+                return new CashierTransactionDto
+                {
+                    Id = t.Id, // Savings transactions use string IDs
+                    TransactionNumber = t.Reference,
+                    Type = t.Type.ToString(),
+                    Currency = t.Currency.ToString(),
+                    Amount = t.Amount,
+                    AccountNumber = accountNumber,
+                    AccountLabel = string.IsNullOrWhiteSpace(accountLabel) ? accountNumber : accountLabel,
+                    CustomerName = string.IsNullOrWhiteSpace(customerName) ? accountLabel : customerName,
+                    ProcessedBy = user != null ? $"{user.FirstName} {user.LastName}" : string.Empty,
+                    Status = t.Status.ToString(),
+                    CreatedAt = t.ProcessedAt.ToLocalTime()
+                };
+            })
+            .ToList();
+
+        recentTransactions.AddRange(savingsRecent);
+
+        // Add current account transactions to recent list
+        var currentAccountRecent = todayCurrentAccountTransactions
+            .Take(10)
+            .Select(t =>
+            {
+                var acc = currentAccounts.FirstOrDefault(a => a.AccountNumber == t.AccountNumber);
+                var accountNumber = string.IsNullOrWhiteSpace(t.AccountNumber)
+                    ? acc?.AccountNumber ?? string.Empty
+                    : t.AccountNumber;
+                var customerName = acc?.Customer != null
+                    ? $"{acc.Customer.FirstName} {acc.Customer.LastName}".Trim()
+                    : string.Empty;
+                var accountLabel = acc != null && acc.Customer != null
+                    ? $"{acc.Customer.FirstName} {acc.Customer.LastName} ({acc.AccountNumber})"
+                    : accountNumber;
+
+                return new CashierTransactionDto
+                {
+                    Id = t.Id, // Current account transactions use string IDs
+                    TransactionNumber = t.Reference,
+                    Type = t.Type.ToString(),
+                    Currency = t.Currency.ToString(),
+                    Amount = t.Amount,
+                    AccountNumber = accountNumber,
+                    AccountLabel = string.IsNullOrWhiteSpace(accountLabel) ? accountNumber : accountLabel,
+                    CustomerName = string.IsNullOrWhiteSpace(customerName) ? accountLabel : customerName,
+                    ProcessedBy = user != null ? $"{user.FirstName} {user.LastName}" : string.Empty,
+                    Status = t.Status.ToString(),
+                    CreatedAt = t.ProcessedAt.ToLocalTime()
+                };
+            })
+            .ToList();
+
+        recentTransactions.AddRange(currentAccountRecent);
+        recentTransactions = recentTransactions
+            .OrderByDescending(t => t.CreatedAt)
+            .Take(10)
+            .ToList();
+
         return Ok(new CashierDashboardDto
         {
             CashSessionStatus = activeCashSession?.Status.ToString() ?? "Closed",
-            CashBalanceHTG = activeCashSession?.OpeningBalanceHTG ?? 0,
-            CashBalanceUSD = activeCashSession?.OpeningBalanceUSD ?? 0,
-            TodayDeposits = totalDeposits,
-            TodayWithdrawals = totalWithdrawals,
-            TodayExchanges = totalExchanges,
+            CashSessionId = activeCashSession?.Id,
+            SessionStartTime = activeCashSession?.SessionStart,
+            CashBalanceHTG = cashBalanceHTG,
+            CashBalanceUSD = cashBalanceUSD,
+            OpeningBalanceHTG = activeCashSession?.OpeningBalanceHTG ?? 0,
+            OpeningBalanceUSD = activeCashSession?.OpeningBalanceUSD ?? 0,
+            TodayDeposits = totalDepositsEquivalent,
+            TodayWithdrawals = totalWithdrawalsEquivalent,
+            TodayExchanges = exchangeTransactions.Count,
             ClientsServed = clientsServed,
-            TransactionCount = todayTransactions.Count,
-            LastTransactionTime = todayTransactions.LastOrDefault()?.CreatedAt
+            TransactionCount = todayTransactions.Count + todaySavings.Count + todayCurrentAccountTransactions.Count,
+            DepositsCount = depositTransactions.Count + savingsDeposits.Count + currentAccountDeposits.Count,
+            DepositsAmountHTG = depositsAmountHTG + savingsDepositsHTG + currentAccountDepositsHTG,
+            DepositsAmountUSD = depositsAmountUSD,
+            WithdrawalsCount = withdrawalTransactions.Count + savingsWithdrawals.Count + currentAccountWithdrawals.Count,
+            WithdrawalsAmountHTG = withdrawalsAmountHTG + savingsWithdrawalsHTG + currentAccountWithdrawalsHTG,
+            WithdrawalsAmountUSD = withdrawalsAmountUSD,
+            TotalIncoming = totalDepositsEquivalent,
+            TotalOutgoing = totalWithdrawalsEquivalent,
+            UsdSalesAmount = exchangeTransactions
+                .Where(t => t.Currency == Currency.USD)
+                .Sum(t => t.Amount),
+            UsdPurchaseAmount = exchangeTransactions
+                .Where(t => t.Currency == Currency.HTG)
+                .Sum(t => t.Amount),
+            LastTransactionTime = recentTransactions.FirstOrDefault()?.CreatedAt,
+            RecentTransactions = recentTransactions
         });
     }
 
@@ -94,7 +342,8 @@ public class DashboardController : ControllerBase
             .CountAsync();
 
         // This week's payments due
-        var weekStart = DateTime.Today.AddDays(-(int)DateTime.Today.DayOfWeek);
+        // Use UTC date range when computing week bounds as well
+        var weekStart = DateTime.UtcNow.Date.AddDays(-(int)DateTime.UtcNow.Date.DayOfWeek);
         var weekEnd = weekStart.AddDays(7);
         
         var paymentsThisWeek = activeCredits
@@ -121,8 +370,8 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("branch-supervisor")]
-    [Authorize(Roles = "Manager,SuperAdmin")]
-    public async Task<ActionResult<ManagerDashboardDto>> GetManagerDashboard()
+    [Authorize(Roles = "BranchSupervisor")]
+    public async Task<ActionResult<BranchSupervisorDashboardDto>> GetBranchSupervisorDashboard()
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var user = await _userManager.FindByIdAsync(userId!);
@@ -131,11 +380,12 @@ public class DashboardController : ControllerBase
             return BadRequest("User not assigned to a branch");
 
         var branchId = user.BranchId.Value;
-        var today = DateTime.Today;
+        var today = DateTime.UtcNow.Date;
+        var tomorrow = today.AddDays(1);
 
         // Today's performance
         var todayTransactions = await _context.Transactions
-            .Where(t => t.BranchId == branchId && t.CreatedAt.Date == today)
+            .Where(t => t.BranchId == branchId && t.CreatedAt >= today && t.CreatedAt < tomorrow)
             .Include(t => t.User)
             .ToListAsync();
 
@@ -148,41 +398,33 @@ public class DashboardController : ControllerBase
         // Branch portfolio
         var branchCredits = await _context.Credits
             .Include(c => c.Account)
-            .Where(c => c.Account != null && c.Account.BranchId == branchId && c.Status == CreditStatus.Active)
+            .Where(c => c.Account.BranchId == branchId && c.Status == CreditStatus.Active)
             .ToListAsync();
 
         // Pending approvals
-        // Pending approvals (global or branch-agnostic if application doesn't track branch)
         var pendingApprovals = await _context.CreditApplications
             .Where(ca => ca.Status == CreditApplicationStatus.UnderReview)
             .CountAsync();
 
-        // Safely compute aggregates guarding against nulls
-        var todayTransactionVolume = todayTransactions.Where(t => t != null).Sum(t => t.Amount);
-        var newAccountsToday = await _context.Accounts
-            .Where(a => a.BranchId == branchId && a.CreatedAt.Date == today)
-            .CountAsync();
-        var branchCreditPortfolio = branchCredits.Where(c => c != null).Sum(c => c.OutstandingBalance);
-
-        var cashierPerformance = activeCashSessions.Select(cs => new CashierPerformanceDto
+        return Ok(new BranchSupervisorDashboardDto
         {
-            CashierName = cs.User != null ? ($"{cs.User.FirstName} {cs.User.LastName}") : "",
-            TransactionsToday = todayTransactions.Count(t => t.UserId == cs.UserId),
-            VolumeToday = todayTransactions.Where(t => t.UserId == cs.UserId).Sum(t => t.Amount),
-            SessionStart = cs.SessionStart
-        }).ToList();
-
-        return Ok(new ManagerDashboardDto
-        {
-            TodayTransactionVolume = todayTransactionVolume,
+            TodayTransactionVolume = todayTransactions.Sum(t => t.Amount),
             TodayTransactionCount = todayTransactions.Count,
             ActiveCashiers = activeCashSessions.Count,
-            NewAccountsToday = newAccountsToday,
-            BranchCreditPortfolio = branchCreditPortfolio,
+            NewAccountsToday = await _context.Accounts
+                .Where(a => a.BranchId == branchId && a.CreatedAt >= today && a.CreatedAt < tomorrow)
+                .CountAsync(),
+            BranchCreditPortfolio = branchCredits.Sum(c => c.OutstandingBalance),
             ActiveCredits = branchCredits.Count,
             PendingCreditApprovals = pendingApprovals,
-            AverageTransactionTime = 2.5m, // Placeholder until timing metrics implemented
-            CashierPerformance = cashierPerformance
+            AverageTransactionTime = 2.5m, // This would come from actual timing data
+            CashierPerformance = activeCashSessions.Select(cs => new CashierPerformanceDto
+            {
+                CashierName = $"{cs.User.FirstName} {cs.User.LastName}",
+                TransactionsToday = todayTransactions.Count(t => t.UserId == cs.UserId),
+                VolumeToday = todayTransactions.Where(t => t.UserId == cs.UserId).Sum(t => t.Amount),
+                SessionStart = cs.SessionStart
+            }).ToList()
         });
     }
 
@@ -196,14 +438,15 @@ public class DashboardController : ControllerBase
         // For now, assume regional manager sees all branches
         // In a real system, you'd have region assignments
         var branches = await _context.Branches.Where(b => b.IsActive).ToListAsync();
-        var today = DateTime.Today;
+        var today = DateTime.UtcNow.Date;
+        var tomorrow = today.AddDays(1);
 
         var branchPerformance = new List<RegionalBranchPerformanceDto>();
 
         foreach (var branch in branches)
         {
             var branchTransactions = await _context.Transactions
-                .Where(t => t.BranchId == branch.Id && t.CreatedAt.Date == today)
+                .Where(t => t.BranchId == branch.Id && t.CreatedAt >= today && t.CreatedAt < tomorrow)
                 .ToListAsync();
 
             var branchCredits = await _context.Credits
@@ -278,7 +521,8 @@ public class DashboardController : ControllerBase
     [Authorize(Roles = "Accounting,Management")]
     public async Task<ActionResult<AccountingDashboardDto>> GetAccountingDashboard()
     {
-        var today = DateTime.Today;
+        // Use UTC-based date to calculate month boundaries for accounting reports
+        var today = DateTime.UtcNow.Date;
         var thisMonth = DateTime.SpecifyKind(new DateTime(today.Year, today.Month, 1), DateTimeKind.Utc);
         var lastMonth = thisMonth.AddMonths(-1);
 

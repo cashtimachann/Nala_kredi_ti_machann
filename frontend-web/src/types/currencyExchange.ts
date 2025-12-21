@@ -222,6 +222,7 @@ export interface ExchangeTransactionSearchDto {
   status?: ExchangeTransactionStatus;
   startDate?: string;
   endDate?: string;
+  includeAll?: boolean;
   customerName?: string;
   transactionNumber?: string;
   page?: number;

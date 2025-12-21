@@ -166,7 +166,7 @@ namespace NalaCreditAPI.Controllers
         /// Confirmer un paiement en attente
         /// </summary>
         [HttpPost("{id}/confirm")]
-        [Authorize(Roles = "SuperAdmin,Admin,Manager,Employee,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,Employee,LoanOfficer,Cashier")]
         public async Task<ActionResult<MicrocreditPaymentDto>> ConfirmPayment(Guid id, [FromBody] ConfirmPaymentDto dto)
         {
             try

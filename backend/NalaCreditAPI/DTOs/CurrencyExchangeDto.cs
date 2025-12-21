@@ -131,9 +131,8 @@ namespace NalaCreditAPI.DTOs
         [Range(0.01, double.MaxValue, ErrorMessage = "Amount must be greater than 0")]
         public decimal Amount { get; set; }
 
-        [Required]
-        [StringLength(200)]
-        public string CustomerName { get; set; } = string.Empty;
+        [StringLength(200, MinimumLength = 1, ErrorMessage = "Customer name must be between 1 and 200 characters")]
+        public string CustomerName { get; set; } = "Client";
 
         [StringLength(50)]
         public string CustomerDocument { get; set; } = string.Empty;
@@ -189,6 +188,8 @@ namespace NalaCreditAPI.DTOs
         public string? TransactionNumber { get; set; }
         public int Page { get; set; } = 1;
         public int PageSize { get; set; } = 20;
+        // When true, the API should not restrict to current user's branch
+        public bool? IncludeAll { get; set; }
 
         public Guid? BranchGuid
         {

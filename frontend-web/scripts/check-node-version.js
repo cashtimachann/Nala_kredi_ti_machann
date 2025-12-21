@@ -2,7 +2,7 @@
 const fs = require('fs');
 const semver = require('semver');
 
-const required = '>=18 <22'; // recommended range
+const required = '>=18 <23'; // recommended range - temporarily allowing Node 22
 const current = process.version;
 
 if (!semver.satisfies(semver.coerce(current), required)) {

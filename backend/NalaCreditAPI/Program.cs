@@ -12,7 +12,6 @@ using StackExchange.Redis;
 using System.Text;
 using Microsoft.Extensions.FileProviders;
 using System.IO;
-using Microsoft.Extensions.Logging;
 
 // Enable legacy timestamp behavior to avoid exceptions when DateTime Kind is Unspecified
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
@@ -83,7 +82,6 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("CashierPolicy", policy => policy.RequireRole("SuperAdmin", "Manager", "Cashier"));
     options.AddPolicy("CreditPolicy", policy => policy.RequireRole("SuperAdmin", "Manager", "Employee"));
     options.AddPolicy("EmployeePolicy", policy => policy.RequireRole("SuperAdmin", "Manager", "Employee", "Support"));
-    options.AddPolicy("RequireManagerOrAbove", policy => policy.RequireRole("SuperAdmin", "Manager", "BranchSupervisor"));
 });
 
 // Register services
@@ -123,34 +121,44 @@ builder.Services.AddScoped<IBranchService, BranchService>();
 builder.Services.AddScoped<IInterBranchTransferService, InterBranchTransferService>();
 builder.Services.AddScoped<IBranchReportService, BranchReportService>();
 
-// Notification Service
-builder.Services.AddScoped<INotificationService, NotificationService>();
-
 // Redis Configuration
-builder.Services.AddSingleton<IConnectionMultiplexer>(provider =>
+builder.Services.AddSingleton<ICacheService>(provider =>
 {
     var configuration = provider.GetRequiredService<IConfiguration>();
-    var logger = provider.GetRequiredService<ILoggerFactory>().CreateLogger("Redis");
+    var logger = provider.GetRequiredService<ILogger<CacheService>>();
+    var enabled = configuration.GetValue<bool?>("Redis:Enabled") ?? true;
 
-    var connectionString = configuration.GetConnectionString("Redis") ?? "localhost:6379,abortConnect=false";
-    var options = ConfigurationOptions.Parse(connectionString, true);
+    if (!enabled)
+    {
+        return new NoOpCacheService(logger);
+    }
 
-    // Ensure the multiplexer keeps retrying even if Redis is temporarily unavailable at startup
+    var connectionString = configuration.GetConnectionString("Redis") ?? "localhost:6379";
+    var options = ConfigurationOptions.Parse(connectionString);
     options.AbortOnConnectFail = false;
-    options.ConnectRetry = Math.Max(options.ConnectRetry, 3);
-    options.ReconnectRetryPolicy ??= new ExponentialRetry(5000);
+    options.ConnectRetry = 2;
+    options.ConnectTimeout = 5000;
+    options.SyncTimeout = 5000;
 
-    logger.LogInformation("Connecting to Redis using endpoints: {Endpoints}", string.Join(", ", options.EndPoints));
-
-    return ConnectionMultiplexer.Connect(options);
+    try
+    {
+        var multiplexer = ConnectionMultiplexer.Connect(options);
+        return new CacheService(multiplexer, logger);
+    }
+    catch (Exception ex)
+    {
+        var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
+        loggerFactory.CreateLogger("RedisStartup").LogWarning(ex, "Redis indisponib – cache an mode degrade");
+        return new NoOpCacheService(logger);
+    }
 });
-builder.Services.AddScoped<ICacheService, CacheService>();
 
 // RabbitMQ Configuration
 builder.Services.AddSingleton<IMessageQueueService, MessageQueueService>();
 
 // SignalR
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<INotificationService, NotificationService>();
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Program));

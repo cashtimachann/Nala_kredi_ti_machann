@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ht">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telechaje Nala Credit Desktop App</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .logo {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        
+        h1 {
+            color: #333;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+        }
+        
+        .download-cards {
+            display: grid;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 30px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .card:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
+        }
+        
+        .card.recommended {
+            border-color: #667eea;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+        }
+        
+        .badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .card-title {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card-size {
+            color: #667eea;
+            font-weight: 600;
+            font-size: 18px;
+        }
+        
+        .card-description {
+            color: #666;
+            margin: 15px 0;
+            line-height: 1.6;
+        }
+        
+        .pros {
+            list-style: none;
+            margin: 15px 0;
+        }
+        
+        .pros li {
+            padding: 5px 0;
+            color: #22c55e;
+        }
+        
+        .pros li:before {
+            content: "✓ ";
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        
+        .requirement {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 15px 0;
+            font-size: 14px;
+            color: #856404;
+        }
+        
+        .download-btn {
+            display: block;
+            width: 100%;
+            padding: 15px 30px;
+            background: #667eea;
+            color: white;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin-top: 15px;
+        }
+        
+        .download-btn:hover {
+            background: #5568d3;
+            transform: scale(1.02);
+        }
+        
+        .download-btn.secondary {
+            background: #6c757d;
+        }
+        
+        .download-btn.secondary:hover {
+            background: #5a6268;
+        }
+        
+        .info-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            margin-top: 30px;
+        }
+        
+        .info-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        
+        .info-section p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+        
+        .info-section a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .info-section a:hover {
+            text-decoration: underline;
+        }
+        
+        .version-info {
+            text-align: center;
+            color: #999;
+            font-size: 14px;
+            margin-top: 30px;
+        }
+        
+        @media (max-width: 640px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+            
+            .card-title {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">💼</div>
+            <h1>Nala Credit Desktop App</h1>
+            <p class="subtitle">Jesyon Caisse, Depots, Retraits ak Rapports</p>
+        </div>
+        
+        <div class="download-cards">
+            <!-- Version ZIP Package (Recommended) -->
+            <div class="card recommended">
+                <span class="badge">REKÒMANDE ✨ v1.0.3</span>
+                <div class="card-title">
+                    <span>📦 Pakèt ZIP Konplè</span>
+                    <span class="card-size">1.84 MB</span>
+                </div>
+                
+                <p class="card-description">
+                    Vèsyon 1.0.3 - Dènye mizajou. <strong style="color: #22c55e;">Login ak XAML fixe!</strong>
+                </p>
+                
+                <ul class="pros">
+                    <li>✓ Koneksyon backend fonksyone</li>
+                    <li>✓ Tout DLL yo inklui</li>
+                    <li>✓ Pa gen erè XAML</li>
+                    <li>Download rapid (3-5 segonn)</li>
+                </ul>
+                
+                <div class="requirement">
+                    ⚠️ <strong>Prérequis:</strong> .NET 8.0 Desktop Runtime dwe enstale. 
+                    <a href="https://dotnet.microsoft.com/download/dotnet/8.0/runtime" target="_blank" style="color: #856404;">Telechaje .NET Runtime</a>
+                </div>
+                
+                <a href="https://admin.nalakreditimachann.com/downloads/desktop/NalaCreditDesktop-v1.0.3.zip" class="download-btn">
+                    ⬇️ Telechaje Pakèt ZIP (1.84 MB)
+                </a>
+            </div>
+            
+            <!-- Version Lite (Old) -->
+            <div class="card">
+                <div class="card-title">
+                    <span>⚡ Vèsyon EXE Sèl</span>
+                    <span class="card-size">148 KB</span>
+                </div>
+                
+                <p class="card-description">
+                    Sèlman fichye EXE a. Ou ap bezwen konfigiré manyèlman.
+                </p>
+                
+                <ul class="pros">
+                    <li>Fichye piti</li>
+                    <li>Download rapid</li>
+                </ul>
+                
+                <div class="requirement" style="background: #fee; border-color: #f88;">
+                    ⚠️ <strong>Atansyon:</strong> Ou ap bezwen ajoute appsettings.json manyèlman
+                </div>
+                
+                <a href="https://admin.nalakreditimachann.com/downloads/desktop/NalaCreditDesktop-Lite.exe" class="download-btn secondary">
+                    ⬇️ Telechaje EXE Sèl (148 KB)
+                </a>
+            </div>
+            
+            <!-- Version Full -->
+            <div class="card">
+                <div class="card-title">
+                    <span>📦 Vèsyon Konplè</span>
+                    <span class="card-size">150 MB</span>
+                </div>
+                
+                <p class="card-description">
+                    Vèsyon ki gen tout sa ki nesesè. Pa bezwen enstale anyen lòt. Bon pou PC ki pa gen Internet rapid oswa ki pa gen .NET.
+                </p>
+                
+                <ul class="pros">
+                    <li>Pa bezwen enstale .NET</li>
+                    <li>Tout enkli</li>
+                    <li>Travay imedyatman</li>
+                </ul>
+                
+                <a href="https://admin.nalakreditimachann.com/downloads/desktop/NalaCreditDesktop.exe" class="download-btn secondary">
+                    ⬇️ Telechaje Vèsyon Konplè (150 MB)
+                </a>
+            </div>
+        </div>
+        
+        <div class="info-section">
+            <h3>📝 Kòman Enstale</h3>
+            
+            <p><strong>Pou Pakèt ZIP Konplè (Rekòmande):</strong></p>
+            <ol style="margin-left: 20px; color: #666; line-height: 1.8;">
+                <li>Si w pa gen .NET 8.0, telechaje li premye: <a href="https://dotnet.microsoft.com/download/dotnet/8.0/runtime" target="_blank">Download .NET Runtime</a></li>
+                <li>Telechaje <code>NalaCreditDesktop-v1.0.3.zip</code></li>
+                <li>Klike dwat sou ZIP la → "Extract All" → Chwazi yon dosye</li>
+                <li>Louvri dosye a epi double-click sou <code>NalaCreditDesktop.exe</code></li>
+                <li>Login avèk email/modpas ou ✓</li>
+            </ol>
+            
+            <p style="margin-top: 20px;"><strong>Pou Vèsyon Konplè (150 MB):</strong></p>
+            <ol style="margin-left: 20px; color: #666; line-height: 1.8;">
+                <li>Telechaje <code>NalaCreditDesktop.exe</code></li>
+                <li>Double-click sou fichye a pou louvri app la</li>
+                <li>Pa bezwen enstale anyen lòt</li>
+            </ol>
+            
+            <p style="margin-top: 20px;"><strong>⚠️ Nòt Sekirite:</strong> Si Windows afiche "Windows protected your PC", klike sou "More info" epi "Run anyway". Sa se nòmal pou aplikasyon ki pa gen code signing certificate.</p>
+        <div class="version-info">
+            <strong style="color: #22c55e;">Version 1.0.2</strong> • 18 Desanm 2025<br>
+            <span style="font-size: 12px; color: #22c55e;">✓ Login fixe • Konfigirasyon korije</span><br>
+            <span style="margin-top: 5px; display: inline-block;">© 2025 Nala Credit - Tout dwa rezève</span>
+        </div>p>
+        </div>
+        
+        <div class="version-info">
+            Version 1.0.0 • 18 Desanm 2025<br>
+            © 2025 Nala Credit - Tout dwa rezève
+        </div>
+    </div>
+</body>
+</html>

@@ -32,7 +32,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpPost("deposit")]
-    [Authorize(Roles = "Cashier,Manager,SuperAdmin")]
+    [Authorize(Roles = "Cashier,Manager,BranchSupervisor,SuperAdmin")]
     public async Task<ActionResult> ProcessDeposit([FromBody] TransactionDto model)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value!;
@@ -64,7 +64,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpPost("withdrawal")]
-    [Authorize(Roles = "Cashier,Manager,SuperAdmin")]
+    [Authorize(Roles = "Cashier,Manager,BranchSupervisor,SuperAdmin")]
     public async Task<ActionResult> ProcessWithdrawal([FromBody] TransactionDto model)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value!;
@@ -122,12 +122,14 @@ public class TransactionController : ControllerBase
     }
 
     [HttpGet("branch/{branchId}/today")]
-    [Authorize(Roles = "Manager,Admin,SuperAdmin")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor")]
     public async Task<ActionResult> GetBranchTransactionsToday(int branchId)
     {
-        var today = DateTime.Today;
+        // Use UTC date for comparison to match transaction CreatedAt (stored in UTC)
+        var today = DateTime.UtcNow.Date;
+        var tomorrow = today.AddDays(1);
         var transactions = await _context.Transactions
-            .Where(t => t.BranchId == branchId && t.CreatedAt.Date == today)
+            .Where(t => t.BranchId == branchId && t.CreatedAt >= today && t.CreatedAt < tomorrow)
             .Include(t => t.User)
             .Include(t => t.Account)
                 .ThenInclude(a => a.Customer)
@@ -140,12 +142,8 @@ public class TransactionController : ControllerBase
                 t.Currency,
                 t.Amount,
                 t.CreatedAt,
-                Customer = t.Account != null && t.Account.Customer != null 
-                    ? $"{t.Account.Customer.FirstName} {t.Account.Customer.LastName}" 
-                    : "N/A",
-                ProcessedBy = t.User != null 
-                    ? $"{t.User.FirstName} {t.User.LastName}" 
-                    : "System"
+                Customer = $"{t.Account.Customer.FirstName} {t.Account.Customer.LastName}",
+                ProcessedBy = $"{t.User.FirstName} {t.User.LastName}"
             })
             .ToListAsync();
 
@@ -221,7 +219,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpGet("branch/{branchId}/history")]
-    [Authorize(Roles = "Manager,Admin,SuperAdmin")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor,Cashier")]
     public async Task<ActionResult> GetBranchTransactionHistory(
         int branchId,
         [FromQuery] DateTime? startDate,
@@ -231,6 +229,18 @@ public class TransactionController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
+        // If caller is a Cashier, restrict access to their own branch only
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (User.IsInRole("Cashier"))
+        {
+            var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+            if (user?.BranchId == null)
+                return Forbid();
+
+            // Override requested branchId to the cashier's assigned branch
+            branchId = user.BranchId.Value;
+        }
+
         var query = _context.Transactions
             .Where(t => t.BranchId == branchId)
             .Include(t => t.User)
@@ -259,10 +269,13 @@ public class TransactionController : ControllerBase
             {
                 t.Id,
                 t.TransactionNumber,
+                t.AccountId,
+                AccountNumber = t.Account.AccountNumber,
                 t.Type,
                 t.Currency,
                 t.Amount,
                 t.CreatedAt,
+                Status = t.Status.ToString(),
                 Customer = $"{t.Account.Customer.FirstName} {t.Account.Customer.LastName}",
                 Cashier = $"{t.User.FirstName} {t.User.LastName}",
                 t.Description,

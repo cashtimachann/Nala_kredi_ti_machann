@@ -26,6 +26,7 @@ public partial class LoginViewModel : ObservableObject
     {
         _apiService = apiService;
         _notificationService = notificationService;
+        AppServices.InitializeApi(apiService);
     }
 
     [RelayCommand]
@@ -51,12 +52,13 @@ public partial class LoginViewModel : ObservableObject
                 
                 // Store user info
                 CurrentUser = result.User;
+                _apiService.SetAuthToken(result.Token);
                 
                 // Navigate to main window
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    var mainWindow = new MainWindow();
-                    mainWindow.Show();
+                    var dashboard = new NalaCreditDesktop.Views.CashierDashboard(_apiService);
+                    dashboard.Show();
                     
                     // Close login window
                     Application.Current.Windows

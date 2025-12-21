@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using NalaCreditDesktop.Models;
+using NalaCreditDesktop.Services;
 using System.Collections.ObjectModel;
 
 namespace NalaCreditDesktop.Views
@@ -29,6 +30,18 @@ namespace NalaCreditDesktop.Views
                 HeureDebut = DateTime.Today.AddHours(8).AddMinutes(30), // 8:30 AM
                 HeureFin = DateTime.Now
             };
+
+            // Set caissier to logged-in user if available
+            try
+            {
+                var apiService = AppServices.GetRequiredApiService();
+                var user = apiService?.CurrentUser;
+                if (user != null)
+                {
+                    _cloture.Caissier = string.IsNullOrWhiteSpace(user.FirstName) ? user.Email : (string.IsNullOrWhiteSpace(user.LastName) ? user.FirstName : $"{user.FirstName} {user.LastName}");
+                }
+            }
+            catch { }
 
             // Initialiser les données simulées pour la démonstration
             InitialiserDonneesSimulees();

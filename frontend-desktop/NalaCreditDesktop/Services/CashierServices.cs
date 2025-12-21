@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using NalaCreditDesktop.Models;
 
@@ -19,9 +20,9 @@ namespace NalaCreditDesktop.Services
 
     public interface ITransactionService
     {
-        Task<List<TransactionSummary>> GetRecentTransactionsAsync(int count = 10);
-        Task<bool> ProcessDepositAsync(string accountId, decimal amount, string currency);
-        Task<bool> ProcessWithdrawalAsync(string accountId, decimal amount, string currency);
+        Task<List<TransactionSummary>> GetRecentTransactionsAsync(int count = 10, DateTime? dateFrom = null, DateTime? dateTo = null, string? type = null);
+        Task<bool> ProcessDepositAsync(string accountId, decimal amount, string currency, int? branchId = null, string? cashierName = null, string? cashierCaisseNumber = null);
+        Task<bool> ProcessWithdrawalAsync(string accountId, decimal amount, string currency, int? branchId = null, string? cashierName = null, string? cashierCaisseNumber = null);
         Task<bool> ProcessExchangeAsync(decimal fromAmount, string fromCurrency, decimal toAmount, string toCurrency);
         Task<TransactionSummary> GetTransactionDetailsAsync(string transactionId);
     }
@@ -143,57 +144,72 @@ namespace NalaCreditDesktop.Services
 
     public class TransactionService : ITransactionService
     {
-        public async Task<List<TransactionSummary>> GetRecentTransactionsAsync(int count = 10)
+        public async Task<List<TransactionSummary>> GetRecentTransactionsAsync(int count = 10, DateTime? dateFrom = null, DateTime? dateTo = null, string? type = null)
         {
-            await Task.Delay(200);
-            var transactions = new List<TransactionSummary>();
-            
-            var random = new Random();
-            var types = new[] { "Dépôt", "Retrait", "Change" };
-            var statuses = new[] { "Complété", "En attente", "Échoué" };
-            var currencies = new[] { "HTG", "USD" };
+            var api = AppServices.ApiService;
 
-            for (int i = 0; i < count; i++)
+            // Try branch history when a branch id is available. Otherwise fall back to the dashboard recent transactions.
+            List<BranchTransactionHistoryItem>? items = null;
+            if (api?.CurrentUser?.BranchId != null)
             {
-                var currency = currencies[random.Next(currencies.Length)];
-                var type = types[random.Next(types.Length)];
-                var amount = currency == "HTG" ? random.Next(5000, 100000) : random.Next(50, 1000);
-                var accountNum = $"2001000{random.Next(10000, 99999)}";
-                
-                transactions.Add(new TransactionSummary
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    Time = DateTime.Now.AddMinutes(-random.Next(1, 180)),
-                    CreatedAt = DateTime.Now.AddMinutes(-random.Next(1, 180)),
-                    Type = type,
-                    TransactionType = type,
-                    ClientAccount = $"Client-{random.Next(100, 999)} (AC-{random.Next(100, 999)})",
-                    AccountId = accountNum,
-                    CustomerName = $"Client {random.Next(100, 999)}",
-                    Amount = amount,
-                    Currency = currency,
-                    Status = statuses[random.Next(statuses.Length)],
-                    ReferenceNumber = $"TRX-{DateTime.Now:yyyyMMdd}-{random.Next(1000, 9999)}",
-                    ProcessedBy = "Caissier Principal",
-                    Description = $"Transaction {type.ToLower()}"
-                });
+                var history = await api.GetBranchTransactionHistoryAsync(
+                    api.CurrentUser.BranchId.Value,
+                    startDate: dateFrom,
+                    endDate: dateTo,
+                    transactionType: MapTypeToApiCode(type),
+                    page: 1,
+                    pageSize: Math.Max(count, 200));
+
+                items = history?.Transactions;
             }
 
-            return transactions;
+            // If branch history is unavailable or empty, fall back to the dashboard recent transactions
+            if (items == null || items.Count == 0)
+            {
+                var dashboard = await api.GetCashierDashboardAsync();
+                if (dashboard.IsSuccess && dashboard.Data?.RecentTransactions != null)
+                {
+                    return dashboard.Data.RecentTransactions
+                        .Select(MapDashboardTransaction)
+                        .Take(count)
+                        .ToList();
+                }
+
+                return new List<TransactionSummary>();
+            }
+
+            return items
+                .Select(MapTransaction)
+                .Take(count)
+                .ToList();
         }
 
-        public async Task<bool> ProcessDepositAsync(string accountId, decimal amount, string currency)
+        public async Task<bool> ProcessDepositAsync(string accountId, decimal amount, string currency, int? branchId = null, string? cashierName = null, string? cashierCaisseNumber = null)
         {
-            await Task.Delay(1000);
-            // Logique de traitement de dépôt
-            return true;
+            var api = AppServices.GetRequiredApiService();
+
+            if (!int.TryParse(accountId, out var accountNumeric))
+            {
+                throw new InvalidOperationException("Numéro de compte invalide pour le dépôt");
+            }
+
+            var parsedCurrency = ParseCurrencyCode(currency);
+
+            return await api.ProcessDepositAsync(accountNumeric, amount, parsedCurrency, branchId, cashierName, cashierCaisseNumber);
         }
 
-        public async Task<bool> ProcessWithdrawalAsync(string accountId, decimal amount, string currency)
+        public async Task<bool> ProcessWithdrawalAsync(string accountId, decimal amount, string currency, int? branchId = null, string? cashierName = null, string? cashierCaisseNumber = null)
         {
-            await Task.Delay(1000);
-            // Logique de traitement de retrait
-            return true;
+            var api = AppServices.GetRequiredApiService();
+
+            if (!int.TryParse(accountId, out var accountNumeric))
+            {
+                throw new InvalidOperationException("Numéro de compte invalide pour le retrait");
+            }
+
+            var parsedCurrency = ParseCurrencyCode(currency);
+
+            return await api.ProcessWithdrawalAsync(accountNumeric, amount, parsedCurrency, branchId, cashierName, cashierCaisseNumber);
         }
 
         public async Task<bool> ProcessExchangeAsync(decimal fromAmount, string fromCurrency, decimal toAmount, string toCurrency)
@@ -205,23 +221,223 @@ namespace NalaCreditDesktop.Services
 
         public async Task<TransactionSummary> GetTransactionDetailsAsync(string transactionId)
         {
-            await Task.Delay(300);
-            return new TransactionSummary
+            // For now return the first match from the last fetch; a dedicated endpoint can replace this when available.
+            var items = await GetRecentTransactionsAsync(200);
+            var match = items.FirstOrDefault(t => string.Equals(t.Id, transactionId, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t.ReferenceNumber, transactionId, StringComparison.OrdinalIgnoreCase));
+
+            return match ?? new TransactionSummary
             {
                 Id = transactionId,
                 Time = DateTime.Now,
                 CreatedAt = DateTime.Now,
-                Type = "Dépôt",
-                TransactionType = "Dépôt",
-                ClientAccount = "Test Account",
-                AccountId = "200100012345",
-                CustomerName = "Test Client",
-                Amount = 10000,
-                Currency = "HTG",
-                Status = "Complété",
-                ReferenceNumber = $"TRX-{DateTime.Now:yyyyMMdd}-1234",
-                ProcessedBy = "Caissier Principal",
-                Description = "Transaction de test"
+                Type = "Inconnu",
+                TransactionType = "Inconnu",
+                ClientAccount = string.Empty,
+                AccountId = string.Empty,
+                CustomerName = string.Empty,
+                Amount = 0,
+                Currency = string.Empty,
+                Status = "Inconnu",
+                ReferenceNumber = transactionId,
+                ProcessedBy = string.Empty,
+                Description = string.Empty
+            };
+        }
+
+        private static TransactionSummary MapTransaction(BranchTransactionHistoryItem item)
+        {
+            var created = item.CreatedAt;
+            if (created.Kind == DateTimeKind.Unspecified)
+            {
+                created = DateTime.SpecifyKind(created, DateTimeKind.Utc);
+            }
+
+            if (created.Kind == DateTimeKind.Utc)
+            {
+                created = created.ToLocalTime();
+            }
+
+            var accountNumber = string.IsNullOrWhiteSpace(item.AccountNumber)
+                ? (item.AccountId == 0 ? string.Empty : item.AccountId.ToString())
+                : item.AccountNumber;
+
+            var typeLabel = NormalizeTransactionType(item.Type);
+
+            return new TransactionSummary
+            {
+                Id = item.Id.ToString(),
+                Time = created,
+                CreatedAt = created,
+                Type = typeLabel,
+                TransactionType = typeLabel,
+                ClientAccount = !string.IsNullOrWhiteSpace(item.Customer)
+                    ? $"{item.Customer} ({accountNumber})"
+                    : (!string.IsNullOrWhiteSpace(accountNumber) ? accountNumber : string.Empty),
+                AccountId = accountNumber,
+                CustomerName = item.Customer,
+                Amount = item.Amount,
+                Currency = NormalizeCurrency(item.Currency),
+                Status = NormalizeStatus(item.Status),
+                ReferenceNumber = item.TransactionNumber,
+                ProcessedBy = item.Cashier,
+                Description = item.Description ?? string.Empty
+            };
+        }
+
+        private static TransactionSummary MapDashboardTransaction(CashierTransaction item)
+        {
+            var created = item.CreatedAt;
+            if (created.Kind == DateTimeKind.Unspecified)
+            {
+                created = DateTime.SpecifyKind(created, DateTimeKind.Utc);
+            }
+
+            if (created.Kind == DateTimeKind.Utc)
+            {
+                created = created.ToLocalTime();
+            }
+
+            var typeLabel = NormalizeTransactionType(item.Type);
+            return new TransactionSummary
+            {
+                Id = item.Id,
+                Time = created,
+                CreatedAt = created,
+                Type = typeLabel,
+                TransactionType = typeLabel,
+                ClientAccount = !string.IsNullOrWhiteSpace(item.CustomerName)
+                    ? $"{item.CustomerName} ({item.AccountNumber})"
+                    : (!string.IsNullOrWhiteSpace(item.AccountLabel)
+                        ? item.AccountLabel
+                        : (!string.IsNullOrWhiteSpace(item.AccountNumber)
+                            ? item.AccountNumber
+                            : string.Empty)),
+                AccountId = item.AccountNumber,
+                CustomerName = item.CustomerName,
+                Amount = item.Amount,
+                Currency = NormalizeCurrency(item.Currency),
+                Status = NormalizeStatus(item.Status),
+                ReferenceNumber = item.TransactionNumber,
+                ProcessedBy = item.ProcessedBy,
+                Description = string.Empty
+            };
+        }
+
+        private static Currency ParseCurrencyCode(string currency)
+        {
+            if (string.IsNullOrWhiteSpace(currency))
+            {
+                return Currency.HTG;
+            }
+
+            if (int.TryParse(currency, out var numeric))
+            {
+                return numeric == 2 ? Currency.USD : Currency.HTG;
+            }
+
+            var code = currency.Trim().ToUpperInvariant();
+            return code switch
+            {
+                "USD" => Currency.USD,
+                "HTG" => Currency.HTG,
+                _ => Currency.HTG
+            };
+        }
+
+        private static string NormalizeCurrency(string? currency)
+        {
+            if (string.IsNullOrWhiteSpace(currency))
+            {
+                return string.Empty;
+            }
+
+            if (int.TryParse(currency, out var numeric))
+            {
+                return numeric == 2 ? "USD" : "HTG";
+            }
+
+            var code = currency.Trim().ToUpperInvariant();
+            return code switch
+            {
+                "USD" => "USD",
+                "HTG" => "HTG",
+                _ => code
+            };
+        }
+
+        private static string NormalizeTransactionType(string? type)
+        {
+            if (string.IsNullOrWhiteSpace(type))
+            {
+                return "Inconnu";
+            }
+
+            if (int.TryParse(type, out var numeric))
+            {
+                return numeric switch
+                {
+                    1 => "Dépôt",
+                    2 => "Retrait",
+                    6 => "Change",
+                    _ => type
+                };
+            }
+
+            var normalized = type.Trim().ToLowerInvariant();
+            return normalized switch
+            {
+                "deposit" => "Dépôt",
+                "withdrawal" => "Retrait",
+                "currencyexchange" => "Change",
+                "change" => "Change",
+                _ => type
+            };
+        }
+
+        private static int? MapTypeToApiCode(string? type)
+        {
+            if (string.IsNullOrWhiteSpace(type))
+            {
+                return null;
+            }
+
+            if (int.TryParse(type, out var numeric))
+            {
+                return numeric;
+            }
+
+            var normalized = type.Trim().ToLowerInvariant();
+            return normalized switch
+            {
+                "dépôt" => 1,
+                "depot" => 1,
+                "deposit" => 1,
+                "retrait" => 2,
+                "withdrawal" => 2,
+                "change" => 6,
+                "currencyexchange" => 6,
+                _ => null
+            };
+        }
+
+        private static string NormalizeStatus(string? status)
+        {
+            if (string.IsNullOrWhiteSpace(status))
+            {
+                return "Inconnu";
+            }
+
+            var normalized = status.Trim().ToLowerInvariant();
+            return normalized switch
+            {
+                "completed" => "Complété",
+                "pending" => "En attente",
+                "failed" => "Échoué",
+                "cancelled" => "Annulé",
+                "canceled" => "Annulé",
+                "reversed" => "Annulé",
+                _ => status
             };
         }
     }

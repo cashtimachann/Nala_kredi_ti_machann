@@ -60,7 +60,6 @@ namespace NalaCreditAPI.Services
             var monthlyPayment = CalculateMonthlyPayment(principalAmount, monthlyInterestRate, durationMonths);
             
             var remainingBalance = principalAmount;
-            var currentDate = startDate;
 
             for (int i = 1; i <= durationMonths; i++)
             {
@@ -76,10 +75,13 @@ namespace NalaCreditAPI.Services
 
                 remainingBalance -= principalPayment;
 
+                // Calculer la date d'échéance: startDate + (i-1) mois pour avoir la première échéance à startDate
+                var dueDate = DateOnly.FromDateTime(startDate.AddMonths(i - 1));
+
                 schedule.Add(new PaymentScheduleItem
                 {
                     InstallmentNumber = i,
-                    DueDate = DateOnly.FromDateTime(currentDate.AddMonths(i)),
+                    DueDate = dueDate,
                     PrincipalAmount = Math.Round(principalPayment, 2),
                     InterestAmount = Math.Round(interestPayment, 2),
                     TotalAmount = Math.Round(monthlyPayment, 2),

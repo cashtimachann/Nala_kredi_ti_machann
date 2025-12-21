@@ -82,6 +82,21 @@ namespace NalaCreditDesktop.ViewModels
         public TransactionViewModel()
         {
             _transactionService = new TransactionService();
+
+            try
+            {
+                AppServices.TransactionProcessed += OnExternalTransactionProcessed;
+            }
+            catch
+            {
+                // Ignore subscription failures
+            }
+
+            _ = LoadTransactionsAsync();
+        }
+
+        private void OnExternalTransactionProcessed()
+        {
             _ = LoadTransactionsAsync();
         }
 
@@ -91,7 +106,11 @@ namespace NalaCreditDesktop.ViewModels
             IsLoading = true;
             try
             {
-                var transactions = await _transactionService.GetRecentTransactionsAsync(100);
+                var transactions = await _transactionService.GetRecentTransactionsAsync(
+                    200,
+                    DateFrom,
+                    DateTo,
+                    SelectedType == "Tous" ? null : SelectedType);
                 Transactions = new ObservableCollection<TransactionSummary>(transactions);
                 ApplyFilters();
                 UpdateStatistics();
@@ -214,8 +233,12 @@ namespace NalaCreditDesktop.ViewModels
             try
             {
                 IsLoading = true;
+                var apiService = AppServices.GetRequiredApiService();
+                var branchId = apiService?.CurrentUser?.BranchId;
+                var cashierName = apiService?.CurrentUser == null ? null : string.IsNullOrWhiteSpace(apiService.CurrentUser.FirstName) ? apiService.CurrentUser.Email : (string.IsNullOrWhiteSpace(apiService.CurrentUser.LastName) ? apiService.CurrentUser.FirstName : apiService.CurrentUser.FirstName + " " + apiService.CurrentUser.LastName);
+
                 var success = await _transactionService.ProcessDepositAsync(
-                    QuickAccountNumber, QuickAmount, QuickCurrency);
+                    QuickAccountNumber, QuickAmount, QuickCurrency, branchId, cashierName, null);
 
                 if (success)
                 {
@@ -226,6 +249,8 @@ namespace NalaCreditDesktop.ViewModels
                     ShowQuickDepositDialog = false;
                     ClearQuickForm();
                     await LoadTransactionsAsync();
+                    // Notify dashboard and other components to refresh
+                    try { AppServices.RaiseTransactionProcessed(); } catch { }
                 }
                 else
                 {
@@ -253,8 +278,12 @@ namespace NalaCreditDesktop.ViewModels
             try
             {
                 IsLoading = true;
+                var apiService = AppServices.GetRequiredApiService();
+                var branchId = apiService?.CurrentUser?.BranchId;
+                var cashierName = apiService?.CurrentUser == null ? null : string.IsNullOrWhiteSpace(apiService.CurrentUser.FirstName) ? apiService.CurrentUser.Email : (string.IsNullOrWhiteSpace(apiService.CurrentUser.LastName) ? apiService.CurrentUser.FirstName : apiService.CurrentUser.FirstName + " " + apiService.CurrentUser.LastName);
+
                 var success = await _transactionService.ProcessWithdrawalAsync(
-                    QuickAccountNumber, QuickAmount, QuickCurrency);
+                    QuickAccountNumber, QuickAmount, QuickCurrency, branchId, cashierName, null);
 
                 if (success)
                 {
@@ -265,6 +294,8 @@ namespace NalaCreditDesktop.ViewModels
                     ShowQuickWithdrawalDialog = false;
                     ClearQuickForm();
                     await LoadTransactionsAsync();
+                    // Notify dashboard and other components to refresh
+                    try { AppServices.RaiseTransactionProcessed(); } catch { }
                 }
                 else
                 {
@@ -414,17 +445,31 @@ namespace NalaCreditDesktop.ViewModels
 
         partial void OnSelectedTypeChanged(string value)
         {
-            ApplyFilters();
+            // Reload from API to apply server-side filtering when type changes
+            _ = LoadTransactionsAsync();
         }
 
         partial void OnSelectedCurrencyChanged(string value)
         {
+            // Currency is applied client-side
             ApplyFilters();
         }
 
         partial void OnSelectedStatusChanged(string value)
         {
             ApplyFilters();
+        }
+
+        partial void OnDateFromChanged(DateTime? value)
+        {
+            // Reload from API so the selected date range fetches the right data
+            _ = LoadTransactionsAsync();
+        }
+
+        partial void OnDateToChanged(DateTime? value)
+        {
+            // Reload from API so the selected date range fetches the right data
+            _ = LoadTransactionsAsync();
         }
     }
 }

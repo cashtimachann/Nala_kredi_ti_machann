@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using NalaCreditDesktop.ViewModels;
 
 namespace NalaCreditDesktop.Views
 {
@@ -8,10 +9,23 @@ namespace NalaCreditDesktop.Views
     {
         private DataGrid? _transactionsGrid;
 
+        public static readonly DependencyProperty ShowHeaderQuickActionsProperty =
+            DependencyProperty.Register(
+                nameof(ShowHeaderQuickActions),
+                typeof(bool),
+                typeof(TransactionView),
+                new PropertyMetadata(true));
+
         public TransactionView()
         {
             InitializeComponent();
             Loaded += TransactionView_Loaded;
+        }
+
+        public bool ShowHeaderQuickActions
+        {
+            get => (bool)GetValue(ShowHeaderQuickActionsProperty);
+            set => SetValue(ShowHeaderQuickActionsProperty, value);
         }
 
         private void TransactionView_Loaded(object sender, RoutedEventArgs e)

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "18": "^0.0.0",
     "@hookform/resolvers": "^3.2.0",
     "@sentry/react": "^7.120.4",
     "@sentry/tracing": "^7.120.4",

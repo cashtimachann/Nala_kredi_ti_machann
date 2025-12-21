@@ -1,0 +1,12 @@
+{
+  "version": "1.0.2",
+  "releaseDate": "2025-12-18",
+  "downloadUrl": "https://admin.nalakreditimachann.com/downloads/desktop/NalaCreditDesktop-v1.0.2-Complete.zip",
+  "fileSize": 1929588,
+  "sha256": "6EA4ADF05B6156304320350123C046CA2C86B410B0BE15F75219DBAB28A94D86",
+  "releaseNotes": "Fixed: Login authentication + XAML compatibility issues resolved. Complete package with all dependencies.",
+  "minOSVersion": "Windows 10",
+  "requiredFramework": ".NET 8.0 Runtime",
+  "packageType": "zip",
+  "fileCount": "Multiple DLLs and dependencies included"
+}

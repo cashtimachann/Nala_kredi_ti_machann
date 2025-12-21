@@ -13,19 +13,25 @@ namespace NalaCreditAPI.Services
 
     public class MessageQueueService : IMessageQueueService, IDisposable
     {
-        private IConnection? _connection;
-        private IModel? _channel;
+        private readonly IConnection? _connection;
+        private readonly IModel? _channel;
         private readonly ILogger<MessageQueueService> _logger;
         private readonly Dictionary<string, IModel> _channels = new();
-        private readonly object _sync = new();
-        private volatile bool _isConnected = false;
-        private readonly ConnectionFactory _factory;
+        private readonly bool _isEnabled;
 
         public MessageQueueService(IConfiguration configuration, ILogger<MessageQueueService> logger)
         {
             _logger = logger;
             
-            _factory = new ConnectionFactory()
+            var messagingEnabled = configuration.GetValue<bool?>("Messaging:Enabled") ?? true;
+            if (!messagingEnabled)
+            {
+                _logger.LogWarning("RabbitMQ messaging disabled via configuration (Messaging:Enabled = false)");
+                _isEnabled = false;
+                return;
+            }
+
+            var factory = new ConnectionFactory()
             {
                 HostName = configuration.GetConnectionString("RabbitMQ") ?? "localhost",
                 Port = 5672,
@@ -34,43 +40,31 @@ namespace NalaCreditAPI.Services
                 VirtualHost = "/"
             };
 
-            // Try to connect, but do not throw if RabbitMQ is unavailable. The service
-            // will operate in a disabled/no-op mode until a successful connection is made.
             try
             {
-                TryConnect();
+                _connection = factory.CreateConnection();
+                _channel = _connection.CreateModel();
+                _logger.LogInformation("Connected to RabbitMQ successfully");
+                _isEnabled = true;
             }
             catch (Exception ex)
             {
-                // Already logged inside TryConnect; keep service in disconnected state
-                _logger.LogWarning(ex, "MessageQueueService started without RabbitMQ connection. Message publishing and subscriptions will be no-ops until a connection is available.");
-            }
-        }
-
-        private void TryConnect()
-        {
-            lock (_sync)
-            {
-                if (_isConnected)
-                    return;
-
-                _connection = _factory.CreateConnection();
-                _channel = _connection.CreateModel();
-                _isConnected = true;
-                _logger.LogInformation("Connected to RabbitMQ successfully");
+                _isEnabled = false;
+                _logger.LogWarning(ex, "RabbitMQ indisponib – messaging ap kontinye san queue (mode degrade)");
             }
         }
 
         public async Task PublishAsync<T>(string queueName, T message) where T : class
         {
+            if (!_isEnabled || _channel == null)
+            {
+                _logger.LogDebug("RabbitMQ pa disponib – message '{QueueName}' pa voye (mode degrade)", queueName);
+                await Task.CompletedTask;
+                return;
+            }
+
             try
             {
-                if (!_isConnected || _channel == null)
-                {
-                    _logger.LogWarning("Cannot publish to queue {QueueName} because RabbitMQ is not connected. Message will be dropped.", queueName);
-                    return;
-                }
-
                 _channel.QueueDeclare(
                     queue: queueName,
                     durable: true,
@@ -96,37 +90,21 @@ namespace NalaCreditAPI.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error publishing message to queue {QueueName}. Marking service as disconnected.", queueName);
-                // Mark disconnected so subsequent attempts will be no-ops and an attempt
-                // to reconnect can be triggered on next publish/subscribes.
-                _isConnected = false;
-                // Optionally attempt a reconnection asynchronously (fire-and-forget)
-                _ = Task.Run(() =>
-                {
-                    try
-                    {
-                        TryConnect();
-                    }
-                    catch (Exception reconEx)
-                    {
-                        _logger.LogDebug(reconEx, "Reconnection attempt to RabbitMQ failed");
-                    }
-                });
-                // swallow to avoid crashing callers
-                return;
+                _logger.LogError(ex, "Error publishing message to queue {QueueName}", queueName);
+                throw;
             }
         }
 
         public void Subscribe<T>(string queueName, Func<T, Task> handler) where T : class
         {
+            if (!_isEnabled || _connection == null)
+            {
+                _logger.LogDebug("RabbitMQ pa disponib – subscription '{QueueName}' inyore (mode degrade)", queueName);
+                return;
+            }
+
             try
             {
-                if (!_isConnected || _connection == null)
-                {
-                    _logger.LogWarning("Cannot subscribe to queue {QueueName} because RabbitMQ is not connected. Subscription will be ignored.", queueName);
-                    return;
-                }
-
                 var channel = _connection.CreateModel();
                 _channels[queueName] = channel;
 
@@ -168,25 +146,27 @@ namespace NalaCreditAPI.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error subscribing to queue {QueueName}. Subscription will be ignored.", queueName);
-                _isConnected = false;
-                return;
+                _logger.LogError(ex, "Error subscribing to queue {QueueName}", queueName);
+                throw;
             }
         }
 
         public void Dispose()
         {
-            foreach (var channel in _channels.Values)
+            if (_isEnabled)
             {
-                channel?.Close();
-                channel?.Dispose();
+                foreach (var channel in _channels.Values)
+                {
+                    channel?.Close();
+                    channel?.Dispose();
+                }
+                _channels.Clear();
+
+                _channel?.Close();
+                _channel?.Dispose();
+                _connection?.Close();
+                _connection?.Dispose();
             }
-            _channels.Clear();
-            
-            _channel?.Close();
-            _channel?.Dispose();
-            _connection?.Close();
-            _connection?.Dispose();
         }
     }
 

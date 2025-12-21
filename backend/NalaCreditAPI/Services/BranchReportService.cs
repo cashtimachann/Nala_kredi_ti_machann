@@ -897,7 +897,8 @@ public class BranchReportService : IBranchReportService
 
     public async Task<SuperAdminDashboardStatsDto> GetDashboardStatsAsync()
     {
-        var today = DateTime.Today;
+        // Use UTC-based dates for report calculations as transaction timestamps are in UTC
+        var today = DateTime.UtcNow.Date;
         var tomorrow = today.AddDays(1);
         var monthStart = new DateTime(today.Year, today.Month, 1);
 
