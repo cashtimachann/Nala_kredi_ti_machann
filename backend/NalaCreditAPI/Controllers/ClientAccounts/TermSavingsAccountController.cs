@@ -21,7 +21,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Ouvrir une nouvelle épargne à terme
         /// </summary>
         [HttpPost("open")]
-        [Authorize(Roles = "Cashier,BranchSupervisor")]
+        [Authorize(Roles = "Cashier,Manager")]
         public async Task<ActionResult<TermSavingsAccountResponseDto>> OpenAccount([FromBody] TermSavingsAccountOpeningDto dto)
         {
             try
@@ -82,7 +82,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Mettre à jour une épargne à terme
         /// </summary>
         [HttpPut("{id}")]
-        [Authorize(Roles = "BranchSupervisor,Admin,SuperAdmin")]
+        [Authorize(Roles = "Manager,Admin,SuperAdmin")]
         public async Task<ActionResult<TermSavingsAccountResponseDto>> UpdateAccount(string id, [FromBody] TermSavingsAccountUpdateDto dto)
         {
             try
@@ -107,7 +107,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Fermer une épargne à terme
         /// </summary>
         [HttpPost("{id}/close")]
-        [Authorize(Roles = "BranchSupervisor,Admin,SuperAdmin")]
+        [Authorize(Roles = "Manager,Admin,SuperAdmin")]
         public async Task<ActionResult> CloseAccount(string id, [FromBody] CloseAccountDto dto)
         {
             try
@@ -163,7 +163,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Suspendre ou activer une épargne à terme (toggle entre ACTIVE et SUSPENDED)
         /// </summary>
         [HttpPut("{id}/toggle-status")]
-        [Authorize(Roles = "BranchSupervisor,Admin,SuperAdmin")]
+        [Authorize(Roles = "Manager,Admin,SuperAdmin")]
         public async Task<ActionResult> ToggleStatus(string id)
         {
             try
@@ -188,7 +188,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Traiter une transaction (dépôt ou retrait) sur une épargne à terme
         /// </summary>
         [HttpPost("transaction")]
-        [Authorize(Roles = "Cashier,BranchSupervisor,Admin,SuperAdmin")]
+        [Authorize(Roles = "Cashier,Manager,Admin,SuperAdmin")]
         public async Task<ActionResult> ProcessTransaction([FromBody] TermSavingsTransactionDto dto)
         {
             try
@@ -213,7 +213,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Obtenir toutes les transactions des épargnes à terme avec filtres optionnels
         /// </summary>
         [HttpGet("transactions")]
-        [Authorize(Roles = "Cashier,BranchSupervisor,Admin,SuperAdmin")]
+        [Authorize(Roles = "Cashier,Manager,BranchManager,AssistantManager,Admin,SuperAdmin")]
         public async Task<ActionResult<List<object>>> GetAllTransactions(
             [FromQuery] string? accountNumber = null,
             [FromQuery] string? type = null,
@@ -256,7 +256,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Calculer les intérêts pour une épargne à terme
         /// </summary>
         [HttpPost("{accountId}/calculate-interest")]
-        [Authorize(Roles = "BranchSupervisor,Admin,SuperAdmin")]
+        [Authorize(Roles = "Manager,Admin,SuperAdmin")]
         public async Task<ActionResult> CalculateInterest(string accountId)
         {
             var success = await _accountService.CalculateInterestAsync(accountId);
@@ -270,7 +270,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Renouveler une épargne à terme arrivée à échéance
         /// </summary>
         [HttpPost("{accountId}/renew")]
-        [Authorize(Roles = "BranchSupervisor,Admin,SuperAdmin")]
+        [Authorize(Roles = "Manager,Admin,SuperAdmin")]
         public async Task<ActionResult<TermSavingsAccountResponseDto>> Renew(string accountId, [FromBody] NalaCreditAPI.DTOs.ClientAccounts.TermSavingsAccountRenewDto dto)
         {
             try
@@ -306,7 +306,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Statistiques des épargnes à terme
         /// </summary>
         [HttpGet("statistics")]
-        [Authorize(Roles = "BranchSupervisor,Admin,SuperAdmin")]
+        [Authorize(Roles = "Manager,Admin,SuperAdmin")]
         public async Task<ActionResult<TermSavingsAccountStatisticsDto>> GetStatistics()
         {
             var statistics = await _accountService.GetStatisticsAsync();

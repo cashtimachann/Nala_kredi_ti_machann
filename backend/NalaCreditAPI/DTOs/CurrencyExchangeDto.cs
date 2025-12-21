@@ -7,6 +7,8 @@ namespace NalaCreditAPI.DTOs
     public class CurrencyExchangeRateDto
     {
         public Guid Id { get; set; }
+        public int? BranchId { get; set; }
+        public string? BranchName { get; set; }
         public CurrencyType BaseCurrency { get; set; }
         public string BaseCurrencyName { get; set; } = string.Empty;
         public CurrencyType TargetCurrency { get; set; }
@@ -27,6 +29,8 @@ namespace NalaCreditAPI.DTOs
 
     public class CreateExchangeRateDto
     {
+        public string? BranchId { get; set; } // Optional: Branch-specific rate
+
         [Required]
         public CurrencyType BaseCurrency { get; set; } = CurrencyType.HTG;
 
@@ -76,6 +80,7 @@ namespace NalaCreditAPI.DTOs
         public bool? IsActive { get; set; }
         public DateTime? EffectiveDateFrom { get; set; }
         public DateTime? EffectiveDateTo { get; set; }
+        public string? BranchId { get; set; } // Can be integer or Guid string
         public int Page { get; set; } = 1;
         public int PageSize { get; set; } = 20;
     }

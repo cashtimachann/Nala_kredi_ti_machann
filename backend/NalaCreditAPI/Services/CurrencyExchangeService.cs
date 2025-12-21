@@ -69,6 +69,13 @@ namespace NalaCreditAPI.Services
                 throw new InvalidOperationException("Selling rate must be higher than buying rate");
             }
 
+            // Parse branch ID if provided
+            int? branchId = null;
+            if (!string.IsNullOrEmpty(dto.BranchId) && int.TryParse(dto.BranchId, out var parsedBranchId))
+            {
+                branchId = parsedBranchId;
+            }
+
             // Deactivate existing active rates for the same currency pair
             var existingRates = await _context.CurrencyExchangeRates
                 .Where(r => r.BaseCurrency == dto.BaseCurrency &&
@@ -87,6 +94,7 @@ namespace NalaCreditAPI.Services
             var exchangeRate = new CurrencyExchangeRate
             {
                 Id = Guid.NewGuid(),
+                BranchId = branchId,
                 BaseCurrency = dto.BaseCurrency,
                 TargetCurrency = dto.TargetCurrency,
                 BuyingRate = dto.BuyingRate,
@@ -154,6 +162,12 @@ namespace NalaCreditAPI.Services
         public async Task<List<CurrencyExchangeRateDto>> GetExchangeRatesAsync(ExchangeRateSearchDto searchDto)
         {
             var query = _context.CurrencyExchangeRates.AsQueryable();
+
+            // Parse BranchId - accept both string and integer
+            if (!string.IsNullOrEmpty(searchDto.BranchId) && int.TryParse(searchDto.BranchId, out var branchId))
+            {
+                query = query.Where(r => r.BranchId == branchId);
+            }
 
             if (searchDto.BaseCurrency.HasValue)
                 query = query.Where(r => r.BaseCurrency == searchDto.BaseCurrency.Value);
@@ -997,9 +1011,18 @@ Thank you for your business!
 
         private CurrencyExchangeRateDto MapExchangeRateToDto(CurrencyExchangeRate rate)
         {
+            string? branchName = null;
+            if (rate.BranchId.HasValue)
+            {
+                var branch = _context.Branches.FirstOrDefault(b => b.Id == rate.BranchId.Value);
+                branchName = branch?.Name;
+            }
+
             return new CurrencyExchangeRateDto
             {
                 Id = rate.Id,
+                BranchId = rate.BranchId,
+                BranchName = branchName,
                 BaseCurrency = rate.BaseCurrency,
                 BaseCurrencyName = rate.BaseCurrency.ToString(),
                 TargetCurrency = rate.TargetCurrency,

@@ -6,7 +6,10 @@ using NalaCreditAPI.Data;
 using NalaCreditAPI.DTOs;
 using NalaCreditAPI.Helpers;
 using NalaCreditAPI.Models;
+using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 
 // Alias pour simplifier le code
 using ApplicationUser = NalaCreditAPI.Models.User;
@@ -21,6 +24,17 @@ namespace NalaCreditAPI.Controllers
         private readonly ApplicationDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<AdminController> _logger;
+        private static readonly HashSet<UserRole> BranchScopedRoles = new()
+        {
+            UserRole.Manager
+        };
+        private static readonly HashSet<AdminTypeDto> BranchManagerCreatableTypes = new()
+        {
+            AdminTypeDto.CAISSIER,
+            AdminTypeDto.SECRETAIRE_ADMINISTRATIF,
+            AdminTypeDto.AGENT_DE_CREDIT,
+            AdminTypeDto.COMPTABLE_FINANCE
+        };
 
         public AdminController(
             ApplicationDbContext context,
@@ -34,11 +48,42 @@ namespace NalaCreditAPI.Controllers
 
         // GET: api/admin
         [HttpGet]
-        [Authorize(Roles = "SuperAdmin")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager")]
         public async Task<ActionResult<AdminListResponseDto>> GetAdmins([FromQuery] AdminFiltersDto filters)
         {
             try
             {
+                filters ??= new AdminFiltersDto();
+
+                var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var currentUser = currentUserId != null
+                    ? await _userManager.FindByIdAsync(currentUserId)
+                    : null;
+
+                if (currentUser == null)
+                {
+                    return Unauthorized("Utilisateur introuvable");
+                }
+
+                var isSuperAdmin = currentUser.Role == UserRole.SuperAdmin || currentUser.Role == UserRole.Admin;
+                var isBranchScoped = BranchScopedRoles.Contains(currentUser.Role);
+
+                if (!isSuperAdmin && !isBranchScoped)
+                {
+                    return Forbid();
+                }
+
+                if (isBranchScoped)
+                {
+                    if (!currentUser.BranchId.HasValue)
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, "Ce profil n'est associé à aucune succursale.");
+                    }
+
+                    var enforcedBranch = currentUser.BranchId.Value.ToString();
+                    filters.AssignedBranch = enforcedBranch;
+                }
+
                 // Get all users (all roles are administrative users)
                 var query = _context.Users.AsQueryable();
 
@@ -152,7 +197,7 @@ namespace NalaCreditAPI.Controllers
                 
                 if (currentUser?.Role != UserRole.SuperAdmin && currentUser?.Id != id)
                 {
-                    return Forbid("Accès non autorisé");
+                    return StatusCode(StatusCodes.Status403Forbidden, "Accès non autorisé");
                 }
 
                 var adminDto = new AdminDto
@@ -196,7 +241,7 @@ namespace NalaCreditAPI.Controllers
 
         // POST: api/admin
         [HttpPost]
-        [Authorize(Roles = "SuperAdmin")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager")]
         public async Task<ActionResult<AdminDto>> CreateAdmin(AdminCreateDto createDto)
         {
             try
@@ -204,6 +249,35 @@ namespace NalaCreditAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     return BadRequest(ModelState);
+                }
+
+                var currentUser = await GetCurrentUser();
+                if (currentUser == null)
+                {
+                    return Unauthorized("Utilisateur introuvable");
+                }
+
+                var isSuperAdmin = currentUser.Role == UserRole.SuperAdmin || currentUser.Role == UserRole.Admin;
+                var isBranchManager = currentUser.Role == UserRole.Manager;
+                if (!isSuperAdmin && !isBranchManager)
+                {
+                    return Forbid();
+                }
+
+                if (isBranchManager)
+                {
+                    if (!currentUser.BranchId.HasValue)
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, "Ce profil manager n'est lié à aucune succursale");
+                    }
+
+                    if (!BranchManagerCreatableTypes.Contains(createDto.AdminType))
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, "Ce type de compte ne peut être créé que par la Direction Générale");
+                    }
+
+                    var enforcedBranchId = currentUser.BranchId.Value.ToString();
+                    createDto.AssignedBranches = new List<string> { enforcedBranchId };
                 }
 
                 // Check if user with this email already exists
@@ -288,33 +362,77 @@ namespace NalaCreditAPI.Controllers
 
         // PUT: api/admin/{id}
         [HttpPut("{id}")]
-        [Authorize(Roles = "SuperAdmin")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager")]
         public async Task<ActionResult<AdminDto>> UpdateAdmin(string id, AdminUpdateDto updateDto)
         {
             try
             {
-                if (!ModelState.IsValid)
-                {
-                    return BadRequest(ModelState);
-                }
-
                 var user = await _userManager.FindByIdAsync(id);
                 if (user == null)
                 {
                     return NotFound("Administrateur introuvable");
                 }
 
-                // Validate that at least one branch is assigned
+                updateDto.AssignedBranches ??= new List<string>();
+
+                var currentUser = await GetCurrentUser();
+                if (currentUser == null)
+                {
+                    return Unauthorized("Utilisateur introuvable");
+                }
+
+                var isSuperAdmin = currentUser.Role == UserRole.SuperAdmin;
+                var isAdmin = currentUser.Role == UserRole.Admin;
+                var isBranchManager = currentUser.Role == UserRole.Manager;
+
+                if (!isSuperAdmin && !isAdmin && !isBranchManager)
+                {
+                    return Forbid();
+                }
+
+                if (user.Role == UserRole.SuperAdmin && !isSuperAdmin)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, "Impossible de modifier un Super Administrateur");
+                }
+
+                if (isBranchManager)
+                {
+                    if (!currentUser.BranchId.HasValue)
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, "Ce profil manager n'est lié à aucune succursale");
+                    }
+
+                    if (!user.BranchId.HasValue || user.BranchId.Value != currentUser.BranchId.Value)
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, "Vous ne pouvez modifier que les comptes de votre succursale");
+                    }
+
+                    var existingAdminType = user.AdminType.HasValue
+                        ? (AdminTypeDto)user.AdminType.Value
+                        : MapUserRoleToAdminType(user.Role);
+
+                    if (!BranchManagerCreatableTypes.Contains(existingAdminType) ||
+                        !BranchManagerCreatableTypes.Contains(updateDto.AdminType))
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, "Ce type de compte ne peut être modifié que par la Direction Générale");
+                    }
+
+                    var enforcedBranchId = currentUser.BranchId.Value.ToString();
+                    updateDto.AssignedBranches = new List<string> { enforcedBranchId };
+
+                    // Remove validation errors tied to AssignedBranches since we enforce it here
+                    ModelState.Remove(nameof(updateDto.AssignedBranches));
+                    ModelState.Remove("assignedBranches");
+                }
+
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(ModelState);
+                }
+
                 if (!updateDto.AssignedBranches.Any())
                 {
                     return BadRequest("Au moins une succursale doit être assignée");
-                }
-
-                // Prevent modification of SuperAdmin by non-SuperAdmin
-                var currentUser = await GetCurrentUser();
-                if (user.Role == UserRole.SuperAdmin && currentUser?.Role != UserRole.SuperAdmin)
-                {
-                    return Forbid("Impossible de modifier un Super Administrateur");
                 }
 
                 // Update user properties
@@ -478,7 +596,7 @@ namespace NalaCreditAPI.Controllers
                 // Only SuperAdmin can change other admins' passwords, or admin can change their own
                 if (currentUserId != id && currentUser?.Role != UserRole.SuperAdmin)
                 {
-                    return Forbid("Accès non autorisé");
+                    return StatusCode(StatusCodes.Status403Forbidden, "Accès non autorisé");
                 }
 
                 var user = await _userManager.FindByIdAsync(id);

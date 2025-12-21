@@ -93,7 +93,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Mettre à jour un compte courant
         /// </summary>
         [HttpPut("{id}")]
-        [Authorize(Roles = "BranchSupervisor,Admin,SuperAdmin")]
+        [Authorize(Roles = "Manager,Admin,SuperAdmin")]
         public async Task<ActionResult<CurrentAccountResponseDto>> UpdateAccount(string id, [FromBody] CurrentAccountUpdateDto dto)
         {
             try
@@ -118,7 +118,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Fermer un compte courant
         /// </summary>
         [HttpPost("{id}/close")]
-        [Authorize(Roles = "BranchSupervisor,Admin,SuperAdmin")]
+        [Authorize(Roles = "Manager,Admin,SuperAdmin")]
         public async Task<ActionResult> CloseAccount(string id, [FromBody] CloseAccountDto dto)
         {
             try
@@ -159,7 +159,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Statistiques des comptes courants
         /// </summary>
         [HttpGet("statistics")]
-        [Authorize(Roles = "BranchSupervisor,Admin,SuperAdmin")]
+        [Authorize(Roles = "Manager,Admin,SuperAdmin")]
         public async Task<ActionResult<CurrentAccountStatisticsDto>> GetStatistics()
         {
             var statistics = await _accountService.GetStatisticsAsync();
@@ -220,7 +220,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Annuler une transaction sur un compte courant
         /// </summary>
         [HttpPost("transactions/{transactionId}/cancel")]
-        [Authorize(Roles = "Cashier,Manager,Admin,SuperAdmin,BranchSupervisor")]
+        [Authorize(Roles = "Cashier,Manager,Admin,SuperAdmin,Manager")]
         public async Task<ActionResult> CancelTransaction(string transactionId, [FromBody] CancelTransactionDto dto)
         {
             try
@@ -248,7 +248,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Mettre à jour le statut d'un compte courant (suspendre/réactiver)
         /// </summary>
         [HttpPatch("{id}/status")]
-        [Authorize(Roles = "BranchSupervisor,Admin,SuperAdmin")]
+        [Authorize(Roles = "Manager,Admin,SuperAdmin")]
         public async Task<ActionResult<CurrentAccountResponseDto>> UpdateAccountStatus(string id, [FromBody] UpdateAccountStatusDto dto)
         {
             try

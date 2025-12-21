@@ -102,7 +102,24 @@ interface CurrentAccountStats {
   recentTransactions: number;
 }
 
-const CurrentAccountManagement: React.FC<{ showTabs?: boolean }> = ({ showTabs = true }) => {
+interface CurrentAccountManagementProps {
+  showTabs?: boolean;
+  effectiveBranchId?: number | string;
+  isBranchLocked?: boolean;
+}
+
+const CurrentAccountManagement: React.FC<CurrentAccountManagementProps> = ({
+  showTabs = true,
+  effectiveBranchId: enforcedBranchId,
+  isBranchLocked: enforcedBranchLock,
+}) => {
+  const currentUser = apiService.getCurrentUser();
+  const userBranchId = currentUser?.branchId;
+  const roleNorm = (currentUser?.role || '').toString().toLowerCase().replace(/[\s_-]+/g, '');
+  const isBranchHead = ['manager','branchsupervisor','chefdesuccursale','branchmanager','assistantmanager','chefdesuccursal'].includes(roleNorm);
+  const derivedBranchId = isBranchHead ? userBranchId : undefined;
+  const effectiveBranchId = (enforcedBranchId != null ? enforcedBranchId : derivedBranchId) ?? undefined;
+  const isBranchLocked = enforcedBranchLock ?? Boolean(effectiveBranchId);
   const [params, setParams] = useSearchParams();
   const [accounts, setAccounts] = useState<CurrentAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,11 +179,11 @@ const CurrentAccountManagement: React.FC<{ showTabs?: boolean }> = ({ showTabs =
     next.set('accSearch', searchTerm || '');
     next.set('accCurrency', currencyFilter);
     next.set('accStatus', statusFilter || '');
-    next.set('accBranch', branchFilter || '');
+    next.set('accBranch', (effectiveBranchId ? String(effectiveBranchId) : (branchFilter || '')));
     setParams(next, { replace: true });
     loadAccounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currencyFilter, statusFilter, searchTerm, branchFilter]);
+  }, [currencyFilter, statusFilter, searchTerm, branchFilter, effectiveBranchId]);
 
   // Reflect tab changes into URL without disrupting other params
   useEffect(() => {
@@ -202,13 +219,24 @@ const CurrentAccountManagement: React.FC<{ showTabs?: boolean }> = ({ showTabs =
     return () => { mounted = false; };
   }, []);
 
+  // Lock branch filter for branch heads
+  useEffect(() => {
+    if (effectiveBranchId) {
+      setBranchFilter(String(effectiveBranchId));
+    }
+  }, [effectiveBranchId]);
+
   const loadAccounts = async () => {
     try {
       setLoading(true);
   const filters: any = { accountType: 'CURRENT' };
       if (currencyFilter !== 'ALL') filters.currency = currencyFilter;
       if (statusFilter) filters.status = statusFilter as any;
-  if (branchFilter) filters.branchId = branchFilter;
+  if (effectiveBranchId) {
+        filters.branchId = effectiveBranchId;
+      } else if (branchFilter) {
+        filters.branchId = branchFilter;
+      }
       if (searchTerm) filters.customerName = searchTerm; // also matches accountNumber server-side via query mapper
 
       const list = await apiService.getClientAccounts(filters);
@@ -861,16 +889,24 @@ const CurrentAccountManagement: React.FC<{ showTabs?: boolean }> = ({ showTabs =
           <option value="USD">USD</option>
         </select>
 
-        <select
-          value={branchFilter}
-          onChange={(e) => setBranchFilter(e.target.value)}
-          className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        >
-          <option value="">Toutes succursales</option>
-          {branches.map(b => (
-            <option key={b.id} value={String(b.id)}>{b.name}</option>
-          ))}
-        </select>
+        <div className="flex items-center">
+          <select
+            value={effectiveBranchId ? String(effectiveBranchId) : branchFilter}
+            onChange={(e) => { if (!effectiveBranchId) setBranchFilter(e.target.value); }}
+            className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            disabled={!!effectiveBranchId}
+          >
+            {!effectiveBranchId && (
+              <option value="">Toutes succursales</option>
+            )}
+            {branches.map(b => (
+              <option key={b.id} value={String(b.id)}>{b.name}</option>
+            ))}
+          </select>
+          {effectiveBranchId && (
+            <span className="ml-2 text-xs text-gray-500 italic">Branch locked</span>
+          )}
+        </div>
 
         <select
           value={statusFilter}
@@ -1028,7 +1064,11 @@ const CurrentAccountManagement: React.FC<{ showTabs?: boolean }> = ({ showTabs =
 
       {/* Clients Tab */}
       {tab === 'clients' && showTabs && (
-        <ClientsTabCurrent onOpenCurrent={(customer) => { setInitialCustomerForOpen(customer); setShowCreateForm(true); }} />
+        <ClientsTabCurrent
+          onOpenCurrent={(customer) => { setInitialCustomerForOpen(customer); setShowCreateForm(true); }}
+          effectiveBranchId={effectiveBranchId}
+          isBranchLocked={isBranchLocked}
+        />
       )}
 
       {/* Transactions Tab */}
@@ -1038,15 +1078,18 @@ const CurrentAccountManagement: React.FC<{ showTabs?: boolean }> = ({ showTabs =
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Transactions - Comptes Courants</h1>
             <p className="text-gray-600 mt-1">Résumé des transactions des comptes courants, par devise et actions rapides</p>
+            {isBranchLocked && (
+              <p className="text-xs text-amber-600 mt-1">Succursale verrouillée — seules les transactions de votre agence sont accessibles.</p>
+            )}
           </div>
-          <TransactionsTabCurrent />
+          <TransactionsTabCurrent effectiveBranchId={effectiveBranchId} isBranchLocked={isBranchLocked} />
         </div>
       )}
 
       {/* Rapports Tab */}
       {tab === 'rapports' && showTabs && (
         <div className="space-y-6">
-          <CurrentAccountReports />
+          <CurrentAccountReports effectiveBranchId={effectiveBranchId} isBranchLocked={isBranchLocked} />
         </div>
       )}
 
@@ -1091,10 +1134,17 @@ const CurrentAccountManagement: React.FC<{ showTabs?: boolean }> = ({ showTabs =
 export default CurrentAccountManagement;
 
 // Clients tab: list/search customers and open a current account directly
-const ClientsTabCurrent: React.FC<{ onOpenCurrent: (customer: any) => void }> = ({ onOpenCurrent }) => {
+interface ClientsTabCurrentProps {
+  onOpenCurrent: (customer: any) => void;
+  effectiveBranchId?: number | string;
+  isBranchLocked?: boolean;
+}
+
+const ClientsTabCurrent: React.FC<ClientsTabCurrentProps> = ({ onOpenCurrent, effectiveBranchId, isBranchLocked }) => {
   const [loading, setLoading] = useState(false);
   const [term, setTerm] = useState('');
   const [results, setResults] = useState<any[]>([]);
+  const [allCustomers, setAllCustomers] = useState<any[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [showCustomerDetailsModal, setShowCustomerDetailsModal] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
@@ -1114,6 +1164,16 @@ const ClientsTabCurrent: React.FC<{ onOpenCurrent: (customer: any) => void }> = 
   const [pageSize, setPageSize] = useState(20);
 
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
+  const normalizedBranchId = React.useMemo(() => {
+    if (effectiveBranchId == null) return undefined;
+    const parsed = Number(effectiveBranchId);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }, [effectiveBranchId]);
+  const lockedBranchName = React.useMemo(() => {
+    if (normalizedBranchId == null) return '';
+    const match = branches.find(b => Number(b.id) === normalizedBranchId);
+    return match?.name || `Succursale #${normalizedBranchId}`;
+  }, [branches, normalizedBranchId]);
 
   // Load branch list for filter options
   useEffect(() => {
@@ -1231,7 +1291,10 @@ const ClientsTabCurrent: React.FC<{ onOpenCurrent: (customer: any) => void }> = 
   const loadCurrentClients = async () => {
     setLoading(true);
     try {
-      const matched = await clientAccountCustomerLoader.loadCustomersHavingAccounts('CURRENT');
+      const matched = await clientAccountCustomerLoader.loadCustomersHavingAccounts(
+        'CURRENT',
+        normalizedBranchId != null ? { branchId: normalizedBranchId } : undefined
+      );
       // Sort by most recent first (createdAt descending)
       const sorted = Array.isArray(matched) ? matched.sort((a, b) => {
         const dateA = new Date(a.createdAt || 0);
@@ -1239,11 +1302,13 @@ const ClientsTabCurrent: React.FC<{ onOpenCurrent: (customer: any) => void }> = 
         return dateB.getTime() - dateA.getTime();
       }) : matched;
       setResults(sorted || []);
+      setAllCustomers(sorted || []);
       if (!matched?.length) toast('Aucun client trouvé avec compte courant');
     } catch (e) {
       console.error('❌ Error loading current clients:', e);
       toast.error('Erreur lors du chargement des clients (courants)');
       setResults([]);
+      setAllCustomers([]);
     } finally {
       setLoading(false);
     }
@@ -1253,6 +1318,24 @@ const ClientsTabCurrent: React.FC<{ onOpenCurrent: (customer: any) => void }> = 
     const raw = term.trim();
     if (!raw || raw.length < 2) return;
     try {
+      if (isBranchLocked) {
+        const filtered = (allCustomers || []).filter((customer: any) => {
+          const q = raw.toLowerCase();
+          const digits = raw.replace(/\D+/g, '');
+          const name = (customer.fullName || `${customer.firstName || ''} ${customer.lastName || ''}`).toLowerCase();
+          const phone = (customer.contact?.primaryPhone || '').replace(/\D+/g, '');
+          const doc = (customer.identity?.documentNumber || '').toString().toLowerCase();
+          const code = (customer.customerCode || '').toString().toLowerCase();
+          return (
+            name.includes(q) ||
+            (!!digits && phone.includes(digits)) ||
+            doc.includes(q) ||
+            code.includes(q)
+          );
+        });
+        setResults(filtered);
+        return;
+      }
       const q = raw.toUpperCase();
       if (lastRef.current === q) return;
       lastRef.current = q;
@@ -1269,14 +1352,28 @@ const ClientsTabCurrent: React.FC<{ onOpenCurrent: (customer: any) => void }> = 
 
   React.useEffect(() => { loadCurrentClients(); }, []);
   React.useEffect(() => {
+    if (isBranchLocked && lockedBranchName) {
+      setFilters((prev) => (prev.branch === lockedBranchName ? prev : { ...prev, branch: lockedBranchName }));
+    }
+  }, [isBranchLocked, lockedBranchName]);
+  React.useEffect(() => {
     const raw = term.trim();
-    if (!raw || raw.length < 2) return;
+    if (!raw || raw.length < 2) {
+      if (isBranchLocked) {
+        setResults(allCustomers);
+      }
+      return;
+    }
+    if (isBranchLocked) {
+      void doSearch();
+      return;
+    }
     const upper = raw.toUpperCase();
     const delay = CODE_PATTERN.test(upper) ? 200 : 500;
-    const h = setTimeout(() => { if (lastRef.current !== upper) doSearch(); }, delay);
+    const h = setTimeout(() => { if (lastRef.current !== upper) void doSearch(); }, delay);
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [term]);
+  }, [term, isBranchLocked, allCustomers]);
 
   const filteredCustomers = Array.isArray(results) ? results.filter(customer => {
     // Filtre par succursale (branch) — attached by clientAccountCustomerLoader when possible
@@ -1328,6 +1425,9 @@ const ClientsTabCurrent: React.FC<{ onOpenCurrent: (customer: any) => void }> = 
           <p className="text-gray-600 mt-1">
             Rechercher, filtrer et gérer tous les clients avec comptes courants
           </p>
+          {isBranchLocked && (
+            <p className="text-xs text-amber-600 mt-1">Succursale verrouillée — seuls les clients de {lockedBranchName || 'votre agence'} sont visibles.</p>
+          )}
         </div>
       </div>
 
@@ -1442,15 +1542,28 @@ const ClientsTabCurrent: React.FC<{ onOpenCurrent: (customer: any) => void }> = 
                   Succursale
                 </label>
                 <select
-                  value={filters.branch}
-                  onChange={(e) => setFilters({ ...filters, branch: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={isBranchLocked ? (lockedBranchName || '') : filters.branch}
+                  onChange={(e) => {
+                    if (isBranchLocked) return;
+                    setFilters({ ...filters, branch: e.target.value });
+                  }}
+                  disabled={isBranchLocked}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${isBranchLocked ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-200' : 'border-gray-300'}`}
                 >
-                  <option value="">Toutes les succursales</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.name}>{b.name}</option>
-                  ))}
+                  {isBranchLocked ? (
+                    <option value={lockedBranchName || ''}>{lockedBranchName || 'Succursale verrouillée'}</option>
+                  ) : (
+                    <>
+                      <option value="">Toutes les succursales</option>
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.name}>{b.name}</option>
+                      ))}
+                    </>
+                  )}
                 </select>
+                {isBranchLocked && (
+                  <p className="text-xs text-amber-600 mt-1">Succursale verrouillée — filtrage forcé sur {lockedBranchName || 'votre agence'}.</p>
+                )}
               </div>
 
               {/* Status Filter */}
@@ -1757,7 +1870,12 @@ const ClientsTabCurrent: React.FC<{ onOpenCurrent: (customer: any) => void }> = 
 
 
 // Transactions tab: search and display transactions for current accounts
-const TransactionsTabCurrent: React.FC = () => {
+interface TransactionsTabCurrentProps {
+  effectiveBranchId?: number | string;
+  isBranchLocked?: boolean;
+}
+
+const TransactionsTabCurrent: React.FC<TransactionsTabCurrentProps> = ({ effectiveBranchId, isBranchLocked }) => {
   const [loading, setLoading] = useState(false);
   const [accountNumber, setAccountNumber] = useState('');
   const [transactions, setTransactions] = useState<CurrentAccountTransaction[]>([]);
@@ -1812,6 +1930,16 @@ const TransactionsTabCurrent: React.FC = () => {
   const [newTxSubmitting, setNewTxSubmitting] = useState<boolean>(false);
   const [accountLiveInfo, setAccountLiveInfo] = useState<{ balance: number; availableBalance: number; currency: 'HTG' | 'USD'; status?: string } | null>(null);
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
+  const normalizedBranchId = React.useMemo(() => {
+    if (effectiveBranchId == null) return undefined;
+    const parsed = Number(effectiveBranchId);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }, [effectiveBranchId]);
+  const lockedBranchName = React.useMemo(() => {
+    if (normalizedBranchId == null) return '';
+    const found = branches.find((b) => Number(b.id) === normalizedBranchId);
+    return found?.name || `Succursale #${normalizedBranchId}`;
+  }, [branches, normalizedBranchId]);
 
   // Normalize backend status (enum int or various strings) to canonical tokens
   const normalizeStatus = (raw: any): 'COMPLETED' | 'CANCELLED' | 'PENDING' | 'FAILED' | 'PROCESSING' | string => {
@@ -1848,6 +1976,23 @@ const TransactionsTabCurrent: React.FC = () => {
     }
   };
 
+  const ensureAccountAccessible = React.useCallback(async (acc: string) => {
+    if (!acc || normalizedBranchId == null) return true;
+    try {
+      const list = await apiService.getClientAccounts({
+        accountType: AccountType.CURRENT,
+        accountNumber: acc,
+        customerName: acc,
+        branchId: normalizedBranchId,
+      } as any);
+      const lower = acc.toLowerCase();
+      return Array.isArray(list) && list.some((item: any) => String(item.accountNumber || '').toLowerCase() === lower);
+    } catch (err) {
+      console.error('Erreur de vérification de succursale pour le compte', acc, err);
+      return false;
+    }
+  }, [normalizedBranchId]);
+
   const refreshBalance = async (acc: string) => {
     try {
       const info = await apiService.getCurrentAccountBalance(acc);
@@ -1862,6 +2007,13 @@ const TransactionsTabCurrent: React.FC = () => {
     if (!acc) return;
     try {
       setLoading(true);
+      const hasAccess = await ensureAccountAccessible(acc);
+      if (!hasAccess) {
+        toast.error('Ce compte ne fait pas partie de votre succursale');
+        setTransactions([]);
+        setAccountLiveInfo(null);
+        return;
+      }
       const data = await apiService.getAccountTransactions(acc);
       const raw: any[] = (data as any[]) || [];
       const mapped: CurrentAccountTransaction[] = raw.map((t: any) => {
@@ -1944,6 +2096,11 @@ const TransactionsTabCurrent: React.FC = () => {
     };
     fetchBranches();
   }, []);
+  useEffect(() => {
+    if (isBranchLocked) {
+      setBranchFilter('ALL');
+    }
+  }, [isBranchLocked]);
 
   // Listen for "start-new-transaction" to open modal and prefill account number
   useEffect(() => {
@@ -1980,7 +2137,11 @@ const TransactionsTabCurrent: React.FC = () => {
     newTxLookupTimer.current = setTimeout(async () => {
       try {
         setNewTxLookupLoading(true);
-        const list = await apiService.getClientAccounts({ accountType: AccountType.CURRENT, accountNumber: acc } as any);
+        const list = await apiService.getClientAccounts({
+          accountType: AccountType.CURRENT,
+          accountNumber: acc,
+          ...(normalizedBranchId != null ? { branchId: normalizedBranchId } : {}),
+        } as any);
         const first = (list || [])[0];
         const name = first?.customerName || '';
         setNewTxClientName(name);
@@ -2016,7 +2177,11 @@ const TransactionsTabCurrent: React.FC = () => {
     newTxDestinationLookupTimer.current = setTimeout(async () => {
       try {
         setNewTxDestinationLookupLoading(true);
-        const list = await apiService.getClientAccounts({ accountType: AccountType.CURRENT, accountNumber: acc } as any);
+        const list = await apiService.getClientAccounts({
+          accountType: AccountType.CURRENT,
+          accountNumber: acc,
+          ...(normalizedBranchId != null ? { branchId: normalizedBranchId } : {}),
+        } as any);
         const first = (list || [])[0];
         const name = first?.customerName || '';
         setNewTxDestinationClientName(name);
@@ -2043,7 +2208,10 @@ const TransactionsTabCurrent: React.FC = () => {
         if (accountNumber && accountNumber.trim().length > 0) return;
         setLoading(true);
         // Load a limited list of current accounts, then fetch their transactions in parallel
-        const accounts = await apiService.getClientAccounts({ accountType: AccountType.CURRENT } as any);
+        const accounts = await apiService.getClientAccounts({
+          accountType: AccountType.CURRENT,
+          ...(normalizedBranchId != null ? { branchId: normalizedBranchId } : {}),
+        } as any);
         const list = (accounts || []).slice(0, 20); // cap to 20 accounts to avoid heavy loads
         const txArrays = await Promise.all(
           list.map((a: any) => apiService.getAccountTransactions(a.accountNumber || a.AccountNumber || ''))
@@ -2574,6 +2742,20 @@ const TransactionsTabCurrent: React.FC = () => {
     if (!newTx.amount || isNaN(amt) || amt <= 0) { toast.error('Montant invalide'); return; }
     try {
       setNewTxSubmitting(true);
+      if (normalizedBranchId != null) {
+        const allowedSource = await ensureAccountAccessible(newTx.accountNumber.trim());
+        if (!allowedSource) {
+          toast.error('Ce compte ne fait pas partie de votre succursale');
+          return;
+        }
+        if (newTx.type === 'TRANSFER' && newTx.destinationAccountNumber?.trim()) {
+          const allowedDest = await ensureAccountAccessible(newTx.destinationAccountNumber.trim());
+          if (!allowedDest) {
+            toast.error('Compte destinataire non autorisé pour votre succursale');
+            return;
+          }
+        }
+      }
       // If transfer, call the transfer endpoint
       if (newTx.type === 'TRANSFER') {
         if (!newTx.destinationAccountNumber?.trim()) {
@@ -2727,16 +2909,18 @@ const TransactionsTabCurrent: React.FC = () => {
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Succursale</label>
             <select
-              value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              value={isBranchLocked ? 'ALL' : branchFilter}
+              onChange={(e) => { if (!isBranchLocked) setBranchFilter(e.target.value); }}
+              disabled={isBranchLocked}
+              className={`w-full px-3 py-2 border rounded-lg ${isBranchLocked ? 'bg-gray-100 cursor-not-allowed text-gray-500 border-gray-200' : 'border-gray-300'}`}
               title="Filtrer par succursale"
             >
-              <option value="ALL">Toutes</option>
-              {branchOptions.map((b) => (
+              <option value="ALL">{isBranchLocked ? 'Succursale verrouillée' : 'Toutes'}</option>
+              {!isBranchLocked && branchOptions.map((b) => (
                 <option key={b} value={b}>{b}</option>
               ))}
             </select>
+            {isBranchLocked && (<p className="text-[11px] text-amber-600 mt-1">Filtrage succursale désactivé car vous êtes limité à {lockedBranchName || 'votre agence'}.</p>)}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
@@ -3238,6 +3422,10 @@ const TransactionsTabCurrent: React.FC = () => {
 
 // Modal to open a Current Account for an existing customer
 function OpenCurrentAccountModal({ onClose, onSuccess, initialCustomer }: { onClose: () => void; onSuccess: () => void; initialCustomer?: any }) {
+  const currentUser = apiService.getCurrentUser();
+  const userBranchId = currentUser?.branchId;
+  const roleNorm = (currentUser?.role || '').toString().toLowerCase().replace(/[\s_-]+/g, '');
+  const isBranchHead = ['manager','branchsupervisor','branchmanager','assistantmanager','chefdesuccursale','chefdesuccursal'].includes(roleNorm);
   const [step, setStep] = useState<'customer' | 'account'>('customer');
   const [customerSearch, setCustomerSearch] = useState('');
   const [customers, setCustomers] = useState<any[]>([]);
@@ -3340,7 +3528,9 @@ function OpenCurrentAccountModal({ onClose, onSuccess, initialCustomer }: { onCl
           const data = await apiService.getAllBranches();
           const mapped = (data || []).map((b: any) => ({ id: b.id || b.Id, name: b.name || b.Name }));
           setBranches(mapped);
-          if (mapped.length && !accountForm.branchId) {
+          if (isBranchHead && userBranchId) {
+            setAccountForm((f: any) => ({ ...f, branchId: Number(userBranchId) }));
+          } else if (mapped.length && !accountForm.branchId) {
             setAccountForm((f: any) => ({ ...f, branchId: mapped[0].id }));
           }
         } catch {
@@ -3607,12 +3797,13 @@ function OpenCurrentAccountModal({ onClose, onSuccess, initialCustomer }: { onCl
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Succursale</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Succursale {isBranchHead && userBranchId ? <span className="ml-2 text-xs text-gray-500 italic">Branch locked</span> : null}</label>
                   <select
                     value={accountForm.branchId}
                     onChange={(e) => setAccountForm({ ...accountForm, branchId: parseInt(e.target.value) })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     required
+                    disabled={isBranchHead && !!userBranchId}
                   >
                     {branches.length === 0 ? (
                       <option value={accountForm.branchId}>#{accountForm.branchId}</option>
@@ -3959,6 +4150,10 @@ function OpenCurrentAccountModal({ onClose, onSuccess, initialCustomer }: { onCl
 
 // Modal to create a NEW customer, then open a Current Account in one flow
 const CreateCurrentAccountWithNewCustomerModal: React.FC<{ onClose: () => void; onSuccess: () => void }> = ({ onClose, onSuccess }) => {
+  const currentUser = apiService.getCurrentUser();
+  const userBranchId = currentUser?.branchId;
+  const roleNorm = (currentUser?.role || '').toString().toLowerCase().replace(/[\s_-]+/g, '');
+  const isBranchHead = ['manager','branchsupervisor','branchmanager','assistantmanager','chefdesuccursale','chefdesuccursal'].includes(roleNorm);
   const [step, setStep] = useState<'customer' | 'account'>('customer');
   const [loading, setLoading] = useState(false);
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
@@ -3982,7 +4177,9 @@ const CreateCurrentAccountWithNewCustomerModal: React.FC<{ onClose: () => void; 
           const data = await apiService.getAllBranches();
           const mapped = (data || []).map((b: any) => ({ id: b.id || b.Id, name: b.name || b.Name }));
           setBranches(mapped);
-          if (mapped.length && !accountForm.branchId) {
+          if (isBranchHead && userBranchId) {
+            setAccountForm((f: any) => ({ ...f, branchId: Number(userBranchId) }));
+          } else if (mapped.length && !accountForm.branchId) {
             setAccountForm((f: any) => ({ ...f, branchId: mapped[0].id }));
           }
         } catch {
@@ -3991,24 +4188,19 @@ const CreateCurrentAccountWithNewCustomerModal: React.FC<{ onClose: () => void; 
       })();
     }
   }, [step]);
-
-  // Map ClientCreationForm data -> SavingsCustomerCreateDto
-  const mapClientFormToSavingsCustomerDto = (clientData: any) => {
-    const mapGender = (g: string) => (String(g).toUpperCase() === 'F' ? 1 : 0);
-    
-    // Map document type string to backend enum number
-    const mapDocType = (t: any): number => {
-      if (typeof t === 'number') return t;
-      const docTypeMap: { [key: string]: number } = {
-        'CIN': 0,
-        'PASSPORT': 1,
-        'DRIVING_LICENSE': 2,
-  // 'BIRTH_CERTIFICATE' retired from frontend — legacy numeric 3 may still appear from backend but should not be emitted by frontend
-      };
-      return docTypeMap[String(t).toUpperCase()] ?? 0;
+  const mapDocType = (t: any) => {
+    const docTypeMap: { [key: string]: number } = {
+      CIN: 0,
+      PASSPORT: 1,
+      DRIVING_LICENSE: 2,
+      // 'BIRTH_CERTIFICATE' retired
     };
-    
-    // Base DTO
+    return docTypeMap[String(t).toUpperCase()] ?? 0;
+  };
+
+  const mapGender = (g: string) => (String(g).toUpperCase() === 'F' ? 1 : 0);
+
+  const mapClientFormToSavingsCustomerDto = (clientData: any) => {
     const dto: any = {
       isBusiness: !!clientData.isBusiness,
       street: clientData.street,
@@ -4030,28 +4222,19 @@ const CreateCurrentAccountWithNewCustomerModal: React.FC<{ onClose: () => void; 
       workAddress: clientData.workAddress || undefined,
       incomeSource: clientData.incomeSource || undefined,
       monthlyIncome: clientData.monthlyIncome ? Number(clientData.monthlyIncome) : undefined,
-      
-      // Informations personnelles additionnelles
       birthPlace: clientData.birthPlace || undefined,
       nationality: clientData.nationality || undefined,
       personalNif: clientData.nif || undefined,
-      
-      // Informations familiales et sociales
       maritalStatus: clientData.maritalStatus || undefined,
       numberOfDependents: clientData.numberOfDependents ? Number(clientData.numberOfDependents) : undefined,
       educationLevel: clientData.educationLevel || undefined,
-      
-      // Déclaration et acceptation
       acceptTerms: !!clientData.acceptTerms,
       signaturePlace: clientData.signaturePlace || undefined,
       signatureDate: clientData.signatureDate || undefined,
-      
-      // Personne de référence
       referencePersonName: clientData.referencePerson || undefined,
-      referencePersonPhone: undefined, // À extraire si format "Nom - Téléphone"
+      referencePersonPhone: undefined,
     };
 
-    // Champs spécifiques à Personne Morale
     if (clientData.isBusiness) {
       dto.companyName = clientData.companyName || '';
       dto.legalForm = clientData.legalForm || '';
@@ -4060,23 +4243,16 @@ const CreateCurrentAccountWithNewCustomerModal: React.FC<{ onClose: () => void; 
       dto.headOfficeAddress = clientData.headOfficeAddress || undefined;
       dto.companyPhone = clientData.companyPhone || undefined;
       dto.companyEmail = clientData.companyEmail || undefined;
-      
-      // Représentant légal - envoyer dans les champs dédiés
       dto.representativeFirstName = clientData.legalRepresentativeName || undefined;
       dto.representativeLastName = clientData.companyName || undefined;
       dto.representativeTitle = clientData.legalRepresentativeTitle || undefined;
       dto.representativeDocumentType = clientData.legalRepresentativeDocumentType ? mapDocType(clientData.legalRepresentativeDocumentType) : undefined;
       dto.representativeDocumentNumber = clientData.legalRepresentativeDocumentNumber || undefined;
-      
-      // Pour une entreprise, utiliser le nom de l'entreprise pour les champs obligatoires
       dto.firstName = clientData.companyName || 'Entreprise';
       dto.lastName = clientData.legalForm || 'Société';
-      
-      // Pour l'entreprise, mettre des valeurs par défaut
       dto.dateOfBirth = '1900-01-01';
-      dto.gender = 0; // Male par défaut
+      dto.gender = 0; // default male
     } else {
-      // Champs spécifiques à Personne Physique
       dto.firstName = clientData.firstName;
       dto.lastName = clientData.lastName;
       dto.dateOfBirth = clientData.dateOfBirth;
@@ -4166,11 +4342,12 @@ const CreateCurrentAccountWithNewCustomerModal: React.FC<{ onClose: () => void; 
             <form onSubmit={handleSubmitAccount} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Succursale</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Succursale {isBranchHead && userBranchId ? <span className="ml-2 text-xs text-gray-500 italic">Branch locked</span> : null}</label>
                   <select
                     value={accountForm.branchId}
                     onChange={(e) => setAccountForm({ ...accountForm, branchId: Number(e.target.value) })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    disabled={isBranchHead && !!userBranchId}
                   >
                     {branches.map((b) => (
                       <option key={b.id} value={b.id}>{b.name}</option>

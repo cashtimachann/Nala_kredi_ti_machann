@@ -1,36 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Building2,
-  TrendingUp, 
   Users, 
   DollarSign,
   CreditCard,
-  FileText,
-  Clock,
-  CheckCircle,
-  AlertCircle,
   RefreshCw,
-  Eye,
-  Download,
-  BarChart3,
   ArrowUpRight,
   ArrowDownRight,
-  UserCheck,
-  Activity
+  Wallet,
+  FileText
 } from 'lucide-react';
 import apiService from '../../services/apiService';
+import { Branch } from '../../types/branch';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../stores/authStore';
+import CashManagement from '../branch/CashManagement';
+import TransactionHistory from '../branch/TransactionHistory';
+import CashSessionReports from '../branch/CashSessionReports';
+// Removed inline account management; use left sidebar navigation instead
 
 interface BranchStats {
   todayTransactions: number;
   todayVolume: number;
+  todayDepositsHTG: number;
+  todayDepositsUSD: number;
+  todayWithdrawalsHTG: number;
+  todayWithdrawalsUSD: number;
+  clientsServed: number;
   activeEmployees: number;
   activeCredits: number;
   pendingValidations: number;
   portfolioValue: number;
   monthlyPerformance: number;
   cashBalance: number;
+  branchBalanceHTG: number;
+  branchBalanceUSD: number;
 }
 
 interface Transaction {
@@ -42,16 +46,6 @@ interface Transaction {
   cashier: string;
   timestamp: string;
   status: string;
-}
-
-interface PendingAccount {
-  id: string;
-  accountNumber: string;
-  clientName: string;
-  accountType: string;
-  submittedBy: string;
-  submittedDate: string;
-  amount: number;
 }
 
 interface CreditPortfolio {
@@ -69,16 +63,23 @@ const BranchSupervisorDashboard: React.FC = () => {
   const [stats, setStats] = useState<BranchStats>({
     todayTransactions: 0,
     todayVolume: 0,
+    todayDepositsHTG: 0,
+    todayDepositsUSD: 0,
+    todayWithdrawalsHTG: 0,
+    todayWithdrawalsUSD: 0,
+    clientsServed: 0,
     activeEmployees: 0,
     activeCredits: 0,
     pendingValidations: 0,
     portfolioValue: 0,
     monthlyPerformance: 0,
-    cashBalance: 0
+    cashBalance: 0,
+    branchBalanceHTG: 0,
+    branchBalanceUSD: 0
   });
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [pendingAccounts, setPendingAccounts] = useState<PendingAccount[]>([]);
+  const [financialSummary, setFinancialSummary] = useState<any>(null);
   const [creditPortfolio, setCreditPortfolio] = useState<CreditPortfolio>({
     totalLoans: 0,
     activeLoans: 0,
@@ -91,7 +92,9 @@ const BranchSupervisorDashboard: React.FC = () => {
   });
 
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'portfolio' | 'validations' | 'reports'>('dashboard');
+  const [branch, setBranch] = useState<Branch | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'cash' | 'history' | 'reports'>('overview');
+  // Removed duplicate tab navigation; use global sidebar
 
   useEffect(() => {
     loadDashboardData();
@@ -105,42 +108,109 @@ const BranchSupervisorDashboard: React.FC = () => {
       const dashboardData = await apiService.getBranchSupervisorDashboard();
       
       if (dashboardData) {
-        setStats({
-          todayTransactions: dashboardData.todayTransactionCount || 0,
-          todayVolume: dashboardData.todayTransactionVolume || 0,
-          activeEmployees: dashboardData.activeCashiers || 0,
-          activeCredits: dashboardData.activeCredits || 0,
-          pendingValidations: dashboardData.pendingCreditApprovals || 0,
-          portfolioValue: dashboardData.branchCreditPortfolio || 0,
-          monthlyPerformance: dashboardData.averageTransactionTime || 0,
-          cashBalance: dashboardData.todayTransactionVolume || 0
-        });
+        // Basic stats from the dashboard endpoint (kept as fallback)
+        setStats((prev) => ({
+          ...prev,
+          activeEmployees: dashboardData.activeCashiers || prev.activeEmployees,
+          activeCredits: dashboardData.activeCredits || prev.activeCredits,
+          pendingValidations: dashboardData.pendingCreditApprovals || prev.pendingValidations,
+          portfolioValue: dashboardData.branchCreditPortfolio || prev.portfolioValue,
+          monthlyPerformance: dashboardData.averageTransactionTime || prev.monthlyPerformance
+        }));
       }
 
-      // Load recent transactions from API
+      // Load recent transactions, pending accounts and branch details from API
       const user = useAuthStore.getState().user;
       if (user?.branchId) {
-        const recentTransactions = await apiService.getRecentTransactions(user.branchId, 10);
+        try {
+          const branchDetails = await apiService.getBranchById(user.branchId);
+          setBranch(branchDetails || null);
+        } catch (err) {
+          console.error('Error loading branch details', err);
+          // non-blocking; user can still see other dashboard data
+        }
+
+        // Fetch recent (today) transactions and compute accurate counts and volume
+        const recentTransactions = await apiService.getRecentTransactions(user.branchId, 1000);
         setTransactions(recentTransactions || []);
+
+        const txList = recentTransactions || [];
+        const txCount = txList.length;
+        const txVolume = txList.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+        
+        // Compute deposits and withdrawals by currency
+        const deposits = txList.filter(t => 
+          (t.type?.toLowerCase().includes('dépôt') || t.type?.toLowerCase().includes('depot'))
+        );
+        const withdrawals = txList.filter(t => 
+          t.type?.toLowerCase().includes('retrait')
+        );
+        
+        const depositsHTG = deposits.filter(t => t.currency === 'HTG').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+        const depositsUSD = deposits.filter(t => t.currency === 'USD').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+        const withdrawalsHTG = withdrawals.filter(t => t.currency === 'HTG').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+        const withdrawalsUSD = withdrawals.filter(t => t.currency === 'USD').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+        
+        // Count unique clients served today
+        const uniqueClients = new Set(txList.map(t => t.clientName).filter(Boolean));
+        const clientsServed = uniqueClients.size;
+        
+        setStats((prev) => ({ 
+          ...prev, 
+          todayTransactions: txCount, 
+          todayVolume: txVolume,
+          todayDepositsHTG: depositsHTG,
+          todayDepositsUSD: depositsUSD,
+          todayWithdrawalsHTG: withdrawalsHTG,
+          todayWithdrawalsUSD: withdrawalsUSD,
+          clientsServed
+        }));
+
+        // Fetch cumulative financial summary for balance cards
+        try {
+          const summary = await apiService.getBranchFinancialSummary(user.branchId);
+          setFinancialSummary(summary);
+          setStats((prev) => ({
+            ...prev,
+            branchBalanceHTG: Number(summary?.balanceHTG ?? 0),
+            branchBalanceUSD: Number(summary?.balanceUSD ?? 0)
+          }));
+        } catch (err) {
+          console.error('Error loading financial summary:', err);
+        }
       }
 
-      // Load pending accounts from API
-      if (user?.branchId) {
-        const pendingAccounts = await apiService.getPendingAccounts(user.branchId);
-        setPendingAccounts(pendingAccounts || []);
-      }
+      // Try to fetch credit portfolio / monthly summary for the branch and map it
+      try {
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+        const monthly = await apiService.getMyBranchMonthlyReport(month, year);
 
-      // Load credit portfolio data
-      setCreditPortfolio({
-        totalLoans: 156,
-        activeLoans: 142,
-        totalDisbursed: 8750000,
-        totalOutstanding: 6240000,
-        paymentsThisMonth: 45,
-        overdueLoans: 8,
-        averageTicket: 55000,
-        portfolioAtRisk: 2.8
-      });
+        // The shape of the report can vary, so safely extract known fields
+        const totalOutstanding = monthly?.totalOutstanding || monthly?.totalOutstandingHTG || monthly?.portfolio?.totalOutstanding || monthly?.portfolioTotal || 0;
+        const totalDisbursed = monthly?.totalDisbursed || monthly?.totalDisbursedHTG || monthly?.portfolio?.totalDisbursed || 0;
+        const activeLoans = monthly?.activeLoans || monthly?.portfolio?.activeLoans || monthly?.loanStats?.active || 0;
+        const totalLoans = monthly?.totalLoans || monthly?.loanStats?.total || 0;
+        const paymentsThisMonth = monthly?.paymentsThisMonth || monthly?.payments || 0;
+        const overdueLoans = monthly?.overdueLoans || monthly?.loanStats?.overdue || 0;
+        const averageTicket = monthly?.averageTicket || monthly?.stats?.averageTicket || 0;
+        const portfolioAtRisk = monthly?.portfolioAtRisk ?? monthly?.par ?? 0;
+
+        setCreditPortfolio({
+          totalLoans: Number(totalLoans) || 0,
+          activeLoans: Number(activeLoans) || 0,
+          totalDisbursed: Number(totalDisbursed) || 0,
+          totalOutstanding: Number(totalOutstanding) || 0,
+          paymentsThisMonth: Number(paymentsThisMonth) || 0,
+          overdueLoans: Number(overdueLoans) || 0,
+          averageTicket: Number(averageTicket) || 0,
+          portfolioAtRisk: Number(portfolioAtRisk) || 0
+        });
+      } catch (err) {
+        // Keep previous fallback values if report parsing fails
+        console.warn('Could not load monthly portfolio report', err);
+      }
 
     } catch (error) {
       console.error('Error loading dashboard:', error);
@@ -150,242 +220,234 @@ const BranchSupervisorDashboard: React.FC = () => {
     }
   };
 
-  const handleValidateAccount = async (accountId: string, approved: boolean) => {
-    try {
-      if (approved) {
-        toast.success('Compte approuvé avec succès');
-      } else {
-        toast.error('Compte rejeté');
-      }
-      // Reload data
-      loadDashboardData();
-    } catch (error) {
-      toast.error('Erreur lors de la validation');
-    }
-  };
-
-  const handleGenerateReport = async (reportType: string) => {
-    try {
-      toast.loading('Génération du rapport en cours...');
-      
-      setTimeout(() => {
-        toast.dismiss();
-        toast.success(`Rapport ${reportType} généré avec succès`);
-      }, 1500);
-    } catch (error) {
-      toast.dismiss();
-      toast.error('Erreur lors de la génération du rapport');
-    }
-  };
+  // Reports generation moved to dedicated Reports page accessible via sidebar
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-600"></div>
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-red-50 to-pink-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-red-600"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-red-50 to-pink-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-8">
+      <div className="bg-gradient-to-r from-red-600 via-orange-600 to-red-700 text-white px-6 py-8 shadow-xl">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
-                <Building2 className="h-8 w-8" />
+                <Building2 className="h-8 w-8 drop-shadow-lg" />
                 Chef de Succursale
               </h1>
-              <p className="text-green-100">Supervision et gestion de la succursale</p>
+              <p className="text-orange-100">Supervision et gestion de la succursale</p>
             </div>
             <button
               onClick={loadDashboardData}
-              className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors"
+              className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-all hover:scale-105 shadow-lg"
             >
               <RefreshCw className="h-5 w-5" />
               Actualiser
             </button>
           </div>
-        </div>
-      </div>
 
-      {/* Navigation Tabs */}
-      <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-6">
-          <nav className="flex gap-6">
+          {/* Navigation Tabs */}
+          <div className="mt-6 flex gap-2">
             <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`py-4 px-2 border-b-2 font-medium transition-colors ${
-                activeTab === 'dashboard'
-                  ? 'border-green-600 text-green-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              onClick={() => setActiveTab('overview')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                activeTab === 'overview'
+                  ? 'bg-white text-red-600 shadow-lg'
+                  : 'bg-white/20 hover:bg-white/30'
               }`}
             >
-              Tableau de Bord
+              <Building2 className="h-5 w-5" />
+              Vue d'ensemble
             </button>
             <button
-              onClick={() => setActiveTab('transactions')}
-              className={`py-4 px-2 border-b-2 font-medium transition-colors ${
-                activeTab === 'transactions'
-                  ? 'border-green-600 text-green-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              onClick={() => setActiveTab('cash')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                activeTab === 'cash'
+                  ? 'bg-white text-red-600 shadow-lg'
+                  : 'bg-white/20 hover:bg-white/30'
               }`}
             >
+              <Wallet className="h-5 w-5" />
+              Gestion Caisse
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                activeTab === 'history'
+                  ? 'bg-white text-red-600 shadow-lg'
+                  : 'bg-white/20 hover:bg-white/30'
+              }`}
+            >
+              <FileText className="h-5 w-5" />
               Historique Transactions
             </button>
             <button
-              onClick={() => setActiveTab('portfolio')}
-              className={`py-4 px-2 border-b-2 font-medium transition-colors ${
-                activeTab === 'portfolio'
-                  ? 'border-green-600 text-green-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Portefeuille Crédit
-            </button>
-            <button
-              onClick={() => setActiveTab('validations')}
-              className={`py-4 px-2 border-b-2 font-medium transition-colors ${
-                activeTab === 'validations'
-                  ? 'border-green-600 text-green-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Validations ({pendingAccounts.length})
-            </button>
-            <button
               onClick={() => setActiveTab('reports')}
-              className={`py-4 px-2 border-b-2 font-medium transition-colors ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
                 activeTab === 'reports'
-                  ? 'border-green-600 text-green-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'bg-white text-red-600 shadow-lg'
+                  : 'bg-white/20 hover:bg-white/30'
               }`}
             >
-              Rapports
+              <FileText className="h-5 w-5" />
+              Rapports Caisse
             </button>
-          </nav>
+          </div>
         </div>
       </div>
 
+      {/* Removed top tabs; use left sidebar for navigation */}
+
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Dashboard Tab */}
-        {activeTab === 'dashboard' && (
+        {/* Tab Content */}
+        {activeTab === 'overview' && (
           <>
-            {/* Statistics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm font-medium">Transactions Aujourd'hui</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">{stats.todayTransactions}</p>
-                    <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
-                      <ArrowUpRight className="h-4 w-4" />
-                      +12% vs hier
-                    </p>
+            {/* Branch Details Card */}
+            {branch && (
+              <div className="mb-6">
+                <div className="bg-white rounded-xl shadow p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="bg-red-50 text-red-600 rounded-full p-3">
+                      <Building2 className="h-7 w-7" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-semibold">{branch.name} <span className="text-sm text-gray-500">({branch.code})</span></h2>
+                      <p className="text-sm text-gray-600">{branch.address}, {branch.commune}, {branch.department}</p>
+                      <p className="text-sm text-gray-600 mt-1">Manager: <span className="font-medium">{branch.managerName || '—'}</span></p>
+                    </div>
                   </div>
-                  <div className="bg-green-100 rounded-full p-3">
-                    <Activity className="h-8 w-8 text-green-600" />
+                  <div className="text-right text-sm text-gray-600">
+                    <p>Phones: {branch.phones?.join(' • ')}</p>
+                    <p className="mt-1">Ouvert: {branch.operatingHours?.openTime} — {branch.operatingHours?.closeTime}</p>
+                    <p className="mt-1">Depuis: {branch.openingDate ? new Date(branch.openingDate).toLocaleDateString('fr-HT') : '—'}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Statistics Cards - Today's Branch Metrics */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+              <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform">
+                <div className="flex items-center justify-between text-white">
+                  <div className="w-full">
+                    <p className="text-emerald-100 text-sm font-medium mb-2">Total Entrées</p>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-bold">
+                        {new Intl.NumberFormat('fr-HT', {
+                          maximumFractionDigits: 0
+                        }).format(financialSummary?.totalDepositHTG ?? 0)} HTG
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-xl font-semibold text-emerald-100">
+                        {new Intl.NumberFormat('en-US', {
+                          style: 'currency',
+                          currency: 'USD',
+                          maximumFractionDigits: 2
+                        }).format(financialSummary?.totalDepositUSD ?? 0)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-emerald-100 mt-2">Total cumulé • Aujourd'hui: {new Intl.NumberFormat('fr-HT', { maximumFractionDigits: 0 }).format(stats.todayDepositsHTG)} HTG</p>
+                  </div>
+                  <div className="bg-white/20 backdrop-blur rounded-full p-3">
+                    <ArrowUpRight className="h-8 w-8" />
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500">
-                <div className="flex items-center justify-between">
+              <div className="bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform">
+                <div className="flex items-center justify-between text-white">
+                  <div className="w-full">
+                    <p className="text-rose-100 text-sm font-medium mb-2">Total Sorties</p>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-bold">
+                        {new Intl.NumberFormat('fr-HT', {
+                          maximumFractionDigits: 0
+                        }).format(financialSummary?.totalWithdrawalHTG ?? 0)} HTG
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-xl font-semibold text-rose-100">
+                        {new Intl.NumberFormat('en-US', {
+                          style: 'currency',
+                          currency: 'USD',
+                          maximumFractionDigits: 2
+                        }).format(financialSummary?.totalWithdrawalUSD ?? 0)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-100 mt-2">Total cumulé • Aujourd'hui: {new Intl.NumberFormat('fr-HT', { maximumFractionDigits: 0 }).format(stats.todayWithdrawalsHTG)} HTG</p>
+                  </div>
+                  <div className="bg-white/20 backdrop-blur rounded-full p-3">
+                    <ArrowDownRight className="h-8 w-8" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform">
+                <div className="flex items-center justify-between text-white">
                   <div>
-                    <p className="text-gray-600 text-sm font-medium">Volume du Jour</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">
+                    <p className="text-indigo-100 text-sm font-medium">Encours Total des Crédits</p>
+                    <p className="text-3xl font-bold mt-2">
                       {new Intl.NumberFormat('fr-HT', {
-                        style: 'currency',
-                        currency: 'HTG',
                         maximumFractionDigits: 0
-                      }).format(stats.todayVolume)}
+                      }).format(creditPortfolio.totalOutstanding)} HTG
                     </p>
-                    <p className="text-sm text-blue-600 mt-1">HTG</p>
+                    <p className="text-sm text-indigo-100 mt-1">{creditPortfolio.activeLoans} crédits actifs</p>
                   </div>
-                  <div className="bg-blue-100 rounded-full p-3">
-                    <DollarSign className="h-8 w-8 text-blue-600" />
+                  <div className="bg-white/20 backdrop-blur rounded-full p-3">
+                    <CreditCard className="h-8 w-8" />
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500">
-                <div className="flex items-center justify-between">
+              <div className="bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform">
+                <div className="flex items-center justify-between text-white">
                   <div>
-                    <p className="text-gray-600 text-sm font-medium">Employés Actifs</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">{stats.activeEmployees}/12</p>
-                    <p className="text-sm text-purple-600 mt-1">En service</p>
+                    <p className="text-amber-100 text-sm font-medium">Nombre de Clients Servis</p>
+                    <p className="text-3xl font-bold mt-2">{stats.clientsServed}</p>
+                    <p className="text-sm text-amber-100 mt-1">Aujourd'hui</p>
                   </div>
-                  <div className="bg-purple-100 rounded-full p-3">
-                    <Users className="h-8 w-8 text-purple-600" />
+                  <div className="bg-white/20 backdrop-blur rounded-full p-3">
+                    <Users className="h-8 w-8" />
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-500">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm font-medium">Crédits Actifs</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">{creditPortfolio.activeLoans}</p>
-                    <p className="text-sm text-orange-600 mt-1">
-                      {creditPortfolio.overdueLoans} en retard
-                    </p>
+              <div className="bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform">
+                <div className="flex items-center justify-between text-white">
+                  <div className="w-full">
+                    <p className="text-cyan-100 text-sm font-medium mb-2">Solde Total</p>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-bold">
+                        {new Intl.NumberFormat('fr-HT', {
+                          maximumFractionDigits: 0
+                        }).format(stats.branchBalanceHTG)} HTG
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-xl font-semibold text-cyan-100">
+                        {new Intl.NumberFormat('en-US', {
+                          style: 'currency',
+                          currency: 'USD',
+                          maximumFractionDigits: 2
+                        }).format(stats.branchBalanceUSD)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-cyan-100 mt-2">Net aujourd'hui</p>
                   </div>
-                  <div className="bg-orange-100 rounded-full p-3">
-                    <CreditCard className="h-8 w-8 text-orange-600" />
+                  <div className="bg-white/20 backdrop-blur rounded-full p-3">
+                    <DollarSign className="h-8 w-8" />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Additional Stats Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-xl shadow-md p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm font-medium">Validations en Attente</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-2">{stats.pendingValidations}</p>
-                  </div>
-                  <AlertCircle className="h-6 w-6 text-yellow-600" />
-                </div>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-md p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm font-medium">Portefeuille Crédit</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-2">
-                      {new Intl.NumberFormat('fr-HT', {
-                        style: 'currency',
-                        currency: 'HTG',
-                        maximumFractionDigits: 0
-                      }).format(creditPortfolio.totalOutstanding)}
-                    </p>
-                  </div>
-                  <TrendingUp className="h-6 w-6 text-green-600" />
-                </div>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-md p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm font-medium">Performance Mensuelle</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-2">92%</p>
-                  </div>
-                  <BarChart3 className="h-6 w-6 text-blue-600" />
-                </div>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-md p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm font-medium">Temps Moyen Transaction</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-2">3.5 min</p>
-                  </div>
-                  <Clock className="h-6 w-6 text-purple-600" />
-                </div>
-              </div>
-            </div>
+            {/* Additional stats removed per design request */}
 
             {/* Recent Transactions */}
             <div className="bg-white rounded-xl shadow-md p-6">
@@ -440,334 +502,19 @@ const BranchSupervisorDashboard: React.FC = () => {
           </>
         )}
 
-        {/* Transactions Tab */}
-        {activeTab === 'transactions' && (
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Historique des Transactions</h2>
-            <div className="mb-4 flex gap-4">
-              <input
-                type="date"
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-              />
-              <select className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
-                <option>Tous les types</option>
-                <option>Dépôts</option>
-                <option>Retraits</option>
-                <option>Paiements</option>
-              </select>
-              <button className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                Filtrer
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Montant</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date/Heure</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {transactions.map((transaction) => (
-                    <tr key={transaction.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        #{transaction.id}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {transaction.type}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {transaction.clientName}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                        {new Intl.NumberFormat('fr-HT', {
-                          style: 'currency',
-                          currency: transaction.currency
-                        }).format(transaction.amount)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {new Date(transaction.timestamp).toLocaleString('fr-FR')}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button className="text-green-600 hover:text-green-900">
-                          <Eye className="h-5 w-5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        {/* Cash Management Tab */}
+        {activeTab === 'cash' && branch && (
+          <CashManagement branchId={branch.id} />
         )}
 
-        {/* Portfolio Tab */}
-        {activeTab === 'portfolio' && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-xl shadow-md p-6">
-                <p className="text-gray-600 text-sm font-medium">Total Prêts</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">{creditPortfolio.totalLoans}</p>
-                <p className="text-sm text-gray-500 mt-1">{creditPortfolio.activeLoans} actifs</p>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-md p-6">
-                <p className="text-gray-600 text-sm font-medium">Montant Décaissé</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
-                  {new Intl.NumberFormat('fr-HT', {
-                    style: 'currency',
-                    currency: 'HTG',
-                    maximumFractionDigits: 0
-                  }).format(creditPortfolio.totalDisbursed)}
-                </p>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-md p-6">
-                <p className="text-gray-600 text-sm font-medium">Encours Total</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
-                  {new Intl.NumberFormat('fr-HT', {
-                    style: 'currency',
-                    currency: 'HTG',
-                    maximumFractionDigits: 0
-                  }).format(creditPortfolio.totalOutstanding)}
-                </p>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-md p-6">
-                <p className="text-gray-600 text-sm font-medium">PAR 30</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">{creditPortfolio.portfolioAtRisk}%</p>
-                <p className="text-sm text-red-600 mt-1">{creditPortfolio.overdueLoans} en retard</p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Détails du Portefeuille</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
-                    <span className="text-gray-700">Paiements ce mois</span>
-                    <span className="font-bold text-gray-900">{creditPortfolio.paymentsThisMonth}</span>
-                  </div>
-                  <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
-                    <span className="text-gray-700">Ticket moyen</span>
-                    <span className="font-bold text-gray-900">
-                      {new Intl.NumberFormat('fr-HT', {
-                        style: 'currency',
-                        currency: 'HTG'
-                      }).format(creditPortfolio.averageTicket)}
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center p-4 bg-green-50 rounded-lg">
-                    <span className="text-green-700">Taux de recouvrement</span>
-                    <span className="font-bold text-green-900">95.2%</span>
-                  </div>
-                  <div className="flex justify-between items-center p-4 bg-blue-50 rounded-lg">
-                    <span className="text-blue-700">Nouveaux prêts (30j)</span>
-                    <span className="font-bold text-blue-900">23</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
+        {/* Transaction History Tab */}
+        {activeTab === 'history' && branch && (
+          <TransactionHistory branchId={branch.id} />
         )}
 
-        {/* Validations Tab */}
-        {activeTab === 'validations' && (
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              Comptes en Attente de Validation ({pendingAccounts.length})
-            </h2>
-            {pendingAccounts.length === 0 ? (
-              <div className="text-center py-12">
-                <CheckCircle className="mx-auto h-12 w-12 text-green-500 mb-4" />
-                <p className="text-gray-600">Aucun compte en attente de validation</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {pendingAccounts.map((account) => (
-                  <div key={account.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">{account.clientName}</h3>
-                          <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm font-medium rounded-full">
-                            En attente
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <p className="text-gray-600">N° de Compte</p>
-                            <p className="font-medium text-gray-900">{account.accountNumber}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">Type de Compte</p>
-                            <p className="font-medium text-gray-900">{account.accountType}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">Soumis par</p>
-                            <p className="font-medium text-gray-900">{account.submittedBy}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">Date de soumission</p>
-                            <p className="font-medium text-gray-900">
-                              {new Date(account.submittedDate).toLocaleDateString('fr-FR')}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">Dépôt Initial</p>
-                            <p className="font-medium text-green-600">
-                              {new Intl.NumberFormat('fr-HT', {
-                                style: 'currency',
-                                currency: 'HTG'
-                              }).format(account.amount)}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex gap-2 ml-4">
-                        <button
-                          onClick={() => handleValidateAccount(account.id, true)}
-                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
-                        >
-                          <CheckCircle className="h-5 w-5" />
-                          Approuver
-                        </button>
-                        <button
-                          onClick={() => handleValidateAccount(account.id, false)}
-                          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
-                        >
-                          <AlertCircle className="h-5 w-5" />
-                          Rejeter
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Reports Tab */}
-        {activeTab === 'reports' && (
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">Rapports de Performance</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <button
-                onClick={() => handleGenerateReport('Rapport Quotidien')}
-                className="p-6 border-2 border-gray-200 rounded-xl hover:border-green-500 hover:shadow-lg transition-all group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="bg-green-100 rounded-full p-3 group-hover:bg-green-200">
-                    <FileText className="h-8 w-8 text-green-600" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="font-semibold text-gray-900">Rapport Quotidien</h3>
-                    <p className="text-sm text-gray-600">Activités du jour</p>
-                  </div>
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <Download className="h-5 w-5 text-gray-400 group-hover:text-green-600" />
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleGenerateReport('Rapport Hebdomadaire')}
-                className="p-6 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:shadow-lg transition-all group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="bg-blue-100 rounded-full p-3 group-hover:bg-blue-200">
-                    <BarChart3 className="h-8 w-8 text-blue-600" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="font-semibold text-gray-900">Rapport Hebdomadaire</h3>
-                    <p className="text-sm text-gray-600">7 derniers jours</p>
-                  </div>
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <Download className="h-5 w-5 text-gray-400 group-hover:text-blue-600" />
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleGenerateReport('Rapport Mensuel')}
-                className="p-6 border-2 border-gray-200 rounded-xl hover:border-purple-500 hover:shadow-lg transition-all group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="bg-purple-100 rounded-full p-3 group-hover:bg-purple-200">
-                    <TrendingUp className="h-8 w-8 text-purple-600" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="font-semibold text-gray-900">Rapport Mensuel</h3>
-                    <p className="text-sm text-gray-600">Performance globale</p>
-                  </div>
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <Download className="h-5 w-5 text-gray-400 group-hover:text-purple-600" />
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleGenerateReport('Rapport Transactions')}
-                className="p-6 border-2 border-gray-200 rounded-xl hover:border-orange-500 hover:shadow-lg transition-all group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="bg-orange-100 rounded-full p-3 group-hover:bg-orange-200">
-                    <Activity className="h-8 w-8 text-orange-600" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="font-semibold text-gray-900">Rapport Transactions</h3>
-                    <p className="text-sm text-gray-600">Détails complets</p>
-                  </div>
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <Download className="h-5 w-5 text-gray-400 group-hover:text-orange-600" />
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleGenerateReport('Rapport Portefeuille')}
-                className="p-6 border-2 border-gray-200 rounded-xl hover:border-teal-500 hover:shadow-lg transition-all group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="bg-teal-100 rounded-full p-3 group-hover:bg-teal-200">
-                    <CreditCard className="h-8 w-8 text-teal-600" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="font-semibold text-gray-900">Rapport Portefeuille</h3>
-                    <p className="text-sm text-gray-600">Crédits et encours</p>
-                  </div>
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <Download className="h-5 w-5 text-gray-400 group-hover:text-teal-600" />
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleGenerateReport('Rapport Performance')}
-                className="p-6 border-2 border-gray-200 rounded-xl hover:border-indigo-500 hover:shadow-lg transition-all group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="bg-indigo-100 rounded-full p-3 group-hover:bg-indigo-200">
-                    <UserCheck className="h-8 w-8 text-indigo-600" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="font-semibold text-gray-900">Rapport Performance</h3>
-                    <p className="text-sm text-gray-600">Équipe et KPIs</p>
-                  </div>
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <Download className="h-5 w-5 text-gray-400 group-hover:text-indigo-600" />
-                </div>
-              </button>
-            </div>
-          </div>
+        {/* Cash Session Reports Tab */}
+        {activeTab === 'reports' && branch && (
+          <CashSessionReports branchId={branch.id} />
         )}
       </div>
     </div>

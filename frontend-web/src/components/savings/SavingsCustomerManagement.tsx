@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Users,
   User,
@@ -33,7 +33,12 @@ import { apiService } from '../../services/apiService';
 import { parseGender, genderLabel } from '../../utils/gender';
 import { Branch } from '../../types/branch';
 
-const SavingsCustomerManagement: React.FC = () => {
+interface SavingsCustomerManagementProps {
+  effectiveBranchId?: number;
+  isBranchLocked?: boolean;
+}
+
+const SavingsCustomerManagement: React.FC<SavingsCustomerManagementProps> = ({ effectiveBranchId, isBranchLocked }) => {
   const [customers, setCustomers] = useState<SavingsCustomerResponseDto[]>([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -41,7 +46,7 @@ const SavingsCustomerManagement: React.FC = () => {
   const [customerAccounts, setCustomerAccounts] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
-    branchId: '',
+    branchId: effectiveBranchId ? String(effectiveBranchId) : '',
     status: '',
     dateFrom: '',
     dateTo: ''
@@ -53,14 +58,37 @@ const SavingsCustomerManagement: React.FC = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<SavingsCustomerResponseDto | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
 
+  const branchFilterId = useMemo(() => {
+    if (filters.branchId) {
+      const parsed = parseInt(filters.branchId, 10);
+      return Number.isNaN(parsed) ? undefined : parsed;
+    }
+    if (effectiveBranchId != null) {
+      const parsed = Number(effectiveBranchId);
+      return Number.isNaN(parsed) ? undefined : parsed;
+    }
+    return undefined;
+  }, [filters.branchId, effectiveBranchId]);
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
 
   useEffect(() => {
-    setInitialLoading(true);
-    loadCustomers().finally(() => setInitialLoading(false));
-  }, []);
+    loadCustomers();
+  }, [branchFilterId]);
+
+  useEffect(() => {
+    if (effectiveBranchId) {
+      setFilters((prev) => {
+        const nextBranch = String(effectiveBranchId);
+        if (prev.branchId === nextBranch) {
+          return prev;
+        }
+        return { ...prev, branchId: nextBranch };
+      });
+    }
+  }, [effectiveBranchId]);
 
   // Search customers without showing initial spinner
   useEffect(() => {
@@ -85,21 +113,6 @@ const SavingsCustomerManagement: React.FC = () => {
     })();
     return () => { mounted = false; };
   }, []);
-
-  // Load customers on mount
-  useEffect(() => {
-    setInitialLoading(true);
-    loadCustomers().finally(() => setInitialLoading(false));
-  }, []);
-
-  // Search customers without showing initial spinner
-  useEffect(() => {
-    if (searchTerm && searchTerm.length >= 2) {
-      loadCustomers();
-    } else if (searchTerm.length === 0) {
-      loadCustomers();
-    }
-  }, [searchTerm]);
 
   // Fonction pour normaliser les données client
   const normalizeCustomer = (customer: any): SavingsCustomerResponseDto => {
@@ -163,12 +176,13 @@ const SavingsCustomerManagement: React.FC = () => {
   const loadCustomers = async () => {
     try {
       setLoading(true);
+      const accountParams = branchFilterId ? { branchId: branchFilterId } : {};
       if (searchTerm && searchTerm.trim().length >= 2) {
         // Recherche avec terme (minimum 2 caractères)
         const results = await savingsCustomerService.searchCustomers(searchTerm.trim());
         
         // Filtrer pour ne garder que ceux qui ont des comptes d'épargne
-        const accounts = await apiService.getSavingsAccounts({});
+        const accounts = await apiService.getSavingsAccounts(accountParams);
         const customerIdsWithAccounts = new Set(accounts.map((acc: any) => acc.customerId));
         const customersWithAccounts = results
           .filter(c => customerIdsWithAccounts.has(c.id))
@@ -179,8 +193,8 @@ const SavingsCustomerManagement: React.FC = () => {
         setCustomerAccounts(accounts);
       } else {
         // Charger tous les clients qui ont des comptes d'épargne (partagé)
-        const customersWithAccounts = await clientAccountCustomerLoader.loadCustomersHavingAccounts('SAVINGS');
-        const accounts = await apiService.getSavingsAccounts({});
+        const customersWithAccounts = await clientAccountCustomerLoader.loadCustomersHavingAccounts('SAVINGS', branchFilterId ? { branchId: branchFilterId } : undefined);
+        const accounts = await apiService.getSavingsAccounts(accountParams);
         const sortedCustomers = Array.isArray(customersWithAccounts) 
           ? customersWithAccounts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) // Sort by most recent first
           : [];
@@ -194,6 +208,9 @@ const SavingsCustomerManagement: React.FC = () => {
       setCustomerAccounts([]);
     } finally {
       setLoading(false);
+      if (initialLoading) {
+        setInitialLoading(false);
+      }
     }
   };
 
@@ -779,9 +796,22 @@ const SavingsCustomerManagement: React.FC = () => {
     // Filtre de recherche déjà appliqué par searchCustomers
     
     // Filtre par succursale (vérifier si le client a des comptes dans cette succursale)
-    if (filters.branchId) {
-      const customerAccount = customerAccounts.find(acc => acc.customerId === customer.id);
-      if (!customerAccount || customerAccount.branchId !== parseInt(filters.branchId)) {
+    if (branchFilterId != null) {
+      const customerId = customer.id ? String(customer.id) : '';
+      const hasAccountInBranch = customerAccounts.some((acc: any) => {
+        const accCustomerId = acc?.customerId ?? acc?.CustomerId ?? acc?.customerID ?? acc?.customer?.id;
+        if (!accCustomerId || String(accCustomerId) !== customerId) {
+          return false;
+        }
+        const rawBranch = acc?.branchId ?? acc?.BranchId ?? acc?.accountBranchId ?? acc?.branch_id ?? acc?.branchID;
+        if (rawBranch == null) {
+          return false;
+        }
+        const normalizedBranch = Number(rawBranch);
+        return !Number.isNaN(normalizedBranch) && normalizedBranch === branchFilterId;
+      });
+
+      if (!hasAccountInBranch) {
         return false;
       }
     }
@@ -982,13 +1012,17 @@ const SavingsCustomerManagement: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Succursale
+                  {isBranchLocked && branchFilterId != null ? (
+                    <span className="ml-2 text-xs text-gray-500 italic">succursale verrouillée</span>
+                  ) : null}
                 </label>
                 <select
                   value={filters.branchId}
                   onChange={(e) => setFilters({ ...filters, branchId: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={isBranchLocked}
                 >
-                  <option value="">Toutes les succursales</option>
+                  {!isBranchLocked && <option value="">Toutes les succursales</option>}
                   {branches.map((branch) => (
                     <option key={branch.id} value={branch.id}>{branch.name}</option>
                   ))}
@@ -1042,7 +1076,12 @@ const SavingsCustomerManagement: React.FC = () => {
             {/* Filter Actions */}
             <div className="mt-4 flex items-center space-x-3">
               <button
-                onClick={() => setFilters({ branchId: '', status: '', dateFrom: '', dateTo: '' })}
+                onClick={() => setFilters({
+                  branchId: isBranchLocked && branchFilterId != null ? String(branchFilterId) : '',
+                  status: '',
+                  dateFrom: '',
+                  dateTo: ''
+                })}
                 className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Réinitialiser les filtres

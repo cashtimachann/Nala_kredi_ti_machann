@@ -272,6 +272,123 @@ class ApiService {
     return authService.getPendingAccounts(branchId);
   }
 
+  // Loan approval actions for Branch Supervisor
+  async approvePendingLoan(id: string): Promise<void> {
+    return authService.approveLoan(id);
+  }
+
+  async rejectPendingLoan(id: string, reason: string): Promise<void> {
+    return authService.rejectLoan(id, reason);
+  }
+
+  // ===== Branch Reports =====
+  async getMyBranchDailyReport(date?: string): Promise<any> {
+    return this.api.get('/branchreport/my-branch/daily', {
+      params: date ? { date } : undefined,
+    }).then(r => r.data);
+  }
+
+  async getMyBranchMonthlyReport(month?: number, year?: number): Promise<any> {
+    const params: any = {};
+    if (month) params.month = month;
+    if (year) params.year = year;
+    return this.api.get('/branchreport/my-branch/monthly', { params }).then(r => r.data);
+  }
+
+  async getCustomBranchReport(branchId: number, startDate: string, endDate: string, includeDetails: boolean = true): Promise<any> {
+    return this.api.post('/branchreport/custom', {
+      branchId,
+      startDate,
+      endDate,
+      includeDetails
+    }).then(r => r.data);
+  }
+
+  async exportDailyBranchReportCsv(branchId: number, date?: string): Promise<Blob> {
+    return this.api.get(`/branchreport/export/daily/${branchId}`,
+      { params: date ? { date } : undefined, responseType: 'blob' }
+    ).then(r => r.data as Blob);
+  }
+
+  async getBranchTransactionHistory(branchId: number, opts?: {
+    startDate?: string;
+    endDate?: string;
+    transactionType?: string;
+    cashierId?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<any> {
+    const { startDate, endDate, transactionType, cashierId, page = 1, pageSize = 200 } = opts || {};
+    const params: any = { page, pageSize };
+    if (startDate) params.startDate = startDate;
+    if (endDate) params.endDate = endDate;
+    if (transactionType) params.transactionType = transactionType;
+    if (cashierId) params.cashierId = cashierId;
+    return this.api.get(`/transaction/branch/${branchId}/history`, { params }).then(r => r.data);
+  }
+
+  // Cash Session Management
+  async getBranchCashSessions(branchId: number, opts?: {
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+    cashierId?: string;
+  }): Promise<any[]> {
+    const params: any = {};
+    if (opts?.startDate) params.startDate = opts.startDate;
+    if (opts?.endDate) params.endDate = opts.endDate;
+    if (opts?.status) params.status = opts.status;
+    if (opts?.cashierId) params.cashierId = opts.cashierId;
+    const response = await this.api.get(`/cashsession/branch/${branchId}`, { params });
+    return response.data;
+  }
+
+  async getActiveCashSessions(branchId: number): Promise<any[]> {
+    const response = await this.api.get(`/cashsession/branch/${branchId}/active`);
+    return response.data;
+  }
+
+  async getCashSessionDetails(sessionId: number): Promise<any> {
+    const response = await this.api.get(`/cashsession/${sessionId}`);
+    return response.data;
+  }
+
+  async getTodayCashSessionSummary(branchId: number): Promise<any> {
+    const response = await this.api.get(`/cashsession/branch/${branchId}/today-summary`);
+    return response.data;
+  }
+
+  // Manager cash session management
+  async getAvailableCashiers(branchId: number): Promise<any[]> {
+    const response = await this.api.get(`/cashsession/available-cashiers/${branchId}`);
+    return response.data;
+  }
+
+  async openCashSessionForCashier(cashierId: string, openingBalanceHTG: number, openingBalanceUSD: number): Promise<any> {
+    const response = await this.api.post('/cashsession/open-for-cashier', {
+      cashierId,
+      openingBalanceHTG,
+      openingBalanceUSD
+    });
+    return response.data;
+  }
+
+  async closeCashSessionByManager(sessionId: number, closingBalanceHTG: number, closingBalanceUSD: number, notes?: string): Promise<any> {
+    const response = await this.api.post(`/cashsession/${sessionId}/close-by-manager`, {
+      closingBalanceHTG,
+      closingBalanceUSD,
+      notes
+    });
+    return response.data;
+  }
+
+  async getCashSessionReports(branchId: number, startDate: string, endDate: string): Promise<any[]> {
+    const response = await this.api.get(`/cashsession/branch/${branchId}/reports`, {
+      params: { startDate, endDate }
+    });
+    return response.data;
+  }
+
   // Transaction methods
   async processDeposit(accountId: number, amount: number, currency: 'HTG' | 'USD'): Promise<void> {
     await this.api.post('/transaction/deposit', {
@@ -971,8 +1088,8 @@ class ApiService {
     return clientAccountService.getClientAccounts(filters);
   }
 
-  async getClientAccountStats(): Promise<ClientAccountStats> {
-    return clientAccountService.getClientAccountStats();
+  async getClientAccountStats(branchId?: number): Promise<ClientAccountStats> {
+    return clientAccountService.getClientAccountStats(branchId);
   }
 
   async getCurrentAccountBalance(accountNumber: string): Promise<{ balance: number; availableBalance: number; currency: 'HTG' | 'USD'; status?: string; }> {

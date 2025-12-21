@@ -32,7 +32,7 @@ public class CreditController : ControllerBase
     }
 
     [HttpPost("application")]
-    [Authorize(Roles = "CreditAgent,Manager,BranchSupervisor,SuperAdmin")]
+    [Authorize(Roles = "CreditAgent,Manager,SuperAdmin")]
     public async Task<ActionResult> CreateApplication([FromBody] CreditApplicationDto model)
     {
         var agentId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value!;
@@ -77,7 +77,7 @@ public class CreditController : ControllerBase
     }
 
     [HttpPost("application/{applicationId}/approve")]
-    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin,Manager")]
     public async Task<ActionResult> ApproveApplication(int applicationId, [FromBody] CreditApprovalDto model)
     {
         var reviewerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value!;
@@ -107,7 +107,7 @@ public class CreditController : ControllerBase
     }
 
     [HttpPost("application/{applicationId}/reject")]
-    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin,Manager")]
     public async Task<ActionResult> RejectApplication(int applicationId, [FromBody] CreditApprovalDto model)
     {
         var reviewerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value!;
@@ -137,7 +137,7 @@ public class CreditController : ControllerBase
     }
 
     [HttpGet("applications/pending")]
-    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin,Manager")]
     public async Task<ActionResult> GetPendingApplications(int page = 1, int pageSize = 20)
     {
         var applications = await _context.CreditApplications
@@ -165,14 +165,14 @@ public class CreditController : ControllerBase
     }
 
     [HttpGet("agent/{agentId}/portfolio")]
-    [Authorize(Roles = "CreditAgent,Manager,Admin,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "CreditAgent,Manager,Admin,SuperAdmin,Manager")]
     public async Task<ActionResult> GetAgentPortfolio(string agentId)
     {
         // Verify agent exists and user has permission to view
         var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
         
-        if (currentUserId != agentId && !new[] { "Manager", "Admin", "SuperAdmin", "BranchSupervisor" }.Contains(userRole))
+        if (currentUserId != agentId && !new[] { "Manager", "Admin", "SuperAdmin", "Manager" }.Contains(userRole))
             return Forbid();
 
         var activeCredits = await _context.Credits
@@ -207,7 +207,7 @@ public class CreditController : ControllerBase
     }
 
     [HttpPost("payment")]
-    [Authorize(Roles = "CreditAgent,Cashier,Manager,Admin,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "CreditAgent,Cashier,Manager,Admin,SuperAdmin,Manager")]
     public async Task<ActionResult> RecordPayment([FromBody] CreditPaymentDto model)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value!;
@@ -295,7 +295,7 @@ public class CreditController : ControllerBase
     }
 
     [HttpGet("payments-due")]
-    [Authorize(Roles = "CreditAgent,Manager,Admin,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "CreditAgent,Manager,Admin,SuperAdmin,Manager")]
     public async Task<ActionResult> GetPaymentsDue()
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

@@ -40,14 +40,19 @@ interface Transaction {
   fees?: number;
 }
 
-const SavingsTransactionManagement: React.FC = () => {
+interface SavingsTransactionManagementProps {
+  effectiveBranchId?: number;
+  isBranchLocked?: boolean;
+}
+
+const SavingsTransactionManagement: React.FC<SavingsTransactionManagementProps> = ({ effectiveBranchId, isBranchLocked }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [showProcessModal, setShowProcessModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filters, setFilters] = useState<any>({});
+  const [filters, setFilters] = useState<any>(() => (effectiveBranchId ? { branchId: effectiveBranchId } : {}));
   const [statistics, setStatistics] = useState<any>(null);
   // Branches for mapping branchId -> branch name
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
@@ -79,6 +84,30 @@ const SavingsTransactionManagement: React.FC = () => {
   const [resolvedDestAccount, setResolvedDestAccount] = useState<any | null>(null);
   const [destLookupLoading, setDestLookupLoading] = useState(false);
   const [destLookupError, setDestLookupError] = useState<string | null>(null);
+
+  const branchFilterId = useMemo(() => {
+    if (filters.branchId != null && filters.branchId !== '') {
+      const parsed = Number(filters.branchId);
+      return Number.isNaN(parsed) ? undefined : parsed;
+    }
+    if (effectiveBranchId != null) {
+      const parsed = Number(effectiveBranchId);
+      return Number.isNaN(parsed) ? undefined : parsed;
+    }
+    return undefined;
+  }, [filters.branchId, effectiveBranchId]);
+  const branchSelectValue = branchFilterId ?? '';
+
+  useEffect(() => {
+    if (effectiveBranchId) {
+      setFilters((prev: any) => {
+        if (prev?.branchId === effectiveBranchId) {
+          return prev;
+        }
+        return { ...prev, branchId: effectiveBranchId };
+      });
+    }
+  }, [effectiveBranchId]);
 
   // Map various currency representations to form code (0=HTG, 1=USD)
   const currencyCodeFrom = (c: any): number => {
@@ -256,7 +285,8 @@ const SavingsTransactionManagement: React.FC = () => {
   const loadTransactions = async () => {
     setLoading(true);
     try {
-      const data = await apiService.getSavingsTransactions(filters);
+      const scopedFilters = branchFilterId != null ? { ...filters, branchId: branchFilterId } : filters;
+      const data = await apiService.getSavingsTransactions(scopedFilters);
       setTransactions(data);
     } catch (error) {
       console.error('Error loading transactions:', error);
@@ -268,7 +298,8 @@ const SavingsTransactionManagement: React.FC = () => {
 
   const loadStatistics = async () => {
     try {
-      const stats = await apiService.getSavingsTransactionStatistics(filters);
+      const scopedFilters = branchFilterId != null ? { ...filters, branchId: branchFilterId } : filters;
+      const stats = await apiService.getSavingsTransactionStatistics(scopedFilters);
       setStatistics(stats);
     } catch (error) {
       console.error('Error loading statistics:', error);
@@ -667,11 +698,20 @@ const SavingsTransactionManagement: React.FC = () => {
     return <AlertCircle className="h-4 w-4" />;
   };
 
-  const filteredTransactions = transactions.filter(tx =>
-    (tx.accountNumber && tx.accountNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (tx.reference && tx.reference.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (tx.description && tx.description.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredTransactions = transactions.filter(tx => {
+    if (branchFilterId != null) {
+      const txBranch = tx.branchId ?? (tx as any)?.BranchId;
+      if (txBranch == null || Number(txBranch) !== branchFilterId) {
+        return false;
+      }
+    }
+    const query = searchTerm.toLowerCase();
+    return (
+      (tx.accountNumber && tx.accountNumber.toLowerCase().includes(query)) ||
+      (tx.reference && tx.reference.toLowerCase().includes(query)) ||
+      (tx.description && tx.description.toLowerCase().includes(query))
+    );
+  });
 
   // Pagination calculations
   const totalFiltered = filteredTransactions.length;
@@ -898,20 +938,25 @@ const SavingsTransactionManagement: React.FC = () => {
             <input type="date" value={filters.dateTo || ''} onChange={(e) => setFilters({...filters, dateTo: e.target.value})} className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
 
             <select
-              value={filters.branchId ?? ''}
+              value={branchSelectValue}
               onChange={(e) => setFilters({
                 ...filters,
                 branchId: e.target.value ? parseInt(e.target.value) : undefined
               })}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              disabled={isBranchLocked}
+              title={isBranchLocked ? 'Succursale verrouillée' : 'Filtrer par succursale'}
             >
-              <option value="">Toutes succursales</option>
+              {!isBranchLocked && <option value="">Toutes succursales</option>}
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
             </select>
 
-            <button onClick={() => setFilters({})} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors">
+            <button
+              onClick={() => setFilters(isBranchLocked && branchFilterId != null ? { branchId: branchFilterId } : {})}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+            >
               Réinitialiser
             </button>
           </div>

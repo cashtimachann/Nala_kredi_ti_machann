@@ -33,6 +33,9 @@ const EXCHANGE_RATE = 130; // Taux de change HTG/USD pour les calculs approximat
 
 interface LoanReportsProps {
   onClose?: () => void;
+  enforcedBranchId?: number;
+  enforcedBranchName?: string;
+  isBranchLocked?: boolean;
 }
 
 interface PortfolioMetrics {
@@ -91,16 +94,26 @@ interface OverdueDetail {
   branch: string;
 }
 
-const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
+const LoanReports: React.FC<LoanReportsProps> = ({ onClose, enforcedBranchId, enforcedBranchName, isBranchLocked }) => {
+  const branchLockActive = Boolean(isBranchLocked && enforcedBranchId);
+  const lockedBranchLabel = branchLockActive && enforcedBranchId
+    ? enforcedBranchName || `Succursale ${enforcedBranchId}`
+    : undefined;
   const [activeTab, setActiveTab] = useState<'portfolio' | 'performance' | 'overdue' | 'collection'>('portfolio');
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom'>('month');
   const [currency, setCurrency] = useState<'ALL' | 'HTG' | 'USD'>('ALL');
-  const [selectedBranch, setSelectedBranch] = useState<string>('ALL');
+  const [selectedBranch, setSelectedBranch] = useState<string>(branchLockActive && enforcedBranchId ? String(enforcedBranchId) : 'ALL');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   
+  useEffect(() => {
+    if (branchLockActive && enforcedBranchId) {
+      setSelectedBranch(String(enforcedBranchId));
+    }
+  }, [branchLockActive, enforcedBranchId]);
+
   // State for real data
   const [portfolioMetrics, setPortfolioMetrics] = useState<PortfolioMetrics>({
     totalLoans: 0,
@@ -133,9 +146,16 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
     if (!loading) {
       loadReportsData();
     }
-  }, [selectedBranch, dateRange, startDate, endDate, currency]);
+  }, [selectedBranch, dateRange, startDate, endDate, currency, branchLockActive, enforcedBranchId]);
 
   const loadBranches = async () => {
+    if (branchLockActive && enforcedBranchId) {
+      setBranches([
+        { id: String(enforcedBranchId), name: lockedBranchLabel || `Succursale ${enforcedBranchId}` }
+      ]);
+      return;
+    }
+
     try {
       const branchesData = await apiService.getAllBranches();
       const formattedBranches = [
@@ -151,7 +171,9 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
       toast.error('Erreur lors du chargement des succursales');
       // Fallback to default branches
       setBranches([
-        { id: 'ALL', name: 'Toutes les succursales' }
+        branchLockActive && enforcedBranchId
+          ? { id: String(enforcedBranchId), name: lockedBranchLabel || `Succursale ${enforcedBranchId}` }
+          : { id: 'ALL', name: 'Toutes les succursales' }
       ]);
     }
   };
@@ -162,8 +184,12 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
 
       // Build filters object
       const filters: any = {};
-      const branchId = selectedBranch && selectedBranch !== 'ALL' ? parseInt(selectedBranch) : undefined;
-      if (branchId) filters.branchId = branchId;
+      const parsedSelectedBranch = selectedBranch && selectedBranch !== 'ALL' ? parseInt(selectedBranch, 10) : undefined;
+      const normalizedSelectedBranch = Number.isNaN(parsedSelectedBranch ?? NaN) ? undefined : parsedSelectedBranch;
+      const appliedBranchId = branchLockActive && enforcedBranchId ? enforcedBranchId : normalizedSelectedBranch;
+      if (appliedBranchId !== undefined) {
+        filters.branchId = appliedBranchId;
+      }
       
       // Add date range filter
       if (dateRange === 'custom' && startDate && endDate) {
@@ -215,10 +241,10 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
       // Load all data in parallel
       const [stats, loansByType, agentPerformance, overdue, collectedStats] = await Promise.all([
         microcreditLoanApplicationService.getDashboardStats(filters),
-        microcreditLoanApplicationService.getLoansByType(branchId, 'Active'),
-        microcreditLoanApplicationService.getAgentPerformance(branchId),
-        microcreditLoanApplicationService.getOverdueLoans(undefined, branchId),
-        microcreditPaymentService.getPaymentStatistics(fromDateString, toDateString, branchId).catch(err => {
+        microcreditLoanApplicationService.getLoansByType(appliedBranchId, 'Active'),
+        microcreditLoanApplicationService.getAgentPerformance(appliedBranchId),
+        microcreditLoanApplicationService.getOverdueLoans(undefined, appliedBranchId),
+        microcreditPaymentService.getPaymentStatistics(fromDateString, toDateString, appliedBranchId).catch(err => {
           console.warn('Unable to load payment statistics:', err);
           return null;
         })
@@ -703,15 +729,25 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
               {/* Branch Filter */}
               <div className="flex items-center gap-2">
                 <Filter className="w-5 h-5 text-gray-400" />
-                <select
-                  value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                >
-                  {branches.map(branch => (
-                    <option key={branch.id} value={branch.id}>{branch.name}</option>
-                  ))}
-                </select>
+                {branchLockActive ? (
+                  <div className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm text-gray-900">
+                    <div>{lockedBranchLabel}</div>
+                    <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                      <Info className="w-3.5 h-3.5" />
+                      Succursale verrouillée
+                    </div>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedBranch}
+                    onChange={(e) => setSelectedBranch(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    {branches.map(branch => (
+                      <option key={branch.id} value={branch.id}>{branch.name}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* Date Range Filter */}
@@ -797,13 +833,15 @@ const LoanReports: React.FC<LoanReportsProps> = ({ onClose }) => {
               <span className="text-sm text-gray-600">Filtres actifs:</span>
               {selectedBranch !== 'ALL' && (
                 <span className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-800 rounded-md text-xs">
-                  {branches.find(b => b.id === selectedBranch)?.name}
-                  <button
-                    onClick={() => setSelectedBranch('ALL')}
-                    className="hover:text-indigo-900"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
+                  {branches.find(b => b.id === selectedBranch)?.name || lockedBranchLabel}
+                  {!branchLockActive && (
+                    <button
+                      onClick={() => setSelectedBranch('ALL')}
+                      className="hover:text-indigo-900"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
                 </span>
               )}
               {dateRange === 'custom' && startDate && endDate && (

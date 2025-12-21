@@ -26,7 +26,7 @@ public class BranchReportController : ControllerBase
     /// <param name="branchId">ID de la succursale</param>
     /// <param name="date">Date du rapport (optionnel, par défaut aujourd'hui)</param>
     [HttpGet("daily/{branchId}")]
-    [Authorize(Roles = "Manager,BranchSupervisor,SuperAdmin,Director")]
+    [Authorize(Roles = "Manager,SuperAdmin,Director")]
     public async Task<ActionResult<DailyBranchReportDto>> GetDailyReport(int branchId, [FromQuery] DateTime? date)
     {
         try
@@ -58,7 +58,7 @@ public class BranchReportController : ControllerBase
     /// <param name="month">Mois (1-12)</param>
     /// <param name="year">Année</param>
     [HttpGet("monthly/{branchId}")]
-    [Authorize(Roles = "Manager,BranchSupervisor,SuperAdmin,Director")]
+    [Authorize(Roles = "Manager,SuperAdmin,Director")]
     public async Task<ActionResult<MonthlyBranchReportDto>> GetMonthlyReport(
         int branchId, 
         [FromQuery] int? month, 
@@ -95,7 +95,7 @@ public class BranchReportController : ControllerBase
     /// Générer un rapport personnalisé avec période spécifique
     /// </summary>
     [HttpPost("custom")]
-    [Authorize(Roles = "Manager,BranchSupervisor,SuperAdmin,Director")]
+    [Authorize(Roles = "Manager,SuperAdmin,Director")]
     public async Task<ActionResult<DailyBranchReportDto>> GetCustomReport([FromBody] BranchReportRequestDto request)
     {
         try
@@ -157,7 +157,7 @@ public class BranchReportController : ControllerBase
     /// Obtenir le rapport journalier pour la succursale de l'utilisateur connecté
     /// </summary>
     [HttpGet("my-branch/daily")]
-    [Authorize(Roles = "Manager,BranchSupervisor,Cashier")]
+    [Authorize(Roles = "Manager,Cashier")]
     public async Task<ActionResult<DailyBranchReportDto>> GetMyBranchDailyReport([FromQuery] DateTime? date)
     {
         try
@@ -193,7 +193,7 @@ public class BranchReportController : ControllerBase
     /// Obtenir le rapport mensuel pour la succursale de l'utilisateur connecté
     /// </summary>
     [HttpGet("my-branch/monthly")]
-    [Authorize(Roles = "Manager,BranchSupervisor,Cashier")]
+    [Authorize(Roles = "Manager,Cashier")]
     public async Task<ActionResult<MonthlyBranchReportDto>> GetMyBranchMonthlyReport(
         [FromQuery] int? month, 
         [FromQuery] int? year)
@@ -236,7 +236,7 @@ public class BranchReportController : ControllerBase
     /// Exporter un rapport en format CSV
     /// </summary>
     [HttpGet("export/daily/{branchId}")]
-    [Authorize(Roles = "Manager,BranchSupervisor,SuperAdmin,Director")]
+    [Authorize(Roles = "Manager,SuperAdmin,Director")]
     public async Task<IActionResult> ExportDailyReportCsv(int branchId, [FromQuery] DateTime? date)
     {
         try

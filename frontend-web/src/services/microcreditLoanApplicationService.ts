@@ -712,21 +712,29 @@ class MicrocreditLoanApplicationService {
     }
   }
 
-  async getActiveLoans(): Promise<any[]> {
+  async getActiveLoans(branchId?: number): Promise<any[]> {
     try {
+      const buildParams = (status: string) => {
+        const params: any = { status, pageSize: 1000 };
+        if (typeof branchId === 'number') {
+          params.branchId = branchId;
+        }
+        return params;
+      };
+
       // Fetch Active, Overdue, and Defaulted loans
       const [activeResponse, overdueResponse, defaultedResponse] = await Promise.all([
         axios.get(
-          `${API_BASE_URL}/MicrocreditLoan?status=Active&pageSize=1000`,
-          { headers: this.getAuthHeaders() }
+          `${API_BASE_URL}/MicrocreditLoan`,
+          { headers: this.getAuthHeaders(), params: buildParams('Active') }
         ),
         axios.get(
-          `${API_BASE_URL}/MicrocreditLoan?status=Overdue&pageSize=1000`,
-          { headers: this.getAuthHeaders() }
+          `${API_BASE_URL}/MicrocreditLoan`,
+          { headers: this.getAuthHeaders(), params: buildParams('Overdue') }
         ),
         axios.get(
-          `${API_BASE_URL}/MicrocreditLoan?status=Defaulted&pageSize=1000`,
-          { headers: this.getAuthHeaders() }
+          `${API_BASE_URL}/MicrocreditLoan`,
+          { headers: this.getAuthHeaders(), params: buildParams('Defaulted') }
         )
       ]);
       
@@ -754,13 +762,18 @@ class MicrocreditLoanApplicationService {
     }
   }
 
-  async getApprovedLoans(): Promise<any[]> {
+  async getApprovedLoans(branchId?: number): Promise<any[]> {
     try {
+      const params: any = { status: 'Approved', pageSize: 1000 };
+      if (typeof branchId === 'number') {
+        params.branchId = branchId;
+      }
+
       // Fetch loan applications with APPROVED status (ready for disbursement)
       // These are applications that have been approved but not yet disbursed
       const response = await axios.get(
-        `${API_BASE_URL}/MicrocreditLoanApplication?status=Approved&pageSize=1000`,
-        { headers: this.getAuthHeaders() }
+        `${API_BASE_URL}/MicrocreditLoanApplication`,
+        { headers: this.getAuthHeaders(), params }
       );
       
       // Handle different response formats

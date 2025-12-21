@@ -46,6 +46,11 @@ public class CashierPerformanceDto
     public DateTime SessionStart { get; set; }
 }
 
+// Alias pour compatibilité
+public class ManagerDashboardDto : BranchSupervisorDashboardDto
+{
+}
+
 public class RegionalManagerDashboardDto
 {
     public int TotalBranches { get; set; }

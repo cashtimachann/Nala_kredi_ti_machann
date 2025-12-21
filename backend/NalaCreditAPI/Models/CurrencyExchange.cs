@@ -33,6 +33,8 @@ namespace NalaCreditAPI.Models
     {
         public Guid Id { get; set; }
 
+        public int? BranchId { get; set; } // Optional: If set, rate applies to specific branch only
+
         [Required]
         public CurrencyType BaseCurrency { get; set; } = CurrencyType.HTG;
 

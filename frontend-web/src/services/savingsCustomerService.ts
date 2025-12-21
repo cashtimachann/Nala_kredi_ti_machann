@@ -151,6 +151,7 @@ export interface SavingsCustomerCreateDto {
 // Interface pour la réponse
 export interface SavingsCustomerResponseDto {
   id: string;
+  branchId?: number;
   customerCode?: string;
   firstName: string;
   lastName: string;

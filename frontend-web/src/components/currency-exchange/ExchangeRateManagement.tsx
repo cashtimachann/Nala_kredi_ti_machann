@@ -39,6 +39,7 @@ import toast from 'react-hot-toast';
 
 interface ExchangeRateManagementProps {
   branchId?: string;
+  userRole?: string;
 }
 
 const normalizeTransactionStatus = (
@@ -104,7 +105,11 @@ const getStatusLabel = (
   return 'Inconnu';
 };
 
-const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchId }) => {
+const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchId, userRole }) => {
+  // Check if user is a branch manager
+  const roleNorm = (userRole || '').toLowerCase().replace(/[\s_-]+/g, '');
+  const branchManagerRoles = ['manager', 'branchmanager', 'branchsupervisor', 'assistantmanager', 'chefdesuccursale'];
+  const isBranchManager = branchManagerRoles.includes(roleNorm);
   const [activeTab, setActiveTab] = useState<'rates' | 'history'>('rates');
   const [rates, setRates] = useState<CurrencyExchangeRate[]>([]);
   const [transactions, setTransactions] = useState<ExchangeTransaction[]>([]);
@@ -157,6 +162,7 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
     try {
       setLoading(true);
       const searchDto: ExchangeRateSearchDto = {
+        branchId: isBranchManager && branchId ? branchId : undefined,
         baseCurrency: baseCurrencyFilter !== '' ? baseCurrencyFilter : undefined,
         targetCurrency: targetCurrencyFilter !== '' ? targetCurrencyFilter : undefined,
         isActive: activeFilter !== '' ? activeFilter === 'true' : undefined
@@ -174,8 +180,20 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
   const loadCurrentRates = async () => {
     try {
       setLoading(true);
-      const data = await apiService.getCurrentRates();
-      setRates(data);
+      // If branch manager, filter current rates by branch
+      if (isBranchManager && branchId) {
+        const searchDto: ExchangeRateSearchDto = {
+          branchId: branchId,
+          isActive: true,
+          page: 1,
+          pageSize: 100
+        };
+        const data = await apiService.getExchangeRates(searchDto);
+        setRates(data);
+      } else {
+        const data = await apiService.getCurrentRates();
+        setRates(data);
+      }
     } catch (error) {
       console.error('Error loading current rates:', error);
       toast.error('Erreur lors du chargement des taux actuels');
@@ -256,7 +274,12 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
         await apiService.updateExchangeRate(rateData as UpdateExchangeRateDto);
         toast.success('Taux modifié avec succès');
       } else {
-        await apiService.createExchangeRate(rateData as CreateExchangeRateDto);
+        // For branch managers, automatically set branchId
+        const createData = rateData as CreateExchangeRateDto;
+        if (isBranchManager && branchId && !createData.branchId) {
+          createData.branchId = branchId;
+        }
+        await apiService.createExchangeRate(createData);
         toast.success('Taux créé avec succès');
       }
       setShowRateForm(false);
@@ -497,8 +520,15 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
             Gestion des Taux de Change
           </h2>
           <p className="text-gray-600 mt-1">
-            Gérez les taux de change pour toutes les devises
+            {isBranchManager 
+              ? 'Gérez les taux de change pour votre succursale' 
+              : 'Gérez les taux de change pour toutes les devises'}
           </p>
+          {isBranchManager && branchId && (
+            <p className="text-sm text-blue-600 mt-1">
+              📍 Vous voyez uniquement les taux de votre succursale
+            </p>
+          )}
         </div>
         <div className="flex space-x-3">
           {activeTab === 'rates' && (
@@ -805,6 +835,11 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
                               {' '}
                               {(rate.targetCurrencyName || formatCurrencyType(rate.targetCurrency))}
                             </div>
+                            {rate.branchName && (
+                              <div className="text-xs text-blue-600 mt-1">
+                                📍 {rate.branchName}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -1082,6 +1117,9 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
       {showRateForm && (
         <ExchangeRateForm
           rate={editingRate}
+          branchId={isBranchManager ? branchId : undefined}
+          userRole={userRole}
+          branches={branches}
           onSubmit={handleRateSubmit}
           onCancel={() => {
             setShowRateForm(false);
@@ -1108,6 +1146,15 @@ const ExchangeRateManagement: React.FC<ExchangeRateManagementProps> = ({ branchI
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {selectedRate.branchName && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700">Succursale</label>
+                    <p className="text-sm text-blue-600 mt-1 font-medium">
+                      📍 {selectedRate.branchName}
+                    </p>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Devise de base</label>
                   <p className="text-sm text-gray-900 mt-1">

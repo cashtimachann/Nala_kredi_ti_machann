@@ -21,7 +21,8 @@ import {
   Search,
   Award,
   Menu,
-  X
+  X,
+  UserPlus
 } from 'lucide-react';
 import { UserInfo } from '../../services';
 
@@ -77,10 +78,52 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
     ...settingsNav,
   ];
 
-  // Filter navigation based on user role
-  const navigation = allNavigation.filter(item => 
+  // Filter navigation based on user role, with curated menus for branch heads
+  // Normalize role to catch synonyms (e.g., AssistantManager, Chef de Succursale)
+  const roleNorm = (user.role || '').toLowerCase().replace(/[\s_-]+/g, '');
+  const branchHeadRoleKeys = ['manager', 'branchsupervisor', 'assistantmanager', 'chefdesuccursale', 'branchmanager'];
+  const isBranchHead = branchHeadRoleKeys.includes(roleNorm);
+  const branchHeadDisplayRoles = [
+    'Manager',
+    'BranchSupervisor',
+    'Branch Supervisor',
+    'AssistantManager',
+    'Assistant Manager',
+    'ChefDeSuccursale',
+    'Chef de Succursale',
+    'BranchManager',
+    'Branch Manager'
+  ];
+  const branchHeadCreateAdminNav = {
+    name: 'Créer Admin Succursale',
+    icon: UserPlus,
+    href: '/admin/accounts',
+    roles: branchHeadDisplayRoles
+  };
+  const navigationSource = isBranchHead ? [...allNavigation, branchHeadCreateAdminNav] : allNavigation;
+  const displayBranchName = user.branchName;
+  const allowedForBranchHead = new Set<string>([
+    '/dashboard',
+    '/client-accounts',
+    '/savings',
+    '/current-accounts',
+    '/term-savings',
+    '/loans',
+    '/currency-exchange/rates',
+    '/transfers',
+    '/reports/branch',
+    '/admin/accounts'
+  ]);
+
+  // Base role filter
+  let navigation = navigationSource.filter(item => 
     item.roles.includes('all') || item.roles.includes(user.role)
   );
+
+  // Apply role-specific curation for branch heads
+  if (isBranchHead) {
+    navigation = navigation.filter(item => allowedForBranchHead.has(item.href));
+  }
 
   const isCurrentPath = (href: string) => {
     if (href === '/dashboard') {
@@ -101,26 +144,27 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
 
       {/* Sidebar */}
       <div className={`
-        fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out
+        fixed inset-y-0 left-0 z-50 w-64 shadow-lg transform transition-transform duration-300 ease-in-out
+        ${isBranchHead ? 'bg-gradient-to-b from-blue-600 via-blue-700 to-blue-800' : 'bg-white'}
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0
       `}>
         <div className="flex flex-col h-full">
           {/* Logo with close button on mobile */}
-          <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
+          <div className={`flex items-center justify-between px-6 py-4 border-b flex-shrink-0 ${isBranchHead ? 'border-blue-500' : ''}`}>
             <div className="flex items-center">
-              <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">NC</span>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isBranchHead ? 'bg-white/20 backdrop-blur' : 'bg-primary-600'}`}>
+                <span className={`font-bold text-sm ${isBranchHead ? 'text-white' : 'text-white'}`}>NC</span>
               </div>
               <div className="ml-3">
-                <p className="text-sm font-semibold text-gray-900">Nala Kredi</p>
-                <p className="text-xs text-gray-500">Ti Machann</p>
+                <p className={`text-sm font-semibold ${isBranchHead ? 'text-white' : 'text-gray-900'}`}>Nala Kredi</p>
+                <p className={`text-xs ${isBranchHead ? 'text-blue-200' : 'text-gray-500'}`}>Ti Machann</p>
               </div>
             </div>
             {/* Close button - only visible on mobile */}
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
+              className={`lg:hidden p-2 rounded-md transition-colors ${isBranchHead ? 'text-blue-200 hover:text-white hover:bg-white/10' : 'text-gray-400 hover:text-gray-500 hover:bg-gray-100'}`}
             >
               <X className="h-6 w-6" />
             </button>
@@ -137,9 +181,13 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
                   <a
                     key={item.name}
                     href="#"
-                    className="group flex items-center px-2 py-2 text-sm font-medium rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                      isBranchHead
+                        ? 'text-blue-100 hover:bg-white/10 hover:text-white'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
                   >
-                    <Icon className="mr-3 flex-shrink-0 h-5 w-5 text-gray-400 group-hover:text-gray-500" />
+                    <Icon className={`mr-3 flex-shrink-0 h-5 w-5 ${isBranchHead ? 'text-blue-200 group-hover:text-white' : 'text-gray-400 group-hover:text-gray-500'}`} />
                     <span className="truncate">{item.name}</span>
                   </a>
                 );
@@ -151,17 +199,28 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
                   to={item.href}
                   onClick={() => setSidebarOpen(false)}
                   className={`
-                    group flex items-center px-2 py-2 text-sm font-medium rounded-md
-                    ${isCurrent
-                      ? 'bg-primary-100 text-primary-900'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-all
+                    ${isBranchHead
+                      ? isCurrent
+                        ? 'bg-white text-blue-700 shadow-lg'
+                        : 'text-blue-100 hover:bg-white/10 hover:text-white'
+                      : isCurrent
+                        ? 'bg-primary-100 text-primary-900'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                     }
                   `}
                 >
                   <Icon
                     className={`
-                      mr-3 flex-shrink-0 h-5 w-5
-                      ${isCurrent ? 'text-primary-500' : 'text-gray-400 group-hover:text-gray-500'}
+                      mr-3 flex-shrink-0 h-5 w-5 transition-colors
+                      ${isBranchHead
+                        ? isCurrent
+                          ? 'text-blue-700'
+                          : 'text-blue-200 group-hover:text-white'
+                        : isCurrent 
+                          ? 'text-primary-500' 
+                          : 'text-gray-400 group-hover:text-gray-500'
+                      }
                     `}
                   />
                   <span className="truncate">{item.name}</span>
@@ -171,22 +230,22 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
           </nav>
 
           {/* User info - Fixed at bottom */}
-          <div className="border-t px-4 py-4 flex-shrink-0">
+          <div className={`border-t px-4 py-4 flex-shrink-0 ${isBranchHead ? 'border-blue-500 bg-blue-900/30' : ''}`}>
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isBranchHead ? 'bg-white/20 backdrop-blur' : 'bg-primary-600'}`}>
                   <span className="text-sm font-medium text-white">
                     {user.firstName?.[0]}{user.lastName?.[0]}
                   </span>
                 </div>
               </div>
               <div className="ml-3 flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
+                <p className={`text-sm font-medium truncate ${isBranchHead ? 'text-white' : 'text-gray-900'}`}>
                   {user.firstName} {user.lastName}
                 </p>
-                <p className="text-xs text-gray-500 truncate">{user.role}</p>
+                <p className={`text-xs truncate ${isBranchHead ? 'text-blue-200' : 'text-gray-500'}`}>{user.role}</p>
                 {user.branchName && (
-                  <p className="text-xs text-primary-600 truncate">{user.branchName}</p>
+                  <p className={`text-xs truncate ${isBranchHead ? 'text-blue-300 font-medium' : 'text-primary-600'}`}>{user.branchName}</p>
                 )}
               </div>
             </div>
@@ -200,7 +259,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         <div className="bg-white shadow-sm border-b sticky top-0 z-30">
           <div className="px-4 sm:px-6 py-4">
             <div className="flex items-center justify-between">
-              {/* Mobile menu button */}
+              {/* Mobile menu button - Left side */}
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
@@ -208,10 +267,21 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
                 <Menu className="h-6 w-6" />
               </button>
 
-              {/* Spacer for mobile */}
-              <div className="lg:hidden flex-1" />
+              {/* Center - Branch name for branch heads */}
+              {isBranchHead && displayBranchName && (
+                <div className="hidden lg:flex items-center justify-center flex-1">
+                  <div className="flex items-center px-6 py-2 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200 shadow-sm">
+                    <Building2 className="h-5 w-5 text-blue-600 mr-3" />
+                    <p className="text-sm font-bold text-blue-900 truncate whitespace-nowrap">Succursale :  {displayBranchName}</p>
+                  </div>
+                </div>
+              )}
 
-              <div className="flex items-center space-x-2 sm:space-x-4">
+              {/* Empty spacer for desktop when not branch head */}
+              {!isBranchHead && <div className="hidden lg:block flex-1" />}
+
+              {/* Right side content */}
+              <div className="flex items-center ml-auto space-x-2 sm:space-x-4">
                 {/* Notifications */}
                 <button className="p-2 text-gray-400 hover:text-gray-500 relative">
                   <Bell className="h-5 w-5 sm:h-6 sm:w-6" />
@@ -220,11 +290,19 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
                   </span>
                 </button>
 
-                {/* Branch info - hidden on small screens */}
-                {user.branchName && (
+                {/* Branch info - visible on small screens for branch heads */}
+                {isBranchHead && displayBranchName && (
+                  <div className="flex lg:hidden items-center px-3 py-1 bg-blue-50 rounded-full border border-blue-200">
+                    <Building2 className="h-4 w-4 text-blue-600 mr-2" />
+                    <span className="text-sm font-medium text-blue-800 truncate whitespace-nowrap">(Succursale) {displayBranchName}</span>
+                  </div>
+                )}
+
+                {/* Branch info - hidden on small screens (only for non-branch heads) */}
+                {!isBranchHead && displayBranchName && (
                   <div className="hidden md:flex items-center px-3 py-1 bg-primary-50 rounded-full">
                     <Building2 className="h-4 w-4 text-primary-600 mr-2" />
-                    <span className="text-sm font-medium text-primary-800">{user.branchName}</span>
+                    <span className="text-sm font-medium text-primary-800 truncate whitespace-nowrap">(Succursale) {displayBranchName}</span>
                   </div>
                 )}
 

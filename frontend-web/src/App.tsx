@@ -75,6 +75,9 @@ function App() {
         return <SecretaryDashboard />;
       case 'CreditAgent':
         return <CreditAgentDashboard />;
+      case 'Manager':
+        // Managers use the same dashboard view as Branch Supervisors
+        return <BranchSupervisorDashboard />;
       case 'BranchSupervisor':
         return <BranchSupervisorDashboard />;
       case 'RegionalManager':
@@ -188,7 +191,7 @@ function App() {
             element={
               user ? (
                 <Layout user={user} onLogout={handleLogout}>
-                  <ExchangeRateManagement branchId={user.branchId?.toString()} />
+                  <ExchangeRateManagement branchId={user.branchId?.toString()} userRole={user.role} />
                 </Layout>
               ) : (
                 <Navigate to="/login" replace />

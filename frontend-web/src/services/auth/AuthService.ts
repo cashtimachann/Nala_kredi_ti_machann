@@ -118,7 +118,7 @@ export class AuthService extends BaseApiService {
       lastName: userData.lastName || userData.LastName,
       role: userData.role || userData.Role,
       branchId: userData.branchId || userData.BranchId,
-      branchName: userData.branchName || userData.BranchName,
+      branchName: userData.branchName || userData.BranchName || userData.branch || userData.Branch,
       phoneNumber: userData.phoneNumber || userData.PhoneNumber,
       isActive: userData.isActive || userData.IsActive,
       lastLogin: userData.lastLogin || userData.LastLogin
@@ -139,7 +139,22 @@ export class AuthService extends BaseApiService {
   }
 
   async getProfile(): Promise<UserInfo> {
-    return this.get<UserInfo>('/auth/profile');
+    // Fetch raw profile and normalize keys (handles PascalCase from backend)
+    const data: any = await this.get<any>('/auth/profile');
+    const userData = data?.user || data?.User || data;
+    const normalizedUser: UserInfo = {
+      id: userData.id || userData.Id,
+      email: userData.email || userData.Email,
+      firstName: userData.firstName || userData.FirstName,
+      lastName: userData.lastName || userData.LastName,
+      role: userData.role || userData.Role,
+      branchId: userData.branchId || userData.BranchId,
+      branchName: userData.branchName || userData.BranchName || userData.branch || userData.Branch,
+      phoneNumber: userData.phoneNumber || userData.PhoneNumber,
+      isActive: userData.isActive || userData.IsActive,
+      lastLogin: userData.lastLogin || userData.LastLogin
+    };
+    return normalizedUser;
   }
 
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
@@ -160,11 +175,46 @@ export class AuthService extends BaseApiService {
   }
 
   async getRecentTransactions(branchId: number, limit: number = 10): Promise<Transaction[]> {
-    return this.get<Transaction[]>(`/branch/${branchId}/transactions/recent?limit=${limit}`);
+    // Use existing backend endpoint: /api/Transaction/branch/{branchId}/today
+    const summary: any = await this.get<any>(`/transaction/branch/${branchId}/today`);
+    const list = (summary?.Transactions ?? summary?.transactions ?? []) as any[];
+    return list.slice(0, limit).map((t) => {
+      const rawC = t.Currency ?? t.currency ?? 'HTG';
+      const currency = typeof rawC === 'number' ? (rawC === 1 ? 'HTG' : 'USD') : String(rawC);
+      return {
+        id: String(t.Id ?? t.id ?? t.TransactionNumber ?? t.transactionNumber ?? ''),
+        type: String(t.Type ?? t.type ?? ''),
+        amount: Number(t.Amount ?? t.amount ?? 0),
+        currency,
+        clientName: String(t.Customer ?? t.customer ?? ''),
+        cashier: String(t.ProcessedBy ?? t.processedBy ?? ''),
+        timestamp: String(t.CreatedAt ?? t.createdAt ?? new Date().toISOString()),
+        status: 'Complétée'
+      } as Transaction;
+    });
   }
 
-  async getPendingAccounts(branchId: number): Promise<PendingAccount[]> {
-    return this.get<PendingAccount[]>(`/branch/${branchId}/accounts/pending`);
+  async getPendingAccounts(_branchId: number): Promise<PendingAccount[]> {
+    // Temporarily use loans pending as validation items for supervisors
+    const loans: any[] = await this.get<any[]>(`/branch/loans/pending`);
+    return loans.map((l) => ({
+      id: String(l.id ?? l.Id ?? ''),
+      accountNumber: String(l.applicationNumber ?? l.ApplicationNumber ?? ''),
+      clientName: String(l.clientName ?? l.ClientName ?? ''),
+      accountType: String(l.loanType ?? l.LoanType ?? 'Loan'),
+      submittedBy: String(l.submittedBy ?? l.SubmittedBy ?? ''),
+      submittedDate: String(l.requestDate ?? l.RequestDate ?? new Date().toISOString()),
+      amount: Number(l.amount ?? l.Amount ?? 0)
+    }));
+  }
+
+  // Approvals for pending loans (used by Branch Supervisor)
+  async approveLoan(id: string): Promise<void> {
+    await this.post(`/branch/loans/${id}/approve`);
+  }
+
+  async rejectLoan(id: string, reason: string): Promise<void> {
+    await this.post(`/branch/loans/${id}/reject`, { reason });
   }
 
   async getSuperAdminDashboard(): Promise<SuperAdminDashboard> {

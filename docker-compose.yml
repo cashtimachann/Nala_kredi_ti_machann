@@ -106,12 +106,31 @@ services:
       retries: 3
       start_period: 40s
 
-  # Frontend React
+  # Frontend React - Admin Dashboard
   frontend:
     build:
       context: ./frontend-web
       dockerfile: Dockerfile
     container_name: nala-frontend
+    restart: unless-stopped
+    # Frontend is internal; nginx will proxy requests to this service.
+    # Do NOT publish frontend port to the host in production.
+    networks:
+      - nala-network
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend React - Branch Manager Dashboard
+  frontend-branch:
+    build:
+      context: ./frontend-web
+      dockerfile: Dockerfile.branch
+    container_name: nala-frontend-branch
     restart: unless-stopped
     # Frontend is internal; nginx will proxy requests to this service.
     # Do NOT publish frontend port to the host in production.
@@ -145,6 +164,7 @@ services:
     depends_on:
       - api
       - frontend
+      - frontend-branch
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s

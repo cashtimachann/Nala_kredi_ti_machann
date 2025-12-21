@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Calendar,
   TrendingUp,
@@ -31,15 +31,32 @@ interface ReportData {
   accounts?: any[];
 }
 
-const CurrentAccountReports: React.FC = () => {
+interface CurrentAccountReportsProps {
+  effectiveBranchId?: number | string;
+  isBranchLocked?: boolean;
+}
+
+const CurrentAccountReports: React.FC<CurrentAccountReportsProps> = ({ effectiveBranchId, isBranchLocked }) => {
   const [loading, setLoading] = useState(false);
   const [reportType, setReportType] = useState('summary');
   const [period, setPeriod] = useState('month');
   const [reportData, setReportData] = useState<ReportData>({});
   const [customDateRange, setCustomDateRange] = useState({ startDate: '', endDate: '' });
-  const [filters, setFilters] = useState<any>({ currency: '', branchId: '', status: '', accountNumber: '', txType: '' });
+  const [filters, setFilters] = useState<any>({ currency: '', branchId: effectiveBranchId ? String(effectiveBranchId) : '', status: '', accountNumber: '', txType: '' });
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
   const [accountsPreviewLimit, setAccountsPreviewLimit] = useState(1000);
+
+  const normalizedBranchId = useMemo(() => {
+    if (effectiveBranchId == null) return undefined;
+    const parsed = Number(effectiveBranchId);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }, [effectiveBranchId]);
+
+  const lockedBranchName = useMemo(() => {
+    if (normalizedBranchId == null) return '';
+    const found = branches.find((b) => Number(b.id) === normalizedBranchId);
+    return found?.name || `Succursale #${normalizedBranchId}`;
+  }, [branches, normalizedBranchId]);
 
   useEffect(() => {
     (async () => {
@@ -51,14 +68,26 @@ const CurrentAccountReports: React.FC = () => {
       } catch {}
     })();
     loadReportData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => { loadReportData(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [reportType, period, JSON.stringify(filters), customDateRange.startDate, customDateRange.endDate]);
+  useEffect(() => {
+    loadReportData();
+  }, [reportType, period, JSON.stringify(filters), customDateRange.startDate, customDateRange.endDate, normalizedBranchId]);
+
+  useEffect(() => {
+    if (normalizedBranchId != null) {
+      setFilters((prev: any) => {
+        const nextVal = String(normalizedBranchId);
+        if (prev.branchId === nextVal) return prev;
+        return { ...prev, branchId: nextVal };
+      });
+    }
+  }, [normalizedBranchId]);
 
   const loadReportData = async () => {
     setLoading(true);
     try {
+      const scopedBranchId = normalizedBranchId != null ? normalizedBranchId : (filters.branchId ? Number(filters.branchId) : undefined);
       // Build date range
       let startDateStr: string | undefined;
       let endDateStr: string | undefined;
@@ -86,7 +115,11 @@ const CurrentAccountReports: React.FC = () => {
 
       if (reportType === 'summary') {
         // Get accounts (current) and a capped set of transactions
-        const accounts = await apiService.getClientAccounts({ accountType: AccountType.CURRENT, branchId: filters.branchId || undefined, currency: filters.currency || undefined });
+        const accounts = await apiService.getClientAccounts({
+          accountType: AccountType.CURRENT,
+          branchId: scopedBranchId,
+          currency: filters.currency || undefined
+        });
         // If an accountNumber filter is set, load its transactions; otherwise attempt to load recent transactions across a small set of accounts
         let txArray: any[] = [];
         if (filters.accountNumber && String(filters.accountNumber).trim()) {
@@ -116,7 +149,10 @@ const CurrentAccountReports: React.FC = () => {
           transactions: txArray
         });
       } else if (reportType === 'accounts') {
-        const accounts = await apiService.getClientAccounts({ accountType: AccountType.CURRENT, branchId: filters.branchId || undefined });
+        const accounts = await apiService.getClientAccounts({
+          accountType: AccountType.CURRENT,
+          branchId: scopedBranchId
+        });
         const statusOf = (s:any) => (typeof s === 'number') ? String(s) : String(s || '');
         const accountsByStatus = [
           { name: 'Actif', value: accounts.filter((a:any) => (a.status||'').toString().toUpperCase() === 'ACTIVE').length },
@@ -131,7 +167,12 @@ const CurrentAccountReports: React.FC = () => {
         if (filters.accountNumber && String(filters.accountNumber).trim()) {
           transactions = await apiService.getAccountTransactions(String(filters.accountNumber).trim());
         } else {
-          const accounts = await apiService.getClientAccounts({ accountType: AccountType.CURRENT, page:1, pageSize:50 });
+          const accounts = await apiService.getClientAccounts({
+            accountType: AccountType.CURRENT,
+            page: 1,
+            pageSize: 50,
+            branchId: scopedBranchId
+          });
           const list = (accounts || []).slice(0, 30);
           const txArrays = await Promise.all(list.map((a:any) => apiService.getAccountTransactions(a.accountNumber || a.AccountNumber || '')));
           transactions = ([] as any[]).concat(...txArrays);
@@ -249,15 +290,28 @@ const CurrentAccountReports: React.FC = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Succursale</label>
             <select
-              value={filters.branchId}
-              onChange={(e) => setFilters({ ...filters, branchId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              value={normalizedBranchId != null ? String(normalizedBranchId) : filters.branchId}
+              onChange={(e) => {
+                if (isBranchLocked) return;
+                setFilters({ ...filters, branchId: e.target.value });
+              }}
+              disabled={isBranchLocked}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${isBranchLocked ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-200' : 'border-gray-300'}`}
             >
-              <option value="">Toutes</option>
-              {branches.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
+              {isBranchLocked ? (
+                <option value={normalizedBranchId != null ? String(normalizedBranchId) : ''}>{lockedBranchName || 'Succursale verrouillée'}</option>
+              ) : (
+                <>
+                  <option value="">Toutes</option>
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </>
+              )}
             </select>
+            {isBranchLocked && (
+              <p className="text-xs text-amber-600 mt-1">Succursale verrouillée — rapports limités à {lockedBranchName || 'votre agence'}.</p>
+            )}
           </div>
           {reportType === 'transactions' && (
             <div>

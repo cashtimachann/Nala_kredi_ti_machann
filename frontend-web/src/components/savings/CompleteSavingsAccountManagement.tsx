@@ -131,7 +131,12 @@ interface AccountFilters {
   pageSize?: number;
 }
 
-const CompleteSavingsAccountManagement: React.FC = () => {
+interface CompleteSavingsAccountManagementProps {
+  effectiveBranchId?: number;
+  isBranchLocked?: boolean;
+}
+
+const CompleteSavingsAccountManagement: React.FC<CompleteSavingsAccountManagementProps> = ({ effectiveBranchId, isBranchLocked }) => {
   const [accounts, setAccounts] = useState<SavingsAccount[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<SavingsAccount | null>(null);
@@ -141,7 +146,7 @@ const CompleteSavingsAccountManagement: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [includeTermAccounts, setIncludeTermAccounts] = useState(false);
-  const [filters, setFilters] = useState<AccountFilters>({});
+  const [filters, setFilters] = useState<AccountFilters>(() => (effectiveBranchId ? { branchId: effectiveBranchId } : {}));
   const [statistics, setStatistics] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
@@ -149,6 +154,20 @@ const CompleteSavingsAccountManagement: React.FC = () => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  const branchFilterId = filters.branchId ?? (effectiveBranchId ?? undefined);
+  const branchSelectValue = branchFilterId ?? '';
+
+  useEffect(() => {
+    if (effectiveBranchId) {
+      setFilters((prev) => {
+        if (prev.branchId === effectiveBranchId) {
+          return prev;
+        }
+        return { ...prev, branchId: Number(effectiveBranchId) };
+      });
+    }
+  }, [effectiveBranchId]);
 
   useEffect(() => {
     loadAccounts();
@@ -185,8 +204,17 @@ const CompleteSavingsAccountManagement: React.FC = () => {
         try {
           const tdata = await apiService.getTermSavingsAccounts({ page: 1, pageSize: 1000 });
           const termList = (tdata?.accounts || tdata?.Accounts || (Array.isArray(tdata) ? tdata : []));
+          const scopedBranchId = branchFilterId;
+          const filteredTermList = scopedBranchId != null
+            ? (termList || []).filter((t: any) => {
+                const raw = t.branchId ?? t.BranchId ?? t.branch_id ?? t.branchID;
+                if (raw == null) return false;
+                const numeric = Number(raw);
+                return !Number.isNaN(numeric) && numeric === scopedBranchId;
+              })
+            : termList;
           // Map term accounts to the SavingsAccount shape partially for display; keep term fields in metadata
-          const mapped = (termList || []).map((t: any) => ({
+          const mapped = (filteredTermList || []).map((t: any) => ({
             ...t,
             accountNumber: t.accountNumber,
             customerName: t.customerName,
@@ -303,7 +331,7 @@ const CompleteSavingsAccountManagement: React.FC = () => {
     (account.customerName && account.customerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (account.customerPhone && account.customerPhone.includes(searchTerm))
   ).filter(account => {
-    if (filters.branchId && account.branchId !== filters.branchId) return false;
+    if (branchFilterId != null && account.branchId !== branchFilterId) return false;
     if (filters.currency !== undefined && account.currency !== (filters.currency === 0 ? 'HTG' : 'USD')) return false;
     if (filters.status !== undefined && account.status !== (filters.status === 0 ? 'Active' : filters.status === 1 ? 'Inactive' : filters.status === 2 ? 'Closed' : 'Suspended')) return false;
     return true;
@@ -592,16 +620,20 @@ const CompleteSavingsAccountManagement: React.FC = () => {
         {showFilters && (
           <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                 <Building2 className="h-4 w-4" />
                 Succursale
+                {isBranchLocked && branchFilterId != null ? (
+                  <span className="text-xs text-gray-500 italic">succursale verrouillée</span>
+                ) : null}
               </label>
               <select
-                value={filters.branchId ?? ''}
+                value={branchSelectValue}
                 onChange={(e) => setFilters({...filters, branchId: e.target.value ? parseInt(e.target.value) : undefined})}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                disabled={isBranchLocked}
               >
-                <option value="">Toutes succursales</option>
+                {!isBranchLocked && <option value="">Toutes succursales</option>}
                 {branches.map((branch) => (
                   <option key={branch.id} value={branch.id}>{branch.name}</option>
                 ))}
@@ -609,7 +641,7 @@ const CompleteSavingsAccountManagement: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                 <DollarSign className="h-4 w-4" />
                 Devise
               </label>
@@ -625,7 +657,7 @@ const CompleteSavingsAccountManagement: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                 <CheckCircle className="h-4 w-4" />
                 Statut
               </label>
@@ -644,7 +676,7 @@ const CompleteSavingsAccountManagement: React.FC = () => {
 
             <div className="flex items-end">
               <button
-                onClick={() => setFilters({})}
+                onClick={() => setFilters(branchFilterId != null && isBranchLocked ? { branchId: branchFilterId } : {})}
                 className="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
               >
                 Réinitialiser
@@ -954,13 +986,17 @@ const CompleteSavingsAccountManagement: React.FC = () => {
 
 // Modal Component for Creating Account
 const CreateAccountModal: React.FC<{ onClose: () => void; onSuccess: () => void }> = ({ onClose, onSuccess }) => {
+  const currentUser = apiService.getCurrentUser();
+  const userBranchId = currentUser?.branchId;
+  const roleNorm = (currentUser?.role || '').toString().toLowerCase().replace(/[\s_-]+/g, '');
+  const isBranchHead = ['manager','branchsupervisor','branchmanager','assistantmanager','chefdesuccursale','chefdesuccursal'].includes(roleNorm);
+  // accountForm state and handlers declared later once in this modal
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'customer' | 'account'>(('customer'));
   const [customerSearch, setCustomerSearch] = useState('');
   const [customers, setCustomers] = useState<any[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const lastSearchedRef = useRef<string>('');
   const CODE_PATTERN = /^[A-Z]{2}\d{3,}$/; // e.g., TD5765
@@ -995,6 +1031,7 @@ const CreateAccountModal: React.FC<{ onClose: () => void; onSuccess: () => void 
       maxWithdrawalAmount: ''
     } as any
   });
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const searchCustomers = async () => {
     const query = customerSearch?.trim();
@@ -1827,12 +1864,16 @@ const CreateAccountWithNewCustomerModal: React.FC<{ onClose: () => void; onSucce
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
   const [createdCustomerDto, setCreatedCustomerDto] = useState<any | null>(null);
   const [createdCustomerId, setCreatedCustomerId] = useState<string | null>(null);
-
+  const currentUser = apiService.getCurrentUser();
+  const userBranchId = currentUser?.branchId;
+  const roleNorm = (currentUser?.role || '').toString().toLowerCase().replace(/[\s_-]+/g, '');
+  const isBranchHead = ['manager','branchsupervisor','branchmanager','assistantmanager','chefdesuccursale','chefdesuccursal'].includes(roleNorm);
   const [accountForm, setAccountForm] = useState({
     branchId: 1,
-    currency: 0 as 0 | 1, // 0=HTG, 1=USD
+    currency: 0 as 0 | 1,
     initialDeposit: 0,
     interestRatePercent: 2.0,
+    notes: '',
     limits: {
       dailyWithdrawalLimit: '',
       dailyDepositLimit: '',
@@ -1843,6 +1884,11 @@ const CreateAccountWithNewCustomerModal: React.FC<{ onClose: () => void; onSucce
     } as any
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const handleCurrencyChange = (value: 0 | 1) => {
+    const suggested = value === 0 ? 2.0 : 1.5;
+    setAccountForm((prev) => ({ ...prev, currency: value, interestRatePercent: suggested }));
+  };
+  
 
   useEffect(() => {
     if (step === 'account') {
@@ -1851,8 +1897,10 @@ const CreateAccountWithNewCustomerModal: React.FC<{ onClose: () => void; onSucce
           const data = await apiService.getAllBranches();
           const mapped = (data || []).map((b: any) => ({ id: b.id || b.Id, name: b.name || b.Name }));
           setBranches(mapped);
-          if (mapped.length && !accountForm.branchId) {
-            setAccountForm((f) => ({ ...f, branchId: mapped[0].id }));
+          if (isBranchHead && userBranchId) {
+            setAccountForm((prev: any) => ({ ...prev, branchId: Number(userBranchId) }));
+          } else if (!accountForm.branchId) {
+            setAccountForm((prev: any) => ({ ...prev, branchId: mapped[0]?.id ?? prev.branchId }));
           }
         } catch {
           /* ignore */
@@ -1861,12 +1909,6 @@ const CreateAccountWithNewCustomerModal: React.FC<{ onClose: () => void; onSucce
     }
   }, [step]);
 
-  const handleCurrencyChange = (value: 0 | 1) => {
-    const suggested = value === 0 ? 2.0 : 1.5; // HTG:2% USD:1.5%
-    setAccountForm({ ...accountForm, currency: value, interestRatePercent: suggested });
-  };
-
-  // Map ClientCreationForm data -> SavingsCustomerCreateDto
   const mapClientFormToSavingsCustomerDto = (clientData: any) => {
     // gender: map 'M'|'F' to backend enum (0/1)
     const mapGender = (g: string) => (String(g).toUpperCase() === 'F' ? 1 : 0);
@@ -2136,12 +2178,13 @@ const CreateAccountWithNewCustomerModal: React.FC<{ onClose: () => void; onSucce
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Succursale</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Succursale {isBranchHead && userBranchId ? <span className="ml-2 text-xs text-gray-500 italic">Branch locked</span> : null}</label>
                   <select
                     value={accountForm.branchId}
                     onChange={(e) => setAccountForm({ ...accountForm, branchId: parseInt(e.target.value) })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     required
+                    disabled={isBranchHead && !!userBranchId}
                   >
                     {branches.length === 0 ? (
                       <option value={accountForm.branchId}>#{accountForm.branchId}</option>

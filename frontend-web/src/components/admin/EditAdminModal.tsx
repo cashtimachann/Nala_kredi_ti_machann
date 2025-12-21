@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import {
   X,
@@ -16,6 +16,18 @@ import {
 import toast from 'react-hot-toast';
 import { apiService } from '../../services/apiService';
 import { Branch, BranchStatus } from '../../types/branch';
+import { useAuthStore } from '../../stores/authStore';
+const normalizeRole = (role?: string) =>
+  role ? role.toLowerCase().replace(/[\s_-]+/g, '') : '';
+
+const BRANCH_MANAGER_ROLE_KEYS = new Set<string>([
+  'manager',
+  'branchmanager',
+  'branchsupervisor',
+  'assistantmanager',
+  'chefdesuccursale',
+  'chefdesuccursal'
+]);
 
 enum AdminType {
   CAISSIER = 'CAISSIER',
@@ -65,10 +77,20 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const currentUser = useAuthStore(state => state.user);
+  const normalizedRole = normalizeRole(currentUser?.role);
+  const isBranchManager = BRANCH_MANAGER_ROLE_KEYS.has(normalizedRole);
+  const managerBranchIdRaw = currentUser?.branchId ?? null;
+  const managerBranchId = typeof managerBranchIdRaw === 'string'
+    ? Number(managerBranchIdRaw)
+    : managerBranchIdRaw;
+  const hasManagerBranch = typeof managerBranchId === 'number' && Number.isFinite(managerBranchId);
 
   const {
     register,
     handleSubmit,
+    setValue,
+    clearErrors,
     formState: { errors }
   } = useForm<EditAdminFormData>({
     defaultValues: {
@@ -77,7 +99,8 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({
       email: currentData.email,
       phone: currentData.phone,
       department: currentData.department,
-      adminType: currentData.adminType
+      adminType: currentData.adminType,
+      branchId: isBranchManager && hasManagerBranch ? managerBranchId || undefined : undefined
     }
   });
 
@@ -103,6 +126,25 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({
     'Audit & Conformité',
     'Crédit & Recouvrement'
   ];
+
+  const branchOptions = useMemo(() => {
+    if (!isBranchManager || !hasManagerBranch) {
+      return branches;
+    }
+    return branches.filter(branch => Number(branch.id) === managerBranchId);
+  }, [branches, isBranchManager, hasManagerBranch, managerBranchId]);
+
+  const branchRegisterOptions = useMemo(() => ({
+    valueAsNumber: true,
+    ...(isBranchManager && hasManagerBranch ? {} : { required: 'La succursale est requise' })
+  }), [isBranchManager, hasManagerBranch]);
+
+  useEffect(() => {
+    if (isBranchManager && hasManagerBranch && typeof managerBranchId === 'number') {
+      setValue('branchId', managerBranchId, { shouldValidate: true, shouldDirty: false });
+      clearErrors('branchId');
+    }
+  }, [isBranchManager, hasManagerBranch, managerBranchId, setValue, clearErrors]);
 
   // Load branches
   useEffect(() => {
@@ -181,6 +223,10 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({
       });
 
       // Prepare update data matching AdminUpdateDto
+      const enforcedBranchId = (isBranchManager && hasManagerBranch)
+        ? managerBranchId?.toString()
+        : data.branchId?.toString();
+
       const updateData: any = {
         FirstName: data.firstName,
         LastName: data.lastName,
@@ -188,7 +234,7 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({
         Department: data.department || 'Non spécifié',
         AdminType: adminTypeValue,
         HireDate: currentData.hireDate || new Date().toISOString(), // Use original hireDate!
-        AssignedBranches: data.branchId ? [data.branchId.toString()] : []
+        AssignedBranches: enforcedBranchId ? [enforcedBranchId] : []
       };
 
       // Add password if reset is requested
@@ -394,14 +440,14 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({
                 <div className="relative">
                   <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <select
-                    {...register('branchId', { 
-                      valueAsNumber: true,
-                      required: 'La succursale est requise'
-                    })}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white"
+                    {...register('branchId', branchRegisterOptions)}
+                    disabled={isBranchManager && hasManagerBranch}
+                    className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none ${
+                      isBranchManager && hasManagerBranch ? 'bg-gray-100 cursor-not-allowed text-gray-500' : 'bg-white'
+                    }`}
                   >
                     <option value="">Sélectionner une succursale</option>
-                    {branches.map((branch) => (
+                    {branchOptions.map((branch) => (
                       <option key={branch.id} value={branch.id}>
                         {branch.name} - {branch.commune || branch.department}
                       </option>
@@ -410,6 +456,11 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({
                 </div>
                 {errors.branchId && (
                   <p className="text-red-600 text-sm mt-1">{errors.branchId.message}</p>
+                )}
+                {isBranchManager && hasManagerBranch && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    Succursale verrouillée sur {currentUser?.branchName || 'votre agence'}
+                  </p>
                 )}
               </div>
             </div>

@@ -28,7 +28,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Créer un nouveau compte client (épargne, courant, ou épargne à terme)
         /// </summary>
     [HttpPost("create")]
-    [Authorize(Roles = "Cashier,Manager,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "Cashier,Manager,SuperAdmin,Manager")]
         public async Task<ActionResult<ClientAccountResponseDto>> CreateAccount([FromBody] ClientAccountCreationDto dto)
         {
             try
@@ -152,7 +152,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Mettre à jour un compte client
         /// </summary>
     [HttpPut("{id}")]
-    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin,Manager")]
         public async Task<ActionResult<ClientAccountResponseDto>> UpdateAccount(string id, [FromBody] ClientAccountUpdateDto dto)
         {
             try
@@ -177,7 +177,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Fermer un compte client
         /// </summary>
     [HttpPost("{id}/close")]
-    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin,Manager")]
         public async Task<ActionResult> CloseAccount(string id, [FromBody] CloseAccountDto dto)
         {
             try
@@ -237,7 +237,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Statistiques générales des comptes clients
         /// </summary>
     [HttpGet("statistics")]
-    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin,Manager")]
         public async Task<ActionResult<ClientAccountStatisticsDto>> GetStatistics()
         {
             try
@@ -260,7 +260,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Statistiques par type de compte
         /// </summary>
     [HttpGet("statistics/by-type")]
-    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin,Manager")]
         public async Task<ActionResult<ClientAccountTypeStatisticsDto>> GetStatisticsByType()
         {
             var statistics = await _accountService.GetStatisticsByTypeAsync(ClientAccountType.Savings);
@@ -271,7 +271,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Statistiques par devise
         /// </summary>
     [HttpGet("statistics/by-currency")]
-    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin,Manager")]
         public async Task<ActionResult<ClientAccountCurrencyStatisticsDto>> GetStatisticsByCurrency()
         {
             var statistics = await _accountService.GetStatisticsByCurrencyAsync(ClientCurrency.HTG);
@@ -292,7 +292,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Mettre à jour le statut d'un compte client (suspendre/réactiver)
         /// </summary>
         [HttpPatch("{id}/status")]
-        [Authorize(Roles = "BranchSupervisor,Admin,SuperAdmin")]
+        [Authorize(Roles = "Manager,Admin,SuperAdmin")]
         public async Task<ActionResult<ClientAccountResponseDto>> UpdateAccountStatus(string id, [FromBody] UpdateAccountStatusDto dto)
         {
             try
@@ -317,7 +317,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Obtenir les comptes en attente de validation (pour les superviseurs de succursale)
         /// </summary>
         [HttpGet("pending-validation")]
-        [Authorize(Roles = "BranchSupervisor,Manager,Admin,SuperAdmin")]
+        [Authorize(Roles = "Manager,Admin,SuperAdmin")]
         public async Task<ActionResult<List<ClientAccountPendingDto>>> GetPendingValidations()
         {
             try
@@ -384,7 +384,7 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// Valider un compte en attente
         /// </summary>
         [HttpPost("{id}/validate")]
-        [Authorize(Roles = "BranchSupervisor,Manager,Admin,SuperAdmin")]
+        [Authorize(Roles = "Manager,Admin,SuperAdmin")]
         public async Task<ActionResult> ValidateAccount(string id, [FromBody] ValidateAccountDto dto)
         {
             try

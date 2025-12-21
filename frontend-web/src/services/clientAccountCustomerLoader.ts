@@ -10,14 +10,21 @@ import { AccountType } from '../types/clientAccounts';
  * 3) Fetch customers by ID; for accounts without IDs, fetch by phone
  * 4) Deduplicate by id; fallback build minimal objects when everything fails
  */
+interface LoadCustomersOptions {
+  branchId?: number;
+}
+
 export async function loadCustomersHavingAccounts(
-  accountType: 'SAVINGS' | 'TERM_SAVINGS' | 'CURRENT'
+  accountType: 'SAVINGS' | 'TERM_SAVINGS' | 'CURRENT',
+  options?: LoadCustomersOptions
 ): Promise<SavingsCustomerResponseDto[]> {
+  const branchFilter = options?.branchId != null ? Number(options.branchId) : undefined;
   // 1) Fetch accounts by type
   let accounts: any[] = [];
   if (accountType === 'SAVINGS') {
     try {
-      accounts = await apiService.getSavingsAccounts({});
+      const resp = await apiService.getSavingsAccounts(branchFilter ? { branchId: branchFilter } : {});
+      accounts = Array.isArray(resp) ? resp : (Array.isArray((resp as any)?.accounts) ? (resp as any).accounts : []);
     } catch (e) {
       console.error('Failed to fetch savings accounts:', e);
       accounts = [];
@@ -50,6 +57,15 @@ export async function loadCustomersHavingAccounts(
       console.error('Failed to fetch current accounts:', e);
       accounts = [];
     }
+  }
+
+  if (branchFilter) {
+    accounts = (accounts || []).filter((acct: any) => {
+      const acctBranchId = acct?.branchId ?? acct?.BranchId ?? acct?.accountBranchId;
+      if (acctBranchId == null) return false;
+      const numericBranch = Number(acctBranchId);
+      return !Number.isNaN(numericBranch) && numericBranch === branchFilter;
+    });
   }
 
   // 2) Collect valid IDs and phones

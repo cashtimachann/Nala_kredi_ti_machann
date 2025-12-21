@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -16,6 +16,7 @@ import {
 import toast from 'react-hot-toast';
 import apiService from '../../services/apiService';
 import { useSearchParams } from 'react-router-dom';
+import { AccountType } from '../../types/clientAccounts';
 
 // Types
 interface Transaction {
@@ -42,7 +43,12 @@ interface TransactionStats {
   transactionCount: number;
 }
 
-const CurrentAccountTransactions: React.FC = () => {
+interface CurrentAccountTransactionsProps {
+  effectiveBranchId?: number | string;
+  isBranchLocked?: boolean;
+}
+
+const CurrentAccountTransactions: React.FC<CurrentAccountTransactionsProps> = ({ effectiveBranchId, isBranchLocked }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
   const [stats, setStats] = useState<TransactionStats>({
@@ -62,11 +68,35 @@ const CurrentAccountTransactions: React.FC = () => {
   const [dateTo, setDateTo] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [params] = useSearchParams();
+  const normalizedBranchId = useMemo(() => {
+    if (effectiveBranchId == null) return undefined;
+    const parsed = Number(effectiveBranchId);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }, [effectiveBranchId]);
+
+  const ensureAccountAccessible = useCallback(async (accountNum: string) => {
+    if (!accountNum || normalizedBranchId == null) return true;
+    try {
+      const list = await apiService.getClientAccounts({ accountType: AccountType.CURRENT, accountNumber: accountNum, branchId: normalizedBranchId });
+      const lower = accountNum.toLowerCase();
+      return Array.isArray(list) && list.some((acc: any) => String(acc.accountNumber || '').toLowerCase() === lower);
+    } catch (error) {
+      console.error('Erreur de vérification de succursale:', error);
+      return false;
+    }
+  }, [normalizedBranchId]);
 
   const loadTransactions = async (accountNumber: string) => {
     try {
       if (!accountNumber || accountNumber.trim().length < 3) {
         toast.error('Entrez un numéro de compte valide');
+        return;
+      }
+      const allowed = await ensureAccountAccessible(accountNumber.trim());
+      if (!allowed) {
+        toast.error('Ce compte ne fait pas partie de votre succursale');
+        setTransactions([]);
+        setFilteredTransactions([]);
         return;
       }
       const tx = await apiService.getAccountTransactions(accountNumber.trim());
@@ -241,6 +271,9 @@ const CurrentAccountTransactions: React.FC = () => {
           <p className="text-sm text-black mt-1">
             Historique des transactions des comptes courants
           </p>
+          {isBranchLocked && (
+            <p className="text-xs text-amber-600 mt-1">Succursale verrouillée — seules les transactions de votre agence sont consultables.</p>
+          )}
         </div>
         <div className="flex gap-3">
           <button

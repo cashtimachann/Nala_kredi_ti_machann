@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users,
   Search,
@@ -20,6 +20,27 @@ import AdminAccountCreation from './AdminAccountCreation';
 import EditAdminModal from './EditAdminModal';
 import { apiService } from '../../services/apiService';
 import { unparse } from 'papaparse';
+import { useAuthStore } from '../../stores/authStore';
+
+const normalizeRole = (role?: string) =>
+  role ? role.toLowerCase().replace(/[\s_-]+/g, '') : '';
+
+const BRANCH_MANAGER_ROLE_KEYS = new Set<string>([
+  'manager',
+  'branchmanager',
+  'branchsupervisor',
+  'assistantmanager',
+  'chefdesuccursale',
+  'chefdesuccursal'
+]);
+
+const PRIVILEGED_ADMIN_CREATION_ROLES = new Set<string>([
+  'superadmin',
+  'director',
+  'directiongenerale',
+  'administrateursysteme',
+  'admin'
+]);
 
 // Types - Aligned with backend AdminTypeDto
 enum AdminType {
@@ -39,6 +60,53 @@ enum AdminStatus {
   Suspended = 'SUSPENDED'
 }
 
+const ADMIN_TYPE_API_MAP: Record<AdminType, number> = {
+  [AdminType.CAISSIER]: 0,
+  [AdminType.SECRETAIRE_ADMINISTRATIF]: 1,
+  [AdminType.AGENT_DE_CREDIT]: 2,
+  [AdminType.CHEF_DE_SUCCURSALE]: 3,
+  [AdminType.DIRECTEUR_REGIONAL]: 4,
+  [AdminType.ADMINISTRATEUR_SYSTEME]: 5,
+  [AdminType.DIRECTION_GENERALE]: 6,
+  [AdminType.COMPTABLE_FINANCE]: 7
+};
+
+type BranchCandidate = Record<string, unknown> & {
+  id?: number | string;
+  Id?: number | string;
+  branchId?: number | string;
+  BranchId?: number | string;
+  name?: string;
+  Name?: string;
+  branchName?: string;
+  BranchName?: string;
+};
+
+const extractBranchCandidates = (payload: unknown): BranchCandidate[] => {
+  if (Array.isArray(payload)) {
+    return payload as BranchCandidate[];
+  }
+
+  if (payload && typeof payload === 'object') {
+    const containers: Array<'branches' | 'items' | 'data' | 'results' | 'result'> = [
+      'branches',
+      'items',
+      'data',
+      'results',
+      'result'
+    ];
+
+    for (const key of containers) {
+      const maybeArray = (payload as Record<string, unknown>)[key];
+      if (Array.isArray(maybeArray)) {
+        return maybeArray as BranchCandidate[];
+      }
+    }
+  }
+
+  return [];
+};
+
 interface AdminAccount {
   id: string;
   fullName: string;
@@ -50,6 +118,7 @@ interface AdminAccount {
   status: AdminStatus;
   photoUrl?: string;
   assignedBranches?: string[];
+  assignedBranchIds?: string[];
   lastLogin?: string;
 }
 
@@ -60,7 +129,6 @@ const AdminAccountList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<AdminStatus | 'all'>('all');
   const [typeFilter, setTypeFilter] = useState<AdminType | 'all'>('all');
-  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -74,36 +142,142 @@ const AdminAccountList: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
 
-  // Load accounts from backend
+  const currentUser = useAuthStore(state => state.user);
+  const normalizedRole = normalizeRole(currentUser?.role);
+  const isBranchManager = BRANCH_MANAGER_ROLE_KEYS.has(normalizedRole);
+  const canCreateAdmin = !currentUser
+    ? true
+    : isBranchManager || PRIVILEGED_ADMIN_CREATION_ROLES.has(normalizedRole);
+  const managerBranchId = currentUser?.branchId ? currentUser.branchId.toString() : null;
+  const managerBranchName = currentUser?.branchName || null;
+  const branchFilterLocked = isBranchManager && !!managerBranchId;
+  const enforcedBranchFilter = branchFilterLocked && managerBranchId ? managerBranchId : branchFilter;
+
   useEffect(() => {
-    loadAccounts();
-    loadBranches();
+    if (branchFilterLocked && managerBranchId) {
+      setBranchFilter(managerBranchId);
+    }
+  }, [branchFilterLocked, managerBranchId]);
+
+  useEffect(() => {
+    const fetchBranches = async () => {
+      try {
+        const response = await apiService.getAllBranches();
+        const sourceBranches = extractBranchCandidates(response);
+
+        const normalized: { id: number; name: string }[] = sourceBranches
+          .map((branch) => {
+            const rawId = branch.id ?? branch.Id ?? branch.branchId ?? branch.BranchId;
+            const parsedId = typeof rawId === 'number' ? rawId : Number(rawId);
+            if (!Number.isFinite(parsedId)) {
+              return null;
+            }
+
+            const displayName =
+              branch.name ||
+              branch.Name ||
+              branch.branchName ||
+              branch.BranchName ||
+              `Succursale ${parsedId}`;
+
+            return { id: parsedId, name: displayName };
+          })
+          .filter((branch): branch is { id: number; name: string } => Boolean(branch));
+
+        if (branchFilterLocked && managerBranchId) {
+          const lockedBranchList = normalized.filter(branch => branch.id.toString() === managerBranchId);
+          setBranches(lockedBranchList);
+          setBranchFilter(managerBranchId);
+        } else {
+          setBranches(normalized);
+        }
+      } catch (error) {
+        console.error('Error loading branches:', error);
+        toast.error('Erreur lors du chargement des succursales');
+      }
+    };
+
+    fetchBranches();
+  }, [branchFilterLocked, managerBranchId]);
+
+  const normalizeAssignedBranches = useCallback((admin: any): { branchNames: string[]; branchIds: string[] } => {
+    const branchNames: string[] = [];
+    const branchIds: string[] = [];
+    const rawBranches = admin.assignedBranches || admin.branches || admin.assignedBranchNames || [];
+
+    if (Array.isArray(rawBranches)) {
+      rawBranches.forEach((entry) => {
+        if (typeof entry === 'string') {
+          branchNames.push(entry);
+          if (/^\d+$/.test(entry)) {
+            branchIds.push(entry);
+          }
+          return;
+        }
+
+        if (typeof entry === 'number') {
+          branchIds.push(entry.toString());
+          return;
+        }
+
+        if (entry && typeof entry === 'object') {
+          const id = entry.id ?? entry.branchId ?? entry.Id ?? entry.BranchId;
+          const name = entry.name ?? entry.branchName ?? entry.Name ?? entry.BranchName;
+          if (typeof name === 'string') {
+            branchNames.push(name);
+          }
+          if (id !== undefined && id !== null) {
+            branchIds.push(String(id));
+          }
+        }
+      });
+    }
+
+    return { branchNames, branchIds };
   }, []);
 
-  const loadBranches = async () => {
-    try {
-      const response = await apiService.getAllBranches();
-      setBranches(response);
-    } catch (error) {
-      console.error('Error loading branches:', error);
-      toast.error('Erreur lors du chargement des succursales');
-    }
-  };
-
-  const loadAccounts = async () => {
+  const loadAccounts = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await apiService.getAllAdmins({
+      const apiFilters: {
+        page: number;
+        pageSize: number;
+        adminType?: number;
+        assignedBranch?: string;
+        isActive?: boolean;
+      } = {
         page: 1,
-        pageSize: 100 // Get all accounts
-      });
-      
-      // Map backend AdminDto to AdminAccount
-      const mappedAccounts: AdminAccount[] = response.admins.map((admin: any) => {
-        // Backend can return AdminType as either number (0-7) or string ('CAISSIER', etc.)
-        let adminType = AdminType.CAISSIER; // default
-        
-        // If it's a string, map directly
+        pageSize: 100
+      };
+
+      if (enforcedBranchFilter && enforcedBranchFilter !== 'all') {
+        apiFilters.assignedBranch = enforcedBranchFilter;
+      }
+
+      if (typeFilter !== 'all') {
+        apiFilters.adminType = ADMIN_TYPE_API_MAP[typeFilter];
+      }
+
+      if (statusFilter === AdminStatus.Active) {
+        apiFilters.isActive = true;
+      } else if (statusFilter === AdminStatus.Inactive) {
+        apiFilters.isActive = false;
+      }
+
+      const response = await apiService.getAllAdmins(apiFilters);
+      const adminList = Array.isArray(response?.admins)
+        ? response.admins
+        : Array.isArray(response?.items)
+          ? response.items
+          : Array.isArray(response?.data)
+            ? response.data
+            : Array.isArray(response)
+              ? response
+              : [];
+
+      const mappedAccounts: AdminAccount[] = adminList.map((admin: any) => {
+        let adminType = AdminType.CAISSIER;
+
         if (typeof admin.adminType === 'string') {
           const adminTypeStr = admin.adminType.toUpperCase();
           switch (adminTypeStr) {
@@ -137,7 +311,6 @@ const AdminAccountList: React.FC = () => {
               break;
           }
         } else {
-          // If it's a number, use original mapping
           switch (admin.adminType) {
             case 0:
               adminType = AdminType.CAISSIER;
@@ -170,6 +343,8 @@ const AdminAccountList: React.FC = () => {
           }
         }
 
+        const { branchNames, branchIds } = normalizeAssignedBranches(admin);
+
         return {
           id: admin.id,
           fullName: admin.fullName,
@@ -179,19 +354,29 @@ const AdminAccountList: React.FC = () => {
           department: admin.department || 'Non spécifié',
           hireDate: admin.hireDate,
           status: admin.isActive ? AdminStatus.Active : AdminStatus.Inactive,
-          assignedBranches: admin.assignedBranches || [],
+          assignedBranches: branchNames,
+          assignedBranchIds: branchIds,
           lastLogin: admin.lastLogin
         };
       });
 
       setAccounts(mappedAccounts);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading accounts:', error);
-      toast.error('Erreur lors du chargement des comptes');
+      if (error.response?.status === 403) {
+        toast.error('Accès refusé: ce profil ne peut voir que sa succursale.');
+      } else {
+        toast.error('Erreur lors du chargement des comptes');
+      }
+      setAccounts([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [enforcedBranchFilter, normalizeAssignedBranches, statusFilter, typeFilter]);
+
+  useEffect(() => {
+    loadAccounts();
+  }, [loadAccounts]);
 
   const getAdminTypeLabel = (type: AdminType): string => {
     const labels: Record<AdminType, string> = {
@@ -468,6 +653,11 @@ const AdminAccountList: React.FC = () => {
     }
   };
 
+  const enforcedBranchName =
+    enforcedBranchFilter === 'all'
+      ? null
+      : (branches.find(branch => branch.id.toString() === enforcedBranchFilter)?.name?.toLowerCase() ?? null);
+
   const filteredAccounts = accounts.filter(account => {
     const matchesSearch =
       (account.fullName && account.fullName.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -477,8 +667,14 @@ const AdminAccountList: React.FC = () => {
 
     const matchesStatus = statusFilter === 'all' || account.status === statusFilter;
     const matchesType = typeFilter === 'all' || account.adminType === typeFilter;
-    const matchesBranch = branchFilter === 'all' || 
-      (account.assignedBranches && account.assignedBranches.some(branch => branch === branchFilter));
+    const matchesBranch =
+      enforcedBranchFilter === 'all' ||
+      (account.assignedBranchIds && account.assignedBranchIds.includes(enforcedBranchFilter)) ||
+      (
+        enforcedBranchName &&
+        account.assignedBranches &&
+        account.assignedBranches.some(branch => branch.toLowerCase() === enforcedBranchName)
+      );
 
     return matchesSearch && matchesStatus && matchesType && matchesBranch;
   });
@@ -561,6 +757,14 @@ const AdminAccountList: React.FC = () => {
     }
   };
 
+  const handleOpenCreation = () => {
+    if (!canCreateAdmin) {
+      toast.error('Vous n\'avez pas l\'autorisation de créer des comptes administrateurs');
+      return;
+    }
+    setShowCreationForm(true);
+  };
+
   const handleEdit = (accountId: string) => {
     const account = accounts.find(acc => acc.id === accountId);
     if (!account) return;
@@ -620,10 +824,19 @@ const AdminAccountList: React.FC = () => {
           <p className="text-gray-600 mt-1">
             Gérez les accès et permissions des utilisateurs du système
           </p>
+          {isBranchManager && currentUser?.branchName && (
+            <p className="text-sm text-blue-600 mt-2">
+              Vous pouvez créer des comptes pour la succursale {currentUser.branchName} uniquement.
+            </p>
+          )}
         </div>
         <button
-          onClick={() => setShowCreationForm(true)}
-          className="mt-4 sm:mt-0 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+          onClick={handleOpenCreation}
+          disabled={!canCreateAdmin}
+          title={!canCreateAdmin ? 'Accès réservé aux rôles autorisés' : undefined}
+          className={`mt-4 sm:mt-0 bg-blue-600 text-white px-6 py-3 rounded-lg transition-colors flex items-center space-x-2 ${
+            canCreateAdmin ? 'hover:bg-blue-700' : 'opacity-50 cursor-not-allowed'
+          }`}
         >
           <Plus className="h-5 w-5" />
           <span>Nouveau Compte</span>
@@ -737,17 +950,23 @@ const AdminAccountList: React.FC = () => {
           <div className="relative">
             <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
             <select
-              value={branchFilter}
+              value={enforcedBranchFilter}
               onChange={(e) => setBranchFilter(e.target.value)}
-              className="w-full pl-10 pr-8 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white"
+              disabled={branchFilterLocked}
+              className={`w-full pl-10 pr-8 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none ${
+                branchFilterLocked ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+              }`}
             >
-              <option value="all">Toutes les succursales</option>
+              {!branchFilterLocked && <option value="all">Toutes les succursales</option>}
               {branches.map((branch) => (
-                <option key={branch.id} value={branch.name}>
+                <option key={branch.id} value={branch.id.toString()}>
                   {branch.name}
                 </option>
               ))}
             </select>
+            {branchFilterLocked && managerBranchName && (
+              <p className="text-xs text-blue-600 mt-1">Filtre verrouillé sur {managerBranchName}</p>
+            )}
           </div>
         </div>
       </div>
@@ -784,7 +1003,7 @@ const AdminAccountList: React.FC = () => {
             <Users className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun compte trouvé</h3>
             <p className="mt-1 text-sm text-gray-500">
-              {searchTerm || statusFilter !== 'all' || typeFilter !== 'all' || branchFilter !== 'all'
+              {searchTerm || statusFilter !== 'all' || typeFilter !== 'all' || enforcedBranchFilter !== 'all'
                 ? 'Essayez de modifier vos critères de recherche.'
                 : 'Commencez par créer un nouveau compte administrateur.'}
             </p>

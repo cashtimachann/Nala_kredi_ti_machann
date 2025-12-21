@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import { 
   FileText, 
   Download, 
@@ -35,7 +35,12 @@ interface ReportData {
   accounts?: any[];
 }
 
-const SavingsReports: React.FC = () => {
+interface SavingsReportsProps {
+  effectiveBranchId?: number;
+  isBranchLocked?: boolean;
+}
+
+const SavingsReports: React.FC<SavingsReportsProps> = ({ effectiveBranchId, isBranchLocked }) => {
   const [loading, setLoading] = useState(false);
   const [reportType, setReportType] = useState('summary');
   const [period, setPeriod] = useState('month');
@@ -46,7 +51,7 @@ const SavingsReports: React.FC = () => {
   });
   const [filters, setFilters] = useState<any>({
     currency: '',
-    branchId: '',
+    branchId: effectiveBranchId ? String(effectiveBranchId) : '',
     status: '',
     accountNumber: '',
     txType: '' // 0=Deposit,1=Withdrawal,2=Interest
@@ -54,6 +59,31 @@ const SavingsReports: React.FC = () => {
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
   // local UI state for accounts preview (client-side paging if needed later)
   const [accountsPreviewLimit, setAccountsPreviewLimit] = useState(1000);
+
+  const branchFilterId = useMemo(() => {
+    if (filters.branchId) {
+      const parsed = Number(filters.branchId);
+      return Number.isNaN(parsed) ? undefined : parsed;
+    }
+    if (effectiveBranchId != null) {
+      const parsed = Number(effectiveBranchId);
+      return Number.isNaN(parsed) ? undefined : parsed;
+    }
+    return undefined;
+  }, [filters.branchId, effectiveBranchId]);
+  const branchSelectValue = branchFilterId != null ? String(branchFilterId) : '';
+
+  useEffect(() => {
+    if (effectiveBranchId) {
+      setFilters((prev: any) => {
+        const nextValue = String(effectiveBranchId);
+        if (prev.branchId === nextValue) {
+          return prev;
+        }
+        return { ...prev, branchId: nextValue };
+      });
+    }
+  }, [effectiveBranchId]);
 
   useEffect(() => {
     // preload branches once
@@ -80,18 +110,22 @@ const SavingsReports: React.FC = () => {
   const loadReportData = async () => {
     setLoading(true);
     try {
+      const scopedBranchId = branchFilterId != null ? Number(branchFilterId) : undefined;
       // Build clean params to avoid sending empty strings
       const accountsParams: any = {
-        branchId: filters.branchId ? Number(filters.branchId) : undefined,
+        branchId: scopedBranchId,
         currency: filters.currency !== '' ? Number(filters.currency) : undefined,
         status: filters.status !== '' ? Number(filters.status) : undefined,
         accountNumber: filters.accountNumber?.trim() ? filters.accountNumber.trim() : undefined
       };
       const txParamsBase: any = {
-        branchId: filters.branchId ? Number(filters.branchId) : undefined,
+        branchId: scopedBranchId,
         type: filters.txType !== '' ? Number(filters.txType) : undefined
       };
       let params: any = { ...filters };
+      if (scopedBranchId != null) {
+        params.branchId = scopedBranchId;
+      }
 
       // Compute a robust date range for the API (always send both bounds)
       let startDateStr: string | undefined;
@@ -474,13 +508,19 @@ const SavingsReports: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Succursale</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Succursale
+              {isBranchLocked && branchFilterId != null ? (
+                <span className="ml-2 text-xs text-gray-500 italic">succursale verrouillée</span>
+              ) : null}
+            </label>
             <select
-              value={filters.branchId}
+              value={branchSelectValue}
               onChange={(e) => setFilters({ ...filters, branchId: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              disabled={isBranchLocked}
             >
-              <option value="">Toutes</option>
+              {!isBranchLocked && <option value="">Toutes</option>}
               {branches.map(b => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}

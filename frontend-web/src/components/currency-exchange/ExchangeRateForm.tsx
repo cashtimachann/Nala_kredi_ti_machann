@@ -14,6 +14,9 @@ import {
 
 interface ExchangeRateFormProps {
   rate?: CurrencyExchangeRate | null;
+  branchId?: string;
+  userRole?: string;
+  branches?: any[];
   onSubmit: (data: CreateExchangeRateDto | UpdateExchangeRateDto) => void;
   onCancel: () => void;
 }
@@ -42,9 +45,14 @@ const exchangeRateSchema = z.object({
 
 type ExchangeRateFormValues = z.infer<typeof exchangeRateSchema>;
 
-const ExchangeRateForm: React.FC<ExchangeRateFormProps> = ({ rate, onSubmit, onCancel }) => {
+const ExchangeRateForm: React.FC<ExchangeRateFormProps> = ({ rate, branchId, userRole, branches = [], onSubmit, onCancel }) => {
   const [loading, setLoading] = useState(false);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(branchId || rate?.branchId || '');
   const isEdit = !!rate;
+  
+  // Check if user is SuperAdmin or Director who can choose branch
+  const isSuperAdmin = userRole === 'SuperAdmin' || userRole === 'Director' || userRole === 'SystemAdmin';
+  const isBranchManager = !isSuperAdmin && !!branchId;
 
   const { register, handleSubmit, formState: { errors }, watch } = useForm<ExchangeRateFormValues>({
     resolver: async (data: any, context: any, options: any) => {
@@ -113,6 +121,7 @@ const ExchangeRateForm: React.FC<ExchangeRateFormProps> = ({ rate, onSubmit, onC
           ...(data.expiryDate ? { expiryDate: new Date(data.expiryDate).toISOString() } : {}),
           updateMethod: data.updateMethod,
           ...(data.notes ? { notes: data.notes } : {}),
+          ...(selectedBranchId ? { branchId: selectedBranchId } : {}),
         };
         onSubmit(formData);
       }
@@ -151,6 +160,41 @@ const ExchangeRateForm: React.FC<ExchangeRateFormProps> = ({ rate, onSubmit, onC
 
           {/* Form Content */}
           <div className="p-6 space-y-6">
+            {/* Branch Selection - Only for SuperAdmin when creating new rate */}
+            {!isEdit && isSuperAdmin && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Succursale (Optionnel)
+                </label>
+                <select
+                  value={selectedBranchId}
+                  onChange={(e) => setSelectedBranchId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="">Taux Global (Toutes les succursales)</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-600 mt-1">
+                  {selectedBranchId 
+                    ? 'Ce taux s\'appliquera uniquement à la succursale sélectionnée' 
+                    : 'Ce taux s\'appliquera à toutes les succursales'}
+                </p>
+              </div>
+            )}
+
+            {/* Branch Info for Branch Managers */}
+            {isBranchManager && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-800">
+                  📍 Ce taux sera créé pour votre succursale uniquement
+                </p>
+              </div>
+            )}
+
             {/* Currency Selection */}
             <div>
               <h3 className="text-lg font-medium text-gray-900 mb-4">Paire de devises</h3>

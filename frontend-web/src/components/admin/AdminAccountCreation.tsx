@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import {
   UserPlus,
@@ -18,6 +18,10 @@ import {
 import toast from 'react-hot-toast';
 import apiService from '../../services/apiService';
 import { Branch, BranchStatus } from '../../types/branch';
+import { useAuthStore } from '../../stores/authStore';
+
+const normalizeRole = (role?: string) =>
+  role ? role.toLowerCase().replace(/[\s_-]+/g, '') : '';
 
 // Types
 // Align with backend AdminTypeDto enum values
@@ -31,6 +35,22 @@ enum AdminType {
   DirectionGenerale = 'DIRECTION_GENERALE',
   ComptableFinance = 'COMPTABLE_FINANCE'
 }
+
+const BRANCH_MANAGER_ROLE_KEYS = new Set<string>([
+  'manager',
+  'branchmanager',
+  'branchsupervisor',
+  'assistantmanager',
+  'chefdesuccursale',
+  'chefdesuccursal'
+]);
+
+const BRANCH_MANAGER_ALLOWED_TYPES = new Set<AdminType>([
+  AdminType.Caissier,
+  AdminType.SecretaireAdministratif,
+  AdminType.AgentDeCredit,
+  AdminType.ComptableFinance
+]);
 
 interface AdminAccountFormData {
   adminType: AdminType;
@@ -60,28 +80,60 @@ const AdminAccountCreation: React.FC<AdminAccountCreationProps> = ({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const currentUser = useAuthStore(state => state.user);
+  const normalizedRole = normalizeRole(currentUser?.role);
+  const isBranchManager = BRANCH_MANAGER_ROLE_KEYS.has(normalizedRole);
+  const rawManagerBranchId = currentUser?.branchId ?? null;
+  const managerBranchId = typeof rawManagerBranchId === 'string'
+    ? Number(rawManagerBranchId)
+    : rawManagerBranchId;
+  const hasManagerBranch = typeof managerBranchId === 'number' && Number.isFinite(managerBranchId);
+  const managerBranchName = currentUser?.branchName;
+  const initialBranchId = hasManagerBranch && typeof managerBranchId === 'number' ? managerBranchId : undefined;
+  const initialAssignedBranches = typeof initialBranchId === 'number' ? [initialBranchId] : [];
 
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    clearErrors,
     formState: { errors }
   } = useForm<AdminAccountFormData>({
     defaultValues: {
-      assignedBranches: []
+      branchId: initialBranchId,
+      assignedBranches: initialAssignedBranches
     }
   });
 
   const selectedAdminType = watch('adminType');
   const selectedBranches = watch('assignedBranches') || [];
+  const branchRegisterOptions = useMemo(() => ({
+    valueAsNumber: true,
+    ...(isBranchManager && hasManagerBranch
+      ? {}
+      : { required: 'La succursale est requise' })
+  }), [isBranchManager, hasManagerBranch]);
 
   // Load branches from API
   useEffect(() => {
     const loadBranches = async () => {
       try {
         const branchData = await apiService.getAllBranches();
-        setBranches(branchData.filter(b => b.status === BranchStatus.Active));
+        const activeBranches = branchData.filter(b => b.status === BranchStatus.Active);
+
+        if (isBranchManager && hasManagerBranch) {
+          const managerBranch = activeBranches.find(b => Number(b.id) === managerBranchId);
+          if (managerBranch) {
+            setBranches([managerBranch]);
+            setValue('branchId', Number(managerBranch.id), { shouldValidate: true, shouldDirty: false });
+            setValue('assignedBranches', [Number(managerBranch.id)], { shouldValidate: false, shouldDirty: false });
+            clearErrors('branchId');
+            return;
+          }
+        }
+
+        setBranches(activeBranches);
       } catch (error) {
         console.error('Error loading branches:', error);
         toast.error('Erreur lors du chargement des succursales');
@@ -89,7 +141,15 @@ const AdminAccountCreation: React.FC<AdminAccountCreationProps> = ({
     };
     
     loadBranches();
-  }, []);
+  }, [isBranchManager, hasManagerBranch, managerBranchId, setValue, clearErrors]);
+
+  useEffect(() => {
+    if (isBranchManager && hasManagerBranch && typeof managerBranchId === 'number') {
+      setValue('branchId', managerBranchId, { shouldValidate: true, shouldDirty: false });
+      setValue('assignedBranches', [managerBranchId], { shouldValidate: false, shouldDirty: false });
+      clearErrors('branchId');
+    }
+  }, [isBranchManager, hasManagerBranch, managerBranchId, setValue, clearErrors]);
 
   const adminTypes = [
     { value: AdminType.Caissier, label: 'Caissier', description: 'Gestion des transactions et caisse' },
@@ -101,6 +161,17 @@ const AdminAccountCreation: React.FC<AdminAccountCreationProps> = ({
     { value: AdminType.DirectionGenerale, label: 'Direction Générale', description: 'Accès complet au système' },
     { value: AdminType.ComptableFinance, label: 'Comptable/Finance', description: 'Gestion financière et comptabilité' }
   ];
+
+  const visibleAdminTypes = isBranchManager
+    ? adminTypes.filter(type => BRANCH_MANAGER_ALLOWED_TYPES.has(type.value))
+    : adminTypes;
+
+  useEffect(() => {
+    if (!visibleAdminTypes.length) return;
+    if (!selectedAdminType || !visibleAdminTypes.some(type => type.value === selectedAdminType)) {
+      setValue('adminType', visibleAdminTypes[0].value);
+    }
+  }, [visibleAdminTypes, selectedAdminType, setValue]);
 
   const departments = [
     'Direction Générale',
@@ -145,7 +216,11 @@ const AdminAccountCreation: React.FC<AdminAccountCreationProps> = ({
   };
 
   const validateForm = (data: AdminAccountFormData): string | null => {
+    const resolvedBranchId = isBranchManager && hasManagerBranch ? managerBranchId : data.branchId;
     if (!data.adminType) return 'Le type d\'administrateur est requis';
+    if (isBranchManager && !BRANCH_MANAGER_ALLOWED_TYPES.has(data.adminType)) {
+      return 'En tant que chef de succursale, vous pouvez uniquement créer des rôles opérationnels pour votre agence.';
+    }
     if (!data.fullName || data.fullName.length < 3) return 'Le nom doit contenir au moins 3 caractères';
     if (!data.email) return 'L\'email est requis';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) return 'Format d\'email invalide';
@@ -156,7 +231,7 @@ const AdminAccountCreation: React.FC<AdminAccountCreationProps> = ({
       return 'Format de téléphone invalide. Utilisez: +509 XXXX-XXXX ou 509XXXXXXXX';
     }
     if (!data.department) return 'Le département est requis';
-    if (!data.branchId) return 'La succursale est requise';
+    if (!resolvedBranchId) return 'La succursale est requise';
     if (!data.hireDate) return 'La date d\'embauche est requise';
     
     if (data.adminType === AdminType.DirecteurRegional && data.assignedBranches.length === 0) {
@@ -183,6 +258,12 @@ const AdminAccountCreation: React.FC<AdminAccountCreationProps> = ({
       }
 
       setLoading(true);
+      const enforcedBranchId = isBranchManager && hasManagerBranch ? managerBranchId : data.branchId;
+      if (enforcedBranchId === null || enforcedBranchId === undefined) {
+        toast.error('Succursale introuvable pour ce compte');
+        setLoading(false);
+        return;
+      }
       
       // Split fullName into firstName and lastName
       const nameParts = data.fullName.trim().split(' ');
@@ -202,6 +283,11 @@ const AdminAccountCreation: React.FC<AdminAccountCreationProps> = ({
       };
       const adminTypeValue = adminTypeMap[data.adminType];
 
+      const assignedBranchSet = new Set<string>(
+        (data.assignedBranches || []).map(b => b.toString())
+      );
+      assignedBranchSet.add(enforcedBranchId.toString());
+
       // Prepare data for backend API
       const adminCreateData = {
         firstName,
@@ -211,10 +297,7 @@ const AdminAccountCreation: React.FC<AdminAccountCreationProps> = ({
         adminType: adminTypeValue,
         department: data.department || 'Non spécifié',
         hireDate: data.hireDate,
-        // If branchId is selected, add it to assignedBranches
-        assignedBranches: data.branchId 
-          ? [...data.assignedBranches, data.branchId.toString()]
-          : data.assignedBranches.map(b => b.toString()),
+        assignedBranches: Array.from(assignedBranchSet),
         password: data.initialPassword
       };
 
@@ -268,6 +351,11 @@ const AdminAccountCreation: React.FC<AdminAccountCreationProps> = ({
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Création de Compte Administrateur</h1>
                 <p className="text-gray-600 mt-1">Créez un nouveau compte pour accéder au système</p>
+                {isBranchManager && managerBranchName && (
+                  <p className="text-sm text-blue-600 mt-1">
+                    Succursale verrouillée: {managerBranchName}
+                  </p>
+                )}
               </div>
             </div>
             {onCancel && (
@@ -290,8 +378,15 @@ const AdminAccountCreation: React.FC<AdminAccountCreationProps> = ({
               <h2 className="text-lg font-semibold text-gray-900">Type d'Administrateur</h2>
             </div>
 
+            {isBranchManager && (
+              <p className="text-sm text-blue-600 mb-4">
+                En tant que chef de succursale, vous pouvez créer uniquement des rôles opérationnels
+                (caissier, secrétaire, agent de crédit, comptable) pour votre succursale.
+              </p>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {adminTypes.map((type) => (
+              {visibleAdminTypes.map((type) => (
                 <label
                   key={type.value}
                   className={`relative flex items-start p-4 border-2 rounded-lg cursor-pointer transition-all ${
@@ -455,9 +550,6 @@ const AdminAccountCreation: React.FC<AdminAccountCreationProps> = ({
                       ))}
                     </select>
                   </div>
-                  {errors.department && (
-                    <p className="text-red-600 text-sm mt-1">Le département est requis</p>
-                  )}
                 </div>
 
                 <div>
@@ -467,11 +559,11 @@ const AdminAccountCreation: React.FC<AdminAccountCreationProps> = ({
                   <div className="relative">
                     <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                     <select
-                      {...register('branchId', { 
-                        valueAsNumber: true,
-                        required: 'La succursale est requise'
-                      })}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white"
+                      {...register('branchId', branchRegisterOptions)}
+                      disabled={isBranchManager}
+                      className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none ${
+                        isBranchManager ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                      }`}
                     >
                       <option value="">Sélectionner une succursale</option>
                       {branches.map((branch) => (
@@ -485,7 +577,7 @@ const AdminAccountCreation: React.FC<AdminAccountCreationProps> = ({
                     <p className="text-red-600 text-sm mt-1">{errors.branchId.message}</p>
                   )}
                   <p className="text-xs text-gray-500 mt-1">
-                    La succursale principale de l'utilisateur
+                    {isBranchManager ? 'Succursale verrouillée sur votre agence' : 'La succursale principale de l\'utilisateur'}
                   </p>
                 </div>
               </div>

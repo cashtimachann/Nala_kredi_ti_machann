@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Wallet, DollarSign, Plus, Users, CreditCard, TrendingUp } from 'lucide-react';
 import apiService from '../../services/apiService';
 import { AccountType, ClientAccount } from '../../types/clientAccounts';
@@ -9,7 +9,12 @@ interface CurrencyBreakdown {
   usd: { accounts: number; balance: number; percentage: number };
 } 
 
-const CurrentAccountOverview: React.FC = () => {
+interface CurrentAccountOverviewProps {
+  effectiveBranchId?: number | string;
+  isBranchLocked?: boolean;
+}
+
+const CurrentAccountOverview: React.FC<CurrentAccountOverviewProps> = ({ effectiveBranchId, isBranchLocked }) => {
   const [loading, setLoading] = useState(true);
   const [accounts, setAccounts] = useState<ClientAccount[]>([]);
   const [currencyBreakdown, setCurrencyBreakdown] = useState<CurrencyBreakdown>({
@@ -18,12 +23,21 @@ const CurrentAccountOverview: React.FC = () => {
   });
   const [params, setParams] = useSearchParams();
 
+  const normalizedBranchId = useMemo(() => {
+    if (effectiveBranchId == null) return undefined;
+    const parsed = Number(effectiveBranchId);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }, [effectiveBranchId]);
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        const list = await apiService.getClientAccounts({});
-        // Filter for CURRENT accounts client-side
+        const list = await apiService.getClientAccounts({
+          accountType: AccountType.CURRENT,
+          ...(normalizedBranchId != null ? { branchId: normalizedBranchId } : {}),
+        });
+        // Filter for CURRENT accounts client-side as a safety net in case backend ignores filter
         const currentAccounts = (list || []).filter((account: ClientAccount) => account.accountType === AccountType.CURRENT);
         setAccounts(currentAccounts);
         const totalBalance = currentAccounts.reduce((s: number, a: any) => s + (a.balance || 0), 0);
@@ -42,7 +56,7 @@ const CurrentAccountOverview: React.FC = () => {
       }
     };
     load();
-  }, []);
+  }, [normalizedBranchId]);
 
   const formatCurrency = (amount: number, currency: string = 'HTG') => {
     return new Intl.NumberFormat('fr-FR', {
@@ -63,6 +77,9 @@ const CurrentAccountOverview: React.FC = () => {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Vue d'ensemble - Comptes Courants</h1>
         <p className="text-gray-600 mt-1">Résumé des comptes courants, par devise et actions rapides</p>
+        {isBranchLocked && (
+          <p className="text-xs font-medium text-amber-600 mt-1">Succursale verrouillée — vous voyez uniquement les comptes de votre agence.</p>
+        )}
       </div>
 
       {loading ? (

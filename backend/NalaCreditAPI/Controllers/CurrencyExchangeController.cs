@@ -106,6 +106,23 @@ namespace NalaCreditAPI.Controllers
         {
             try
             {
+                // For branch managers, filter by their branch only
+                var userRole = User.FindFirst("http://schemas.microsoft.com/ws/2008/06/identity/claims/role")?.Value;
+                var isBranchManager = !string.IsNullOrEmpty(userRole) && 
+                    (userRole.Equals("Manager", StringComparison.OrdinalIgnoreCase) ||
+                     userRole.Equals("BranchManager", StringComparison.OrdinalIgnoreCase) ||
+                     userRole.Equals("BranchSupervisor", StringComparison.OrdinalIgnoreCase) ||
+                     userRole.Contains("Manager", StringComparison.OrdinalIgnoreCase));
+
+                if (isBranchManager && string.IsNullOrEmpty(searchDto.BranchId))
+                {
+                    var branchIdClaim = User.FindFirst("BranchId")?.Value;
+                    if (!string.IsNullOrEmpty(branchIdClaim))
+                    {
+                        searchDto.BranchId = branchIdClaim;
+                    }
+                }
+
                 var rates = await _currencyExchangeService.GetExchangeRatesAsync(searchDto);
                 return Ok(new { success = true, data = rates });
             }

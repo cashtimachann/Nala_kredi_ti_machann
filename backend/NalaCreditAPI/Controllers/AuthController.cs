@@ -15,17 +15,20 @@ public class AuthController : ControllerBase
     private readonly UserManager<User> _userManager;
     private readonly SignInManager<User> _signInManager;
     private readonly IAuthService _authService;
+    private readonly IBranchService _branchService;
     private readonly IAuditService _auditService;
 
     public AuthController(
         UserManager<User> userManager,
         SignInManager<User> signInManager,
         IAuthService authService,
-        IAuditService auditService)
+        IAuditService auditService,
+        IBranchService branchService)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _authService = authService;
+        _branchService = branchService;
         _auditService = auditService;
     }
 
@@ -78,19 +81,31 @@ public class AuthController : ControllerBase
 
         await _auditService.LogAsync("Successful Login", "User", user.Id, user.Id);
 
-        return Ok(new LoginResponseDto
+        var userDto = new UserInfoDto
         {
-            Token = jwtToken,
-            User = new UserInfoDto
+            Id = user.Id,
+            Email = user.Email!,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            Role = user.Role.ToString(),
+            BranchId = user.BranchId
+        };
+
+        if (user.BranchId.HasValue)
+        {
+            try
             {
-                Id = user.Id,
-                Email = user.Email!,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                Role = user.Role.ToString(),
-                BranchId = user.BranchId
+                var branch = await _branchService.GetBranchAsync(user.BranchId.Value);
+                userDto.BranchName = branch?.Name;
             }
-        });
+            catch (KeyNotFoundException) { /* ignore missing branch */ }
+            catch (Exception)
+            {
+                // ignore any branch lookup failure
+            }
+        }
+
+        return Ok(new LoginResponseDto { Token = jwtToken, User = userDto });
     }
 
     [HttpPost("verify-2fa")]
@@ -185,7 +200,7 @@ public class AuthController : ControllerBase
         if (user == null)
             return NotFound();
 
-        return Ok(new UserInfoDto
+        var profileDto = new UserInfoDto
         {
             Id = user.Id,
             Email = user.Email!,
@@ -194,6 +209,19 @@ public class AuthController : ControllerBase
             Role = user.Role.ToString(),
             BranchId = user.BranchId,
             LastLogin = user.LastLogin?.ToString("yyyy-MM-ddTHH:mm:ssZ")
-        });
+        };
+
+        if (user.BranchId.HasValue)
+        {
+            try
+            {
+                var branch = await _branchService.GetBranchAsync(user.BranchId.Value);
+                profileDto.BranchName = branch?.Name;
+            }
+            catch (KeyNotFoundException) { }
+            catch { }
+        }
+
+        return Ok(profileDto);
     }
 }

@@ -32,7 +32,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpPost("deposit")]
-    [Authorize(Roles = "Cashier,Manager,BranchSupervisor,SuperAdmin")]
+    [Authorize(Roles = "Cashier,Manager,SuperAdmin")]
     public async Task<ActionResult> ProcessDeposit([FromBody] TransactionDto model)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value!;
@@ -64,7 +64,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpPost("withdrawal")]
-    [Authorize(Roles = "Cashier,Manager,BranchSupervisor,SuperAdmin")]
+    [Authorize(Roles = "Cashier,Manager,SuperAdmin")]
     public async Task<ActionResult> ProcessWithdrawal([FromBody] TransactionDto model)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value!;
@@ -122,7 +122,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpGet("branch/{branchId}/today")]
-    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin")]
     public async Task<ActionResult> GetBranchTransactionsToday(int branchId)
     {
         var today = DateTime.Today;
@@ -140,8 +140,12 @@ public class TransactionController : ControllerBase
                 t.Currency,
                 t.Amount,
                 t.CreatedAt,
-                Customer = $"{t.Account.Customer.FirstName} {t.Account.Customer.LastName}",
-                ProcessedBy = $"{t.User.FirstName} {t.User.LastName}"
+                Customer = t.Account != null && t.Account.Customer != null 
+                    ? $"{t.Account.Customer.FirstName} {t.Account.Customer.LastName}" 
+                    : "N/A",
+                ProcessedBy = t.User != null 
+                    ? $"{t.User.FirstName} {t.User.LastName}" 
+                    : "System"
             })
             .ToListAsync();
 
@@ -217,7 +221,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpGet("branch/{branchId}/history")]
-    [Authorize(Roles = "Manager,Admin,SuperAdmin,BranchSupervisor")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin")]
     public async Task<ActionResult> GetBranchTransactionHistory(
         int branchId,
         [FromQuery] DateTime? startDate,

@@ -121,8 +121,8 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("branch-supervisor")]
-    [Authorize(Roles = "BranchSupervisor")]
-    public async Task<ActionResult<BranchSupervisorDashboardDto>> GetBranchSupervisorDashboard()
+    [Authorize(Roles = "Manager,SuperAdmin")]
+    public async Task<ActionResult<ManagerDashboardDto>> GetManagerDashboard()
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var user = await _userManager.FindByIdAsync(userId!);
@@ -148,33 +148,41 @@ public class DashboardController : ControllerBase
         // Branch portfolio
         var branchCredits = await _context.Credits
             .Include(c => c.Account)
-            .Where(c => c.Account.BranchId == branchId && c.Status == CreditStatus.Active)
+            .Where(c => c.Account != null && c.Account.BranchId == branchId && c.Status == CreditStatus.Active)
             .ToListAsync();
 
         // Pending approvals
+        // Pending approvals (global or branch-agnostic if application doesn't track branch)
         var pendingApprovals = await _context.CreditApplications
             .Where(ca => ca.Status == CreditApplicationStatus.UnderReview)
             .CountAsync();
 
-        return Ok(new BranchSupervisorDashboardDto
+        // Safely compute aggregates guarding against nulls
+        var todayTransactionVolume = todayTransactions.Where(t => t != null).Sum(t => t.Amount);
+        var newAccountsToday = await _context.Accounts
+            .Where(a => a.BranchId == branchId && a.CreatedAt.Date == today)
+            .CountAsync();
+        var branchCreditPortfolio = branchCredits.Where(c => c != null).Sum(c => c.OutstandingBalance);
+
+        var cashierPerformance = activeCashSessions.Select(cs => new CashierPerformanceDto
         {
-            TodayTransactionVolume = todayTransactions.Sum(t => t.Amount),
+            CashierName = cs.User != null ? ($"{cs.User.FirstName} {cs.User.LastName}") : "",
+            TransactionsToday = todayTransactions.Count(t => t.UserId == cs.UserId),
+            VolumeToday = todayTransactions.Where(t => t.UserId == cs.UserId).Sum(t => t.Amount),
+            SessionStart = cs.SessionStart
+        }).ToList();
+
+        return Ok(new ManagerDashboardDto
+        {
+            TodayTransactionVolume = todayTransactionVolume,
             TodayTransactionCount = todayTransactions.Count,
             ActiveCashiers = activeCashSessions.Count,
-            NewAccountsToday = await _context.Accounts
-                .Where(a => a.BranchId == branchId && a.CreatedAt.Date == today)
-                .CountAsync(),
-            BranchCreditPortfolio = branchCredits.Sum(c => c.OutstandingBalance),
+            NewAccountsToday = newAccountsToday,
+            BranchCreditPortfolio = branchCreditPortfolio,
             ActiveCredits = branchCredits.Count,
             PendingCreditApprovals = pendingApprovals,
-            AverageTransactionTime = 2.5m, // This would come from actual timing data
-            CashierPerformance = activeCashSessions.Select(cs => new CashierPerformanceDto
-            {
-                CashierName = $"{cs.User.FirstName} {cs.User.LastName}",
-                TransactionsToday = todayTransactions.Count(t => t.UserId == cs.UserId),
-                VolumeToday = todayTransactions.Where(t => t.UserId == cs.UserId).Sum(t => t.Amount),
-                SessionStart = cs.SessionStart
-            }).ToList()
+            AverageTransactionTime = 2.5m, // Placeholder until timing metrics implemented
+            CashierPerformance = cashierPerformance
         });
     }
 

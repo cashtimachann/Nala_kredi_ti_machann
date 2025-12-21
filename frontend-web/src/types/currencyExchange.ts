@@ -39,6 +39,8 @@ export enum CurrencyMovementType {
 // Base Interfaces
 export interface CurrencyExchangeRate {
   id: string;
+  branchId?: string;
+  branchName?: string;
   baseCurrency: CurrencyType;
   baseCurrencyName: string;
   targetCurrency: CurrencyType;
@@ -133,6 +135,7 @@ export interface CurrencyMovement {
 
 // DTOs for forms and API calls
 export interface CreateExchangeRateDto {
+  branchId?: string;
   baseCurrency: CurrencyType;
   targetCurrency: CurrencyType;
   buyingRate: number;
@@ -202,6 +205,7 @@ export interface CreateCurrencyMovementDto {
 
 // Search and Filter DTOs
 export interface ExchangeRateSearchDto {
+  branchId?: string;
   baseCurrency?: CurrencyType;
   targetCurrency?: CurrencyType;
   isActive?: boolean;

@@ -62,15 +62,25 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
   const [loading, setLoading] = useState(false);
   const currentUser = apiService.getCurrentUser();
   const defaultBranchId = currentUser?.branchId ? String(currentUser.branchId) : '';
+  const roleNorm = (currentUser?.role || '').toString().toLowerCase().replace(/[\s_-]+/g, '');
+  const isBranchHead = ['manager','branchsupervisor','branchmanager','assistantmanager','chefdesuccursale','chefdesuccursal'].includes(roleNorm);
   const [branchId, setBranchId] = useState<string>(defaultBranchId);
   const [branchOptions, setBranchOptions] = useState<Array<{ id: string; name: string }>>([]);
   const canCreate = (() => {
-    const role = (currentUser?.role || '').toString();
-    // Accept English and French role labels commonly used
-    return [
-      'Cashier', 'BranchSupervisor', 'SuperAdmin',
-      'CAISSIER', 'CHEF_DE_SUCCURSALE', 'ChefDeSuccursale', 'SUPERADMIN'
-    ].includes(role);
+    const rawRole = (currentUser?.role || '').toString();
+    const roleNorm = rawRole.toLowerCase().replace(/[\s_-]+/g, '');
+    // Allow Cashier, Branch Supervisor/Manager, Assistant Manager, SuperAdmin (English/French variants)
+    const allowedNorms = new Set([
+      'cashier',
+      'branchsupervisor',
+      'branchmanager',
+      'manager',
+      'assistantmanager',
+      'chefdesuccursale',
+      'chefdesuccursal',
+      'superadmin'
+    ]);
+    return allowedNorms.has(roleNorm);
   })();
 
   // Local search input for customer ID lookups (can be ID, document number, phone, etc.)
@@ -407,7 +417,7 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
     <form onSubmit={handleSubmit} className="p-6 space-y-6">
       {!canCreate && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-800">
-          Vous n'avez pas l'autorisation de créer un compte. Rôle requis: Caissier, Chef de Succursale, ou SuperAdmin.
+          Vous n'avez pas l'autorisation de créer un compte. Rôle requis: Caissier, Chef de Succursale, Manager de Succursale, Assistant Manager, ou SuperAdmin.
         </div>
       )}
       {/* Account Type Selection */}
@@ -494,14 +504,19 @@ const AccountCreationForm: React.FC<AccountCreationFormProps> = ({ onSubmit, onC
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Succursale *
+            {isBranchHead && defaultBranchId && (
+              <span className="ml-2 text-xs text-gray-500 italic">Branch locked</span>
+            )}
           </label>
           <select
             value={branchId}
             onChange={(e) => setBranchId(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            disabled={branchOptions.length === 0}
+            disabled={branchOptions.length === 0 || (isBranchHead && !!defaultBranchId)}
           >
-            <option value="">Sélectionner...</option>
+            {!isBranchHead && (
+              <option value="">Sélectionner...</option>
+            )}
             {branchOptions.map((branch) => (
               <option key={branch.id} value={branch.id}>
                 {branch.name}
@@ -1231,16 +1246,29 @@ const AuthorizedSignersEditor: React.FC<{
   );
 };
 
-interface ClientAccountManagementProps {}
+interface ClientAccountManagementProps {
+  branchId?: number; // Optional: if provided, filter accounts by this branch
+}
 
-const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
+const ClientAccountManagement: React.FC<ClientAccountManagementProps> = ({ branchId: propBranchId }) => {
+  const currentUser = apiService.getCurrentUser();
+  const userBranchId = currentUser?.branchId;
+  // Normalize role string and detect branch head roles (Manager, BranchSupervisor, Chef de Succursale, BranchManager, AssistantManager)
+  const roleNorm = (currentUser?.role || '').toString().toLowerCase().replace(/[\s_-]+/g, '');
+  const isBranchHead = ['manager','branchsupervisor','chefdesuccursale','branchmanager','assistantmanager','chefdesuccursal'].includes(roleNorm);
+  
+  // Use prop branchId if provided, otherwise use user's branchId for Branch Supervisors
+  const effectiveBranchId = propBranchId || (isBranchHead ? userBranchId : undefined);
+  
   const [activeTab, setActiveTab] = useState<'accounts' | 'clients'>('accounts');
   const [accounts, setAccounts] = useState<ClientAccount[]>([]);
   const [customers, setCustomers] = useState<SavingsCustomerResponseDto[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [clientSearchTerm, setClientSearchTerm] = useState('');
-  const [filters, setFilters] = useState<AccountSearchFilters>({});
+  const [filters, setFilters] = useState<AccountSearchFilters>({
+    ...(effectiveBranchId ? { branchId: effectiveBranchId } : {})
+  });
   const [clientFilters, setClientFilters] = useState({
     branchId: undefined as number | undefined,
     status: '',
@@ -1265,6 +1293,13 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
   const [showEditClientForm, setShowEditClientForm] = useState(false);
   const [showViewClientDetails, setShowViewClientDetails] = useState(false);
   const [showDocumentUploadModal, setShowDocumentUploadModal] = useState(false);
+
+  // Auto-filter clients by branch for branch heads (manager/supervisor)
+  useEffect(() => {
+    if (effectiveBranchId) {
+      setClientFilters((prev) => ({ ...prev, branchId: effectiveBranchId }));
+    }
+  }, [effectiveBranchId]);
   const [selectedAccount, setSelectedAccount] = useState<ClientAccount | null>(null);
   const [selectedCustomer, setselectedCustomer] = useState<SavingsCustomerResponseDto | null>(null);
   const [showAccountDetails, setShowAccountDetails] = useState(false);
@@ -1301,13 +1336,16 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
 
   const loadAccounts = async () => {
     try {
-      console.log('🔍 Loading all client accounts...');
-      const accountsData = await apiService.getClientAccounts({});
+      console.log('🔍 Loading client accounts...', effectiveBranchId ? `for branch ${effectiveBranchId}` : 'all branches');
+      const accountsData = await apiService.getClientAccounts({
+        ...(effectiveBranchId ? { branchId: effectiveBranchId } : {})
+      });
       console.log('✅ Client accounts loaded:', {
         isArray: Array.isArray(accountsData),
         count: Array.isArray(accountsData) ? accountsData.length : 0,
         sample: Array.isArray(accountsData) && accountsData.length > 0 ? accountsData[0] : null,
-        allAccountTypes: Array.isArray(accountsData) ? accountsData.map(a => a.accountType) : []
+        allAccountTypes: Array.isArray(accountsData) ? accountsData.map(a => a.accountType) : [],
+        filteredByBranch: effectiveBranchId
       });
       // S'assurer que c'est un array
       setAccounts(Array.isArray(accountsData) ? accountsData : []);
@@ -1344,6 +1382,7 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
     if (!customer) {
       return {
         id: '',
+        branchId: undefined,
         firstName: '',
         lastName: '',
         fullName: 'N/A',
@@ -1399,6 +1438,11 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
 
     return {
       id: customer?.id || customer?.Id || '',
+      branchId: (() => {
+        const b = (customer?.branchId ?? (customer as any)?.BranchId);
+        const n = typeof b === 'string' ? Number(b) : b;
+        return typeof n === 'number' && Number.isFinite(n) ? n : undefined;
+      })(),
       // Preserve backend-provided customer code if available
       customerCode: customer?.customerCode || (customer as any)?.CustomerCode || undefined,
       firstName: customer?.FirstName || customer?.firstName || '',
@@ -1488,10 +1532,86 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
     };
   };
 
+  const computeStatsFromAccounts = (list: ClientAccount[]): ClientAccountStats => {
+    const byType: Record<AccountType, number> = {
+      [AccountType.SAVINGS]: 0,
+      [AccountType.CURRENT]: 0,
+      [AccountType.TERM_SAVINGS]: 0,
+    };
+    const byCurrency: Record<'HTG'|'USD', number> = { HTG: 0, USD: 0 };
+    let totalHTG = 0;
+    let totalUSD = 0;
+    let active = 0;
+    for (const a of list) {
+      if (!a) continue;
+      byType[a.accountType] = (byType[a.accountType] || 0) + 1;
+      byCurrency[a.currency] = (byCurrency[a.currency] || 0) + 1;
+      if (a.currency === 'HTG') totalHTG += Number(a.balance || 0);
+      if (a.currency === 'USD') totalUSD += Number(a.balance || 0);
+      if (a.status === 'ACTIVE') active += 1;
+    }
+    return {
+      totalAccounts: list.length,
+      activeAccounts: active,
+      totalBalanceHTG: totalHTG,
+      totalBalanceUSD: totalUSD,
+      accountsByType: byType,
+      accountsByCurrency: byCurrency,
+      recentTransactions: 0,
+      dormantAccounts: 0,
+    };
+  };
+
   const loadStats = async () => {
     try {
-      console.log('📊 Loading client account statistics...');
-      const statsData = await apiService.getClientAccountStats();
+      console.log('📊 Loading client account statistics...', effectiveBranchId ? `(branch ${effectiveBranchId})` : '(all)');
+      // When branch is locked, prefer client-side computation from branch-filtered accounts
+      if (effectiveBranchId) {
+        if (Array.isArray(accounts) && accounts.length > 0) {
+          setStats(computeStatsFromAccounts(accounts));
+          return;
+        }
+        // If accounts are not yet loaded, fetch a minimal list for the branch and compute
+        try {
+          const minimalList = await apiService.getClientAccounts({ branchId: effectiveBranchId, pageSize: 5000 });
+          const list: any[] = Array.isArray(minimalList) ? minimalList : [];
+          const byType: Record<AccountType, number> = {
+            [AccountType.SAVINGS]: 0,
+            [AccountType.CURRENT]: 0,
+            [AccountType.TERM_SAVINGS]: 0,
+          };
+          const byCurrency: Record<'HTG'|'USD', number> = { HTG: 0, USD: 0 };
+          let totalHTG = 0;
+          let totalUSD = 0;
+          let active = 0;
+          for (const a of list) {
+            const type = (a?.accountType as AccountType) ?? AccountType.SAVINGS;
+            byType[type] = (byType[type] || 0) + 1;
+            const currency = String(a?.currency).toUpperCase() === 'USD' ? 'USD' : 'HTG';
+            byCurrency[currency as 'HTG'|'USD'] = (byCurrency[currency as 'HTG'|'USD'] || 0) + 1;
+            const bal = Number(a?.balance || 0);
+            if (currency === 'HTG') totalHTG += bal; else totalUSD += bal;
+            const status = String(a?.status).toUpperCase();
+            if (status === 'ACTIVE' || status === '1' || status === 'TRUE') active += 1;
+          }
+          setStats({
+            totalAccounts: list.length,
+            activeAccounts: active,
+            totalBalanceHTG: totalHTG,
+            totalBalanceUSD: totalUSD,
+            accountsByType: byType,
+            accountsByCurrency: byCurrency,
+            recentTransactions: 0,
+            dormantAccounts: 0,
+          });
+          return;
+        } catch (fetchErr) {
+          console.warn('⚠️ Could not fetch branch accounts for local stats, falling back to API stats:', fetchErr);
+        }
+      }
+
+      // Default: use backend statistics (global or branch if supported server-side)
+      const statsData = await apiService.getClientAccountStats(effectiveBranchId);
       console.log('✅ Statistics loaded:', statsData);
       setStats(statsData);
     } catch (error: any) {
@@ -1500,7 +1620,10 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
         response: error?.response?.data,
         status: error?.response?.status
       });
-      // Don't show toast for stats error, just log it
+      // Fallback: compute from currently loaded accounts if available
+      if (Array.isArray(accounts) && accounts.length > 0) {
+        setStats(computeStatsFromAccounts(accounts));
+      }
     }
   };
 
@@ -1558,7 +1681,9 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
         
         normalizedResults = normalizedResults.map(customer => ({
           ...customer,
-          branchId: customerBranchMap.get(customer.id) || 1 // Default to branch 1 if no account found
+          branchId: (typeof customer.branchId === 'number' && Number.isFinite(customer.branchId))
+            ? customer.branchId
+            : customerBranchMap.get(customer.id)
         }));
         
         setCustomers(normalizedResults);
@@ -1580,7 +1705,9 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
         
         normalizedCustomers = normalizedCustomers.map(customer => ({
           ...customer,
-          branchId: customerBranchMap.get(customer.id) || 1 // Default to branch 1 if no account found
+          branchId: (typeof customer.branchId === 'number' && Number.isFinite(customer.branchId))
+            ? customer.branchId
+            : customerBranchMap.get(customer.id)
         }));
         
         setCustomers(normalizedCustomers);
@@ -1952,48 +2079,13 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
       
       return normalizedCustomer;
     } catch (error: any) {
-      console.error('Erreur lors de la création du client:', error);
       const errorMessage = error.message || 'Erreur lors de la création du client';
       toast.error(errorMessage);
       throw error; // Re-throw the error so the caller can handle it
     }
   };
 
-  const handleEditClient = async (customerId: string) => {
-    try {
-      // Charger les données du client
-      const customer = await savingsCustomerService.getCustomer(customerId);
-      // Normalize customer data before setting
-      const normalizedCustomer = normalizeCustomer(customer);
-      console.log('Client chargé pour édition:', normalizedCustomer);
-      setselectedCustomer(normalizedCustomer);
-      setShowEditClientForm(true);
-    } catch (error: any) {
-      console.error('Erreur lors du chargement du client:', error);
-      toast.error('Impossible de charger les informations du client');
-    }
-  };
-
-  const handleDownloadDocument = async (customerId: string, documentId: string, documentName: string) => {
-    try {
-      const blob = await savingsCustomerService.downloadDocument(customerId, documentId);
-      
-      // Kreye yon lyen telechajman tanporè
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = documentName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      toast.success('Document téléchargé avec succès!');
-    } catch (error: any) {
-      console.error('Erreur lors du téléchargement du document:', error);
-      toast.error('Erreur lors du téléchargement du document');
-    }
-  };
+  
 
   const handleDeleteDocument = async (customerId: string, documentId: string) => {
     if (!window.confirm('Èske ou sèten ou vle efase dokiman sa a?')) {
@@ -2234,6 +2326,38 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
     } catch (error) {
       console.error('Erreur lors du chargement des détails:', error);
       toast.error('Impossible de charger les détails du client');
+    }
+  };
+
+  // Ouvrir le formulaire d'édition pour un client
+  const handleEditClient = async (customerId: string) => {
+    try {
+      const customer = await savingsCustomerService.getCustomer(customerId);
+      const normalizedCustomer = normalizeCustomer(customer);
+      setselectedCustomer(normalizedCustomer);
+      setShowEditClientForm(true);
+    } catch (error) {
+      console.error('Erreur lors du chargement du client pour modification:', error);
+      toast.error('Impossible de charger le client pour modification');
+    }
+  };
+
+  // Téléchargement d'un document client
+  const handleDownloadDocument = async (customerId: string, documentId: string, filename: string) => {
+    try {
+      const blob = await savingsCustomerService.downloadDocument(customerId, documentId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'document.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Téléchargement démarré');
+    } catch (error) {
+      console.error('Erreur lors du téléchargement du document:', error);
+      toast.error('Impossible de télécharger le document');
     }
   };
 
@@ -3094,8 +3218,14 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
     }
 
     // Filtre par succursale
-    if (clientFilters.branchId && (customer as any).branchId !== clientFilters.branchId) {
-      return false;
+    if (clientFilters.branchId) {
+      const rawBranchId = (customer as any).branchId;
+      const numericBranchId = typeof rawBranchId === 'string' ? parseInt(rawBranchId, 10) : rawBranchId;
+      if (Number.isFinite(numericBranchId) && numericBranchId !== clientFilters.branchId) {
+        return false;
+      }
+      // When the backend omits branch ownership we still keep the customer in the list
+      // so branch managers can see freshly created clients before the association syncs.
     }
 
     // Filtre par statut (si le champ existe)
@@ -3420,8 +3550,9 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
         <div className="relative">
           <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
           <select
-            value={filters.branchId ?? ''}
-            onChange={(e) => { setFilters({ ...filters, branchId: e.target.value ? Number(e.target.value) : undefined }); setCurrentPage(1); }}
+            value={effectiveBranchId ?? (filters.branchId ?? '')}
+            onChange={(e) => { if (!effectiveBranchId) { setFilters({ ...filters, branchId: e.target.value ? Number(e.target.value) : undefined }); setCurrentPage(1); } }}
+            disabled={!!effectiveBranchId}
             className="pl-10 pr-8 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white"
           >
             <option value="">Toutes succursales</option>
@@ -3673,13 +3804,19 @@ const ClientAccountManagement: React.FC<ClientAccountManagementProps> = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Succursale
+                  {effectiveBranchId && (
+                    <span className="ml-2 text-xs text-gray-500 italic">Branch locked</span>
+                  )}
                 </label>
                 <select
-                  value={clientFilters.branchId ?? ''}
+                  value={effectiveBranchId ?? (clientFilters.branchId ?? '')}
                   onChange={(e) => setClientFilters({ ...clientFilters, branchId: e.target.value ? Number(e.target.value) : undefined })}
+                  disabled={!!effectiveBranchId}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="">Toutes les succursales</option>
+                  {!effectiveBranchId && (
+                    <option value="">Toutes les succursales</option>
+                  )}
                   {branches.map((b) => (
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}

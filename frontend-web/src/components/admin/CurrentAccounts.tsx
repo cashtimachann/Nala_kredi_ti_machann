@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, Suspense } from 'react';
 import { Users, LayoutGrid, CreditCard, List, Search, Plus } from 'lucide-react';
 import apiService from '../../services/apiService';
+import clientAccountCustomerLoader from '../../services/clientAccountCustomerLoader';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 const CurrentAccountManagement = React.lazy(() => import('./CurrentAccountManagement'));
 const CurrentAccountTransactions = React.lazy(() => import('./CurrentAccountTransactions'));
@@ -16,6 +17,12 @@ const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
 ];
 
 const CurrentAccounts: React.FC = () => {
+  const currentUser = apiService.getCurrentUser();
+  const userBranchId = currentUser?.branchId;
+  const roleNorm = (currentUser?.role || '').toString().toLowerCase().replace(/[\s_-]+/g, '');
+  const isBranchHead = ['manager','branchsupervisor','chefdesuccursale','branchmanager','assistantmanager','chefdesuccursal'].includes(roleNorm);
+  const effectiveBranchId = isBranchHead ? userBranchId : undefined;
+  const isBranchLocked = Boolean(effectiveBranchId);
   const [params, setParams] = useSearchParams();
   const initialTab = useMemo<TabKey>(() => {
     const t = (params.get('tab') || '').toLowerCase();
@@ -37,6 +44,7 @@ const CurrentAccounts: React.FC = () => {
   const [clientSearch, setClientSearch] = useState('');
   const [searching, setSearching] = useState(false);
   const [clients, setClients] = useState<any[]>([]);
+  const [branchCustomers, setBranchCustomers] = useState<any[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -56,6 +64,28 @@ const CurrentAccounts: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
+  useEffect(() => {
+    const loadBranchCustomers = async () => {
+      if (!isBranchLocked || effectiveBranchId == null) {
+        setBranchCustomers([]);
+        return;
+      }
+      try {
+        const branchIdNum = Number(effectiveBranchId);
+        if (Number.isNaN(branchIdNum)) {
+          setBranchCustomers([]);
+          return;
+        }
+        const list = await clientAccountCustomerLoader.loadCustomersHavingAccounts('CURRENT', { branchId: branchIdNum });
+        setBranchCustomers(list || []);
+      } catch (error) {
+        console.error('Erreur lors du chargement des clients de la succursale', error);
+        setBranchCustomers([]);
+      }
+    };
+    void loadBranchCustomers();
+  }, [isBranchLocked, effectiveBranchId]);
+
   // Debounce client search input
   useEffect(() => {
     if (active !== 'clients') return;
@@ -71,8 +101,26 @@ const CurrentAccounts: React.FC = () => {
     if (!clientSearch || clientSearch.trim().length < 2) return;
     setSearching(true);
     try {
-      const res = await apiService.getSavingsCustomers(clientSearch.trim());
-      setClients(Array.isArray(res) ? res : []);
+      if (isBranchLocked) {
+        const q = clientSearch.trim().toLowerCase();
+        const digits = clientSearch.replace(/\D+/g, '');
+        const filtered = branchCustomers.filter((customer) => {
+          const fullName = (customer.fullName || `${customer.firstName || ''} ${customer.lastName || ''}`).toLowerCase();
+          const phone = (customer.contact?.primaryPhone || '').replace(/\D+/g, '');
+          const doc = (customer.identity?.documentNumber || '').toString().toLowerCase();
+          const code = (customer.customerCode || '').toString().toLowerCase();
+          return (
+            fullName.includes(q) ||
+            (!!digits && phone.includes(digits)) ||
+            doc.includes(q) ||
+            code.includes(q)
+          );
+        });
+        setClients(filtered);
+      } else {
+        const res = await apiService.getSavingsCustomers(clientSearch.trim());
+        setClients(Array.isArray(res) ? res : []);
+      }
     } catch (e) {
       setClients([]);
     } finally {
@@ -107,13 +155,16 @@ const CurrentAccounts: React.FC = () => {
       {/* Content */}
       {active === 'overview' && (
         <Suspense fallback={<div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 text-center">Chargement...</div>}>
-          <CurrentAccountOverview />
+          <CurrentAccountOverview effectiveBranchId={effectiveBranchId} isBranchLocked={isBranchLocked} />
         </Suspense>
       )}
 
       {active === 'clients' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
           <h2 className="text-lg font-semibold text-gray-900">Clients</h2>
+          {isBranchLocked && (
+            <p className="text-xs text-amber-600">Succursale verrouillée — la recherche est limitée aux clients de votre agence.</p>
+          )}
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -173,13 +224,13 @@ const CurrentAccounts: React.FC = () => {
 
       {active === 'accounts' && (
         <Suspense fallback={<div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 text-center">Chargement des comptes...</div>}>
-          <CurrentAccountManagement showTabs={false} />
+          <CurrentAccountManagement showTabs={false} effectiveBranchId={effectiveBranchId} isBranchLocked={isBranchLocked} />
         </Suspense>
       )}
 
       {active === 'transactions' && (
         <Suspense fallback={<div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 text-center">Chargement des transactions...</div>}>
-          <CurrentAccountTransactions />
+          <CurrentAccountTransactions effectiveBranchId={effectiveBranchId} isBranchLocked={isBranchLocked} />
         </Suspense>
       )}
     </div>

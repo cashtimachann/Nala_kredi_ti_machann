@@ -30,6 +30,17 @@ import jsPDF from 'jspdf';
 const CODE_PATTERN = /^[A-Z]{2}\d{3,}$/; // e.g., TD5765
 
 const TermSavingsManagement: React.FC = () => {
+  const currentUser = apiService.getCurrentUser();
+  const userBranchId = currentUser?.branchId;
+  const roleSlug = (currentUser?.role || '').toString().toLowerCase().replace(/[\s_-]+/g, '');
+  const branchScopedRoles = ['manager', 'branchsupervisor', 'chefdesuccursale', 'branchmanager', 'assistantmanager', 'chefdesuccursal'];
+  const historyAllowedRoles = ['cashier', 'branchsupervisor', 'admin', 'superadmin', 'manager', 'branchmanager', 'assistantmanager', 'chefdesuccursale', 'chefdesuccursal'];
+  const isBranchScoped = branchScopedRoles.includes(roleSlug);
+  const parsedBranchId = userBranchId == null ? undefined : Number(userBranchId);
+  const normalizedBranchId = parsedBranchId != null && !Number.isNaN(parsedBranchId) ? parsedBranchId : undefined;
+  const effectiveBranchId = isBranchScoped ? normalizedBranchId : undefined;
+  const isBranchLocked = Boolean(effectiveBranchId);
+  const canAccessTermHistory = historyAllowedRoles.includes(roleSlug);
   const [tab, setTab] = useState<'overview' | 'clients' | 'accounts' | 'transactions'>('overview');
   const [accounts, setAccounts] = useState<ClientAccount[]>([]);
   const [stats, setStats] = useState<ClientAccountStats | null>(null);
@@ -44,6 +55,11 @@ const TermSavingsManagement: React.FC = () => {
   const [minAmount, setMinAmount] = useState<string>('');
   const [maxAmount, setMaxAmount] = useState<string>('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  useEffect(() => {
+    if (!isBranchLocked || effectiveBranchId == null) return;
+    const numericBranch = Number(effectiveBranchId);
+    setBranchFilter((prev) => (prev === numericBranch ? prev : numericBranch));
+  }, [isBranchLocked, effectiveBranchId]);
 
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showNewClientModal, setShowNewClientModal] = useState(false);
@@ -83,15 +99,24 @@ const TermSavingsManagement: React.FC = () => {
     })();
     return () => { mounted = false; };
   }, []);
+  const lockedBranchName = useMemo(() => {
+    if (!isBranchLocked || effectiveBranchId == null) return '';
+    const match = branches.find((b) => Number(b.id) === Number(effectiveBranchId));
+    return match?.name || '';
+  }, [branches, isBranchLocked, effectiveBranchId]);
 
   const load = async () => {
     setLoading(true);
     try {
-      // Load all term savings accounts without filters for client-side filtering
-      const data = await apiService.getTermSavingsAccounts({
+      // Load term savings accounts (limit to branch when required)
+      const params: { page: number; pageSize: number; branchId?: number } = {
         page: 1,
         pageSize: 1000
-      });
+      };
+      if (isBranchLocked && effectiveBranchId != null) {
+        params.branchId = Number(effectiveBranchId);
+      }
+      const data = await apiService.getTermSavingsAccounts(params);
       
       const rawList: any[] = data?.accounts || data?.Accounts || (Array.isArray(data) ? data : []);
       
@@ -202,7 +227,8 @@ const TermSavingsManagement: React.FC = () => {
       } catch (enrichErr) {
         console.warn('Error enriching accounts with customer data', enrichErr);
       }
-      const s = await apiService.getClientAccountStats();
+      const statsBranchId = isBranchLocked && effectiveBranchId != null ? Number(effectiveBranchId) : undefined;
+      const s = await apiService.getClientAccountStats(statsBranchId);
       setStats(s);
     } catch (e) {
       console.error(e);
@@ -220,6 +246,13 @@ const TermSavingsManagement: React.FC = () => {
     return () => clearTimeout(id);
   }, [searchInput]);
 
+  const appliedBranchFilter = isBranchLocked && effectiveBranchId != null ? Number(effectiveBranchId) : branchFilter;
+
+  const branchScopedAccounts = useMemo(() => {
+    if (!appliedBranchFilter) return accounts;
+    return accounts.filter((a) => Number(a.branchId) === Number(appliedBranchFilter));
+  }, [accounts, appliedBranchFilter]);
+
   const filtered = useMemo(() => {
     return (accounts || []).filter(a => {
       const matchesSearch = !searchTerm ||
@@ -228,12 +261,12 @@ const TermSavingsManagement: React.FC = () => {
       const matchesCurrency = currencyFilter === 'ALL' || a.currency === currencyFilter;
       const matchesStatus = !statusFilter || (a.status || '').toUpperCase() === statusFilter.toUpperCase();
       const matchesTerm = termFilter === 'ALL' || a.termType === termFilter;
-      const matchesBranch = !branchFilter || a.branchId === branchFilter;
+      const matchesBranch = !appliedBranchFilter || Number(a.branchId) === Number(appliedBranchFilter);
       const matchesMin = !minAmount || a.balance >= Number(minAmount);
       const matchesMax = !maxAmount || a.balance <= Number(maxAmount);
       return matchesSearch && matchesCurrency && matchesStatus && matchesTerm && matchesBranch && matchesMin && matchesMax;
     });
-  }, [accounts, searchTerm, currencyFilter, statusFilter, termFilter, branchFilter, minAmount, maxAmount]);
+  }, [accounts, searchTerm, currencyFilter, statusFilter, termFilter, appliedBranchFilter, minAmount, maxAmount]);
 
   const sorters: Record<string, (a: ClientAccount) => any> = {
     accountNumber: (a) => a.accountNumber || '',
@@ -290,14 +323,14 @@ const TermSavingsManagement: React.FC = () => {
   };
 
   // Compute upcoming maturities pagination
-  const allUpcoming = useMemo(() => getUpcomingMaturities(accounts), [accounts]);
+  const allUpcoming = useMemo(() => getUpcomingMaturities(branchScopedAccounts), [branchScopedAccounts]);
   const upcomingTotalPages = Math.max(1, Math.ceil(allUpcoming.length / upcomingPageSize));
   const upcomingPaged = useMemo(() => {
     const start = (upcomingPage - 1) * upcomingPageSize;
     return allUpcoming.slice(start, start + upcomingPageSize);
   }, [allUpcoming, upcomingPage, upcomingPageSize]);
 
-  const countByCurrency = (cur: 'HTG' | 'USD') => accounts.filter(a => a.currency === cur).length;
+  const countByCurrency = (cur: 'HTG' | 'USD') => branchScopedAccounts.filter(a => a.currency === cur).length;
 
   const formatCurrency = (amount: number, currency: 'HTG' | 'USD') => {
     if (currency === 'HTG') {
@@ -513,6 +546,16 @@ const TermSavingsManagement: React.FC = () => {
           <div>
             <p className="text-sm opacity-90">À échéance sous 7 jours</p>
             <p className="text-2xl font-bold">{maturing7}</p>
+          {isBranchLocked && (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              <AlertCircle className="mt-0.5 h-4 w-4 text-amber-600" />
+              <div>
+                <p className="font-semibold">Succursale verrouillée</p>
+                <p>Cette page est limitée à {lockedBranchName || `la succursale #${effectiveBranchId}`}.</p>
+              </div>
+            </div>
+          )}
+
           </div>
         </div>
         <div className="bg-gradient-to-br from-sky-500 to-sky-600 p-6 rounded-xl text-white shadow-lg">
@@ -572,7 +615,7 @@ const TermSavingsManagement: React.FC = () => {
     setCurrencyFilter('ALL');
     setStatusFilter('');
     setTermFilter('ALL');
-    setBranchFilter(undefined);
+    setBranchFilter(isBranchLocked && effectiveBranchId != null ? Number(effectiveBranchId) : undefined);
     setMinAmount('');
     setMaxAmount('');
     setSortKey('openingDate');
@@ -811,8 +854,8 @@ const TermSavingsManagement: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm opacity-90">Total Comptes à Terme</p>
-                  <p className="text-3xl font-bold">{accounts.length}</p>
-                  <p className="text-xs mt-1 opacity-75">{accounts.filter(a => (a.status || '').toUpperCase() === 'ACTIVE').length} actifs</p>
+                  <p className="text-3xl font-bold">{branchScopedAccounts.length}</p>
+                  <p className="text-xs mt-1 opacity-75">{branchScopedAccounts.filter(a => (a.status || '').toUpperCase() === 'ACTIVE').length} actifs</p>
                 </div>
                 <DollarSign className="h-10 w-10 opacity-80" />
               </div>
@@ -821,8 +864,8 @@ const TermSavingsManagement: React.FC = () => {
             <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 p-6 rounded-xl text-white shadow-lg">
               <div>
                 <p className="text-sm opacity-90">Comptes à Terme</p>
-                <p className="text-2xl font-bold">{accounts.filter(a => a.termType != null).length}</p>
-                <p className="text-xs mt-1 opacity-75">Terme actif: {accounts.filter(a => a.termType != null && (a.status || '').toUpperCase() === 'ACTIVE').length}</p>
+                <p className="text-2xl font-bold">{branchScopedAccounts.filter(a => a.termType != null).length}</p>
+                <p className="text-xs mt-1 opacity-75">Terme actif: {branchScopedAccounts.filter(a => a.termType != null && (a.status || '').toUpperCase() === 'ACTIVE').length}</p>
               </div>
             </div>
 
@@ -843,14 +886,14 @@ const TermSavingsManagement: React.FC = () => {
             <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 p-6 rounded-xl text-white shadow-lg">
               <div>
                 <p className="text-sm opacity-90">Solde Total HTG</p>
-                <p className="text-2xl font-bold">{new Intl.NumberFormat('fr-FR').format(accounts.filter(a => a.currency === 'HTG').reduce((s, a) => s + (a.balance || 0), 0))}</p>
+                <p className="text-2xl font-bold">{new Intl.NumberFormat('fr-FR').format(branchScopedAccounts.filter(a => a.currency === 'HTG').reduce((s, a) => s + (a.balance || 0), 0))}</p>
               </div>
             </div>
 
             <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-6 rounded-xl text-white shadow-lg">
               <div>
                 <p className="text-sm opacity-90">Solde Total USD</p>
-                <p className="text-2xl font-bold">{'$' + new Intl.NumberFormat('fr-FR').format(accounts.filter(a => a.currency === 'USD').reduce((s, a) => s + (a.balance || 0), 0))}</p>
+                <p className="text-2xl font-bold">{'$' + new Intl.NumberFormat('fr-FR').format(branchScopedAccounts.filter(a => a.currency === 'USD').reduce((s, a) => s + (a.balance || 0), 0))}</p>
               </div>
             </div>
           </div>
@@ -858,7 +901,7 @@ const TermSavingsManagement: React.FC = () => {
           {/* Term-specific KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             {/** compute term-specific metrics client-side **/}
-            <TermKpiAccounts accounts={accounts} />
+            <TermKpiAccounts accounts={branchScopedAccounts} />
           </div>
 
           {/* Upcoming maturities list */}
@@ -980,9 +1023,10 @@ const TermSavingsManagement: React.FC = () => {
             <option value="CLOSED">Fermé</option>
           </select>
           <select
-            value={branchFilter ?? ''}
+            value={appliedBranchFilter ?? ''}
             onChange={(e) => setBranchFilter(e.target.value ? Number(e.target.value) : undefined)}
-            className="px-3 py-2 border border-gray-300 rounded-lg"
+            disabled={isBranchLocked}
+            className={`px-3 py-2 border rounded-lg ${isBranchLocked ? 'bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed' : 'border-gray-300'}`}
           >
             <option value="">Toutes succursales</option>
             {branches.map((b) => (
@@ -1268,13 +1312,23 @@ const TermSavingsManagement: React.FC = () => {
 
       {tab === 'clients' && (
         <div className="tab-contrast-fix">
-          <ClientsTab onOpenTerm={(customer) => { setInitialCustomerForOpen(customer); setShowOpenModal(true); }} />
+          <ClientsTab
+            onOpenTerm={(customer) => { setInitialCustomerForOpen(customer); setShowOpenModal(true); }}
+            effectiveBranchId={effectiveBranchId}
+            isBranchLocked={isBranchLocked}
+            lockedBranchName={lockedBranchName}
+          />
         </div>
       )}
 
       {tab === 'transactions' && (
         <div className="tab-contrast-fix">
-          <TransactionsTab />
+          <TransactionsTab
+            effectiveBranchId={effectiveBranchId}
+            isBranchLocked={isBranchLocked}
+            lockedBranchName={lockedBranchName}
+            canAccessHistory={canAccessTermHistory}
+          />
         </div>
       )}
 
@@ -1355,25 +1409,38 @@ const TermSavingsManagement: React.FC = () => {
 
 export default TermSavingsManagement;
 
+type ClientsTabProps = {
+  onOpenTerm: (customer: any) => void;
+  effectiveBranchId?: number;
+  isBranchLocked?: boolean;
+  lockedBranchName?: string;
+};
+
 // Clients tab: search existing savings customers and open a term account directly
-const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenTerm }) => {
+const ClientsTab: React.FC<ClientsTabProps> = ({ onOpenTerm, effectiveBranchId, isBranchLocked, lockedBranchName }) => {
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [showCustomerDetailsModal, setShowCustomerDetailsModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [term, setTerm] = useState('');
   const [results, setResults] = useState<any[]>([]);
+  const [clientBaseResults, setClientBaseResults] = useState<any[]>([]);
+  const enforcedClientBranchId = isBranchLocked && effectiveBranchId != null ? Number(effectiveBranchId) : undefined;
   const lastRef = useRef<string>('');
   const [showDocumentUploadModal, setShowDocumentUploadModal] = useState(false);
   const [showEditClientForm, setShowEditClientForm] = useState(false);
 
   // Advanced filters state
   const [clientFilters, setClientFilters] = useState({
-    branchId: undefined as number | undefined,
+    branchId: enforcedClientBranchId,
     status: '',
     dateFrom: '',
     dateTo: ''
   });
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  useEffect(() => {
+    if (enforcedClientBranchId == null) return;
+    setClientFilters((prev) => (prev.branchId === enforcedClientBranchId ? prev : { ...prev, branchId: enforcedClientBranchId }));
+  }, [enforcedClientBranchId]);
 
   // Branches for succursale filter (loaded locally in this tab)
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
@@ -1863,59 +1930,60 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
   const loadTermClients = async (filters?: typeof clientFilters) => {
     setLoading(true);
     try {
-      const matched = await clientAccountCustomerLoader.loadCustomersHavingAccounts('TERM_SAVINGS');
+      const matched = await clientAccountCustomerLoader.loadCustomersHavingAccounts(
+        'TERM_SAVINGS',
+        enforcedClientBranchId != null ? { branchId: enforcedClientBranchId } : undefined
+      );
       console.log('📋 Final matched customers:', matched);
-      
-  let filteredResults: any[] = (matched || []) as any[];
-      
-      // Apply advanced filters if provided
-      if (filters) {
-  filteredResults = filteredResults.filter((customer: any) => {
-          // Branch (Succursale) filter: if branchId is set, only include matching customers
-          if (filters.branchId !== undefined && filters.branchId !== null) {
-            // Compare by branch name because SavingsCustomerResponseDto may not include branchId in its type
-            const selBranch = branches.find(b => Number(b.id) === Number(filters.branchId));
-            if (selBranch) {
-              // clientAccountCustomerLoader attaches accountBranchId/accountBranchName onto customer objects
-              const acctBranchId = (customer as any).accountBranchId ?? (customer as any).branchId ?? (customer as any).BranchId;
-              const acctBranchName = (customer as any).accountBranchName ?? (customer as any).branchName ?? (customer as any).BranchName ?? '';
-              if (acctBranchId != null) {
-                if (Number(acctBranchId) !== Number(selBranch.id)) return false;
-              } else {
-                if ((acctBranchName || '') !== selBranch.name) return false;
-              }
-            }
-          }
 
-          // Status filter
-          if (filters.status && customer.isActive !== (filters.status === 'ACTIVE')) {
+      let filteredResults: any[] = (matched || []) as any[];
+      const branchFilterSource = enforcedClientBranchId ?? filters?.branchId;
+      const branchFilterId = branchFilterSource != null ? Number(branchFilterSource) : undefined;
+      const selectedBranch = branchFilterId != null
+        ? branches.find((b) => Number(b.id) === branchFilterId)
+        : undefined;
+
+      filteredResults = filteredResults.filter((customer: any) => {
+        if (branchFilterId != null) {
+          const acctBranchId = (customer as any).accountBranchId ?? (customer as any).branchId ?? (customer as any).BranchId;
+          const acctBranchName = (customer as any).accountBranchName ?? (customer as any).branchName ?? (customer as any).BranchName ?? '';
+          if (acctBranchId != null) {
+            if (Number(acctBranchId) !== branchFilterId) return false;
+          } else if (selectedBranch) {
+            if ((acctBranchName || '') !== selectedBranch.name) return false;
+          } else {
             return false;
           }
+        }
 
-          // Date range filter (creation date)
-          if (filters.dateFrom || filters.dateTo) {
-            const createdDate = new Date(customer.createdAt);
-            if (filters.dateFrom) {
-              const fromDate = new Date(filters.dateFrom);
-              if (createdDate < fromDate) return false;
-            }
-            if (filters.dateTo) {
-              const toDate = new Date(filters.dateTo);
-              toDate.setHours(23, 59, 59, 999); // End of day
-              if (createdDate > toDate) return false;
-            }
+        if (filters?.status && customer.isActive !== (filters.status === 'ACTIVE')) {
+          return false;
+        }
+
+        if (filters?.dateFrom || filters?.dateTo) {
+          const createdDate = new Date(customer.createdAt);
+          if (filters?.dateFrom) {
+            const fromDate = new Date(filters.dateFrom);
+            if (createdDate < fromDate) return false;
           }
+          if (filters?.dateTo) {
+            const toDate = new Date(filters.dateTo);
+            toDate.setHours(23, 59, 59, 999);
+            if (createdDate > toDate) return false;
+          }
+        }
 
-          return true;
-        });
-      }
-      
+        return true;
+      });
+
+      setClientBaseResults(filteredResults);
       setResults(filteredResults);
       if (!filteredResults.length) toast('Aucun client trouvé avec compte à terme');
     } catch (e) {
       console.error('❌ Error loading term clients:', e);
       toast.error('Erreur lors du chargement des clients à terme');
       setResults([]);
+      setClientBaseResults([]);
     } finally {
       setLoading(false);
     }
@@ -1924,13 +1992,34 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
   const doSearch = async () => {
     const raw = term.trim();
     if (!raw || raw.length < 2) return;
+    const reference = raw.toUpperCase();
+    if (lastRef.current === reference) return;
+    lastRef.current = reference;
+
+    if (isBranchLocked) {
+      const normalized = raw.toLowerCase();
+      const digits = raw.replace(/\D+/g, '');
+      const filtered = clientBaseResults.filter((customer: any) => {
+        const fullName = (customer.fullName || `${customer.firstName || ''} ${customer.lastName || ''}`.trim()).toLowerCase();
+        const phone = String(customer.contact?.primaryPhone || customer.primaryPhone || '').replace(/\D+/g, '');
+        const doc = String(customer.identity?.documentNumber || '').toLowerCase();
+        const code = String(customer.customerCode || customer.id || '').toLowerCase();
+        return (
+          fullName.includes(normalized) ||
+          (!!digits && phone.includes(digits)) ||
+          doc.includes(normalized) ||
+          code.includes(normalized)
+        );
+      });
+      setResults(filtered);
+      if (!filtered.length) toast('Aucun client dans votre succursale pour cette recherche');
+      return;
+    }
+
     try {
-      const q = raw.toUpperCase();
-      if (lastRef.current === q) return;
-      lastRef.current = q;
       setLoading(true);
       // Use normalized customer service to ensure fullName/contact/address are populated
-      const list = await savingsCustomerService.searchCustomers(q);
+      const list = await savingsCustomerService.searchCustomers(reference);
       setResults(list || []);
     } catch (e) {
       console.error(e);
@@ -1942,24 +2031,33 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
 
   useEffect(() => {
     const raw = term.trim();
-    if (!raw || raw.length < 2) return;
+    if (!raw || raw.length < 2) {
+      if (isBranchLocked) {
+        setResults(clientBaseResults);
+      }
+      return;
+    }
     const upper = raw.toUpperCase();
     const delay = CODE_PATTERN.test(upper) ? 200 : 500;
-    const h = setTimeout(() => { if (lastRef.current !== upper) doSearch(); }, delay);
+    const h = setTimeout(() => { doSearch(); }, delay);
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [term]);
+  }, [term, isBranchLocked, clientBaseResults]);
 
   useEffect(() => {
-    loadTermClients();
-  }, []);
-
-  // Apply filters when they change
-  useEffect(() => {
-    if (showAdvancedFilters || Object.values(clientFilters).some(v => v !== undefined && v !== '')) {
+    const hasCustomFilter = Boolean(
+      (clientFilters.branchId != null && (!isBranchLocked || clientFilters.branchId !== enforcedClientBranchId)) ||
+      clientFilters.status ||
+      clientFilters.dateFrom ||
+      clientFilters.dateTo
+    );
+    if (hasCustomFilter) {
       loadTermClients(clientFilters);
+    } else {
+      loadTermClients();
     }
-  }, [clientFilters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientFilters, isBranchLocked, enforcedClientBranchId]);
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -2032,6 +2130,9 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
             className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
+        {isBranchLocked && (
+          <p className="mt-2 text-xs text-amber-600">Succursale verrouillée — cette liste est limitée à {lockedBranchName || `la succursale #${effectiveBranchId}`}.</p>
+        )}
         
         {/* Export Buttons */}
         {!loading && results.length > 0 && (
@@ -2131,15 +2232,19 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
                   Succursale
                 </label>
                 <select
-                  value={clientFilters.branchId ?? ''}
+                  value={enforcedClientBranchId ?? clientFilters.branchId ?? ''}
                   onChange={(e) => setClientFilters({ ...clientFilters, branchId: e.target.value ? Number(e.target.value) : undefined })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={isBranchLocked}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${isBranchLocked ? 'bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed' : 'border-gray-300'}`}
                 >
                   <option value="">Toutes</option>
                   {branches.map((b) => (
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
+                {isBranchLocked && (
+                  <p className="mt-1 text-xs text-amber-600">Filtrage forcé sur {lockedBranchName || `la succursale #${effectiveBranchId}`}</p>
+                )}
               </div>
 
               {/* Status Filter */}
@@ -2188,7 +2293,7 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
             {/* Filter Actions */}
             <div className="mt-4 flex items-center space-x-3">
               <button
-                onClick={() => setClientFilters({ branchId: undefined, status: '', dateFrom: '', dateTo: '' })}
+                onClick={() => setClientFilters({ branchId: enforcedClientBranchId, status: '', dateFrom: '', dateTo: '' })}
                 className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Effacer les filtres
@@ -2686,8 +2791,15 @@ const ClientsTab: React.FC<{ onOpenTerm: (customer: any) => void }> = ({ onOpenT
   );
 };
 
+type TransactionsTabProps = {
+  effectiveBranchId?: number;
+  isBranchLocked?: boolean;
+  lockedBranchName?: string;
+  canAccessHistory?: boolean;
+};
+
 // Transactions tab: view transactions of an account number
-const TransactionsTab: React.FC = () => {
+const TransactionsTab: React.FC<TransactionsTabProps> = ({ effectiveBranchId, isBranchLocked, lockedBranchName, canAccessHistory }) => {
   const [viewMode, setViewMode] = useState<'search' | 'history'>('search');
   const [accountNumber, setAccountNumber] = useState('');
   const [loading, setLoading] = useState(false);
@@ -2699,6 +2811,25 @@ const TransactionsTab: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [showNewTransactionModal, setShowNewTransactionModal] = useState(false);
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
+  const enforcedBranchId = isBranchLocked && effectiveBranchId != null ? Number(effectiveBranchId) : undefined;
+  const enforcedBranchIdString = enforcedBranchId != null ? String(enforcedBranchId) : '';
+  const branchLockLabel = isBranchLocked && enforcedBranchId != null
+    ? (lockedBranchName || `la succursale #${enforcedBranchId}`)
+    : '';
+
+  const handleViewSwitch = (mode: 'search' | 'history') => {
+    if (mode === 'history' && !canAccessHistory) {
+      toast.error('Votre rôle ne permet pas de consulter l\'historique global.');
+      return;
+    }
+    setViewMode(mode);
+  };
+
+  useEffect(() => {
+    if (!canAccessHistory && viewMode === 'history') {
+      setViewMode('search');
+    }
+  }, [canAccessHistory, viewMode]);
   
   // Pour l'historique global
   const [allTransactions, setAllTransactions] = useState<AccountTransaction[]>([]);
@@ -2708,10 +2839,14 @@ const TransactionsTab: React.FC = () => {
     type: 'ALL',
     dateFrom: '',
     dateTo: '',
-    branchId: '',
+    branchId: enforcedBranchIdString,
     minAmount: '',
     maxAmount: ''
   });
+  useEffect(() => {
+    if (!isBranchLocked) return;
+    setHistoryFilters((prev) => (prev.branchId === enforcedBranchIdString ? prev : { ...prev, branchId: enforcedBranchIdString }));
+  }, [isBranchLocked, enforcedBranchIdString]);
 
   const load = async () => {
     const num = accountNumber.trim();
@@ -2723,6 +2858,18 @@ const TransactionsTab: React.FC = () => {
     try {
       // Charger les informations du compte
       const account = await apiService.getAccountByNumber(num);
+      if (!account) {
+        throw new Error('Compte introuvable');
+      }
+      if (isBranchLocked && enforcedBranchId != null) {
+        const accountBranchId = account.branchId ?? (account as any).BranchId;
+        if (accountBranchId != null && Number(accountBranchId) !== enforcedBranchId) {
+          toast.error('Ce compte appartient à une autre succursale.');
+          setAccountInfo(null);
+          setItems([]);
+          return;
+        }
+      }
       setAccountInfo(account);
       
       // Charger les transactions
@@ -2741,6 +2888,10 @@ const TransactionsTab: React.FC = () => {
 
   // Charger l'historique global
   const loadHistory = async () => {
+    if (!canAccessHistory) {
+      setAllTransactions([]);
+      return;
+    }
     setHistoryLoading(true);
     try {
       const params: any = {};
@@ -2748,7 +2899,11 @@ const TransactionsTab: React.FC = () => {
       if (historyFilters.type && historyFilters.type !== 'ALL') params.type = historyFilters.type;
       if (historyFilters.dateFrom) params.startDate = historyFilters.dateFrom;
       if (historyFilters.dateTo) params.endDate = historyFilters.dateTo;
-      if (historyFilters.branchId) params.branchId = historyFilters.branchId;
+      const shouldForceBranch = Boolean(isBranchLocked && enforcedBranchId != null);
+      const branchIdParam = shouldForceBranch
+        ? String(enforcedBranchId ?? '')
+        : (historyFilters.branchId || undefined);
+      if (branchIdParam) params.branchId = branchIdParam;
       if (historyFilters.minAmount) params.minAmount = historyFilters.minAmount;
       if (historyFilters.maxAmount) params.maxAmount = historyFilters.maxAmount;
       
@@ -2763,6 +2918,13 @@ const TransactionsTab: React.FC = () => {
       setHistoryLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isBranchLocked || !canAccessHistory) return;
+    if (viewMode !== 'history') return;
+    loadHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBranchLocked, enforcedBranchIdString, viewMode, canAccessHistory]);
 
   // Charger les branches au montage
   useEffect(() => {
@@ -2779,10 +2941,11 @@ const TransactionsTab: React.FC = () => {
 
   // Charger automatiquement l'historique au montage
   useEffect(() => {
+    if (!canAccessHistory) return;
     if (viewMode === 'history' && allTransactions.length === 0) {
       loadHistory();
     }
-  }, [viewMode]);
+  }, [viewMode, canAccessHistory]);
 
   // Filtrer les transactions
   const filteredItems = useMemo(() => {
@@ -2961,7 +3124,7 @@ const TransactionsTab: React.FC = () => {
       {/* Toggle entre Recherche et Historique */}
       <div className="bg-white rounded-xl shadow-sm border p-2 flex gap-2">
         <button
-          onClick={() => setViewMode('search')}
+          onClick={() => handleViewSwitch('search')}
           className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all ${
             viewMode === 'search'
               ? 'bg-blue-600 text-white'
@@ -2972,17 +3135,29 @@ const TransactionsTab: React.FC = () => {
           Recherche par compte
         </button>
         <button
-          onClick={() => setViewMode('history')}
+          onClick={() => handleViewSwitch('history')}
+          disabled={!canAccessHistory}
           className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all ${
             viewMode === 'history'
               ? 'bg-purple-600 text-white'
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
+          } ${!canAccessHistory ? 'opacity-60 cursor-not-allowed' : ''}`}
+          title={!canAccessHistory ? 'Réservé aux caissiers ou superviseurs' : undefined}
         >
           <FileText className="h-4 w-4 inline-block mr-2" />
           Historique global
         </button>
       </div>
+
+      {isBranchLocked && branchLockLabel && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl flex gap-3">
+          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium">Succursale verrouillée</p>
+            <p className="text-sm">Cette recherche ne peut afficher que les comptes de {branchLockLabel}.</p>
+          </div>
+        </div>
+      )}
 
       {/* Vue Recherche par compte */}
       {viewMode === 'search' && (
@@ -3296,7 +3471,7 @@ const TransactionsTab: React.FC = () => {
       )}
 
       {/* Vue Historique global */}
-      {viewMode === 'history' && (
+      {viewMode === 'history' && canAccessHistory && (
         <HistoryView
           transactions={allTransactions}
           loading={historyLoading}
@@ -3304,7 +3479,18 @@ const TransactionsTab: React.FC = () => {
           onFiltersChange={setHistoryFilters}
           onRefresh={loadHistory}
           branches={branches}
+          isBranchLocked={isBranchLocked}
+          enforcedBranchId={enforcedBranchId}
+          lockedBranchName={lockedBranchName}
         />
+      )}
+
+      {viewMode === 'history' && !canAccessHistory && (
+        <div className="bg-white border border-amber-200 rounded-xl p-8 text-center text-amber-800">
+          <AlertCircle className="h-10 w-10 mx-auto mb-3" />
+          <p className="text-lg font-semibold mb-1">Accès restreint</p>
+          <p className="text-sm">Votre rôle ne permet pas de consulter l'historique global des transactions. Contactez un superviseur pour obtenir l'autorisation.</p>
+        </div>
       )}
     </div>
   );
@@ -3318,7 +3504,13 @@ const HistoryView: React.FC<{
   onFiltersChange: (filters: any) => void;
   onRefresh: () => void;
   branches: { id: number; name: string }[];
-}> = ({ transactions, loading, filters, onFiltersChange, onRefresh, branches }) => {
+  isBranchLocked?: boolean;
+  enforcedBranchId?: number;
+  lockedBranchName?: string;
+}> = ({ transactions, loading, filters, onFiltersChange, onRefresh, branches, isBranchLocked, enforcedBranchId, lockedBranchName }) => {
+  const branchLockLabel = isBranchLocked && enforcedBranchId != null
+    ? (lockedBranchName || `la succursale #${enforcedBranchId}`)
+    : '';
   
   // Filtrer les transactions
   const filteredTransactions = useMemo(() => {
@@ -3522,7 +3714,13 @@ const HistoryView: React.FC<{
             Actualiser
           </button>
         </div>
-        
+        {isBranchLocked && branchLockLabel && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+            <AlertCircle className="h-5 w-5 flex-shrink-0" />
+            <p className="text-sm">Historique limité à {branchLockLabel}. Les transactions des autres succursales sont masquées.</p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Numéro de compte</label>
@@ -3537,16 +3735,22 @@ const HistoryView: React.FC<{
           
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Succursale</label>
-            <select
-              value={filters.branchId}
-              onChange={(e) => onFiltersChange({ ...filters, branchId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
-            >
-              <option value="">Toutes les succursales</option>
-              {branches.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
+            {isBranchLocked && branchLockLabel ? (
+              <div className="w-full px-3 py-2 border border-amber-300 rounded-lg bg-amber-50 text-sm text-amber-900">
+                {branchLockLabel}
+              </div>
+            ) : (
+              <select
+                value={filters.branchId}
+                onChange={(e) => onFiltersChange({ ...filters, branchId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
+              >
+                <option value="">Toutes les succursales</option>
+                {branches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            )}
           </div>
           
           <div>
@@ -3614,7 +3818,7 @@ const HistoryView: React.FC<{
                 type: 'ALL',
                 dateFrom: '',
                 dateTo: '',
-                branchId: '',
+                branchId: isBranchLocked && enforcedBranchId != null ? String(enforcedBranchId) : '',
                 minAmount: '',
                 maxAmount: ''
               })}

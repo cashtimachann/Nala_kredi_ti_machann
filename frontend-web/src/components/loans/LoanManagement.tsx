@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Plus, Search, Download, Eye, DollarSign,
   TrendingUp, Clock, AlertTriangle, CheckCircle, XCircle,
@@ -28,6 +28,7 @@ import {
 import { microcreditLoanApplicationService } from '../../services/microcreditLoanApplicationService';
 import { microcreditLoanService } from '../../services/microcreditLoanService';
 import { microcreditPaymentService, type PaymentResponse, type PaymentHistoryResponse, PaymentStatus } from '../../services/microcreditPaymentService';
+import { apiService } from '../../services/apiService';
 
 interface Loan {
   id: string;
@@ -164,6 +165,14 @@ const formatDate = (dateString?: string): string => {
   });
 };
 
+const safeString = (value: unknown, fallback = ''): string => {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+  const text = String(value).trim();
+  return text.length > 0 ? text : fallback;
+};
+
 const normalizeStatusKey = (value: unknown): string =>
   String(value ?? '')
     .trim()
@@ -219,6 +228,10 @@ const castApplicationStatus = (status: unknown): ApplicationStatus | undefined =
 };
 
 const LoanManagement: React.FC = () => {
+  const currentUser = apiService.getCurrentUser();
+  const userBranchId = currentUser?.branchId;
+  const roleNorm = (currentUser?.role || '').toString().toLowerCase().replace(/[\s_-]+/g, '');
+  const isBranchHead = ['manager','branchsupervisor','chefdesuccursale','branchmanager','assistantmanager','chefdesuccursal'].includes(roleNorm);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [filteredLoans, setFilteredLoans] = useState<Loan[]>([]);
   const [activeLoansCount, setActiveLoansCount] = useState(0);
@@ -255,7 +268,7 @@ const LoanManagement: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'ALL' | LoanStatus>('ALL');
   const [typeFilter, setTypeFilter] = useState<'ALL' | LoanType>('ALL');
   const [currencyFilter, setCurrencyFilter] = useState<'ALL' | 'HTG' | 'USD'>('ALL');
-  const [branchFilter, setBranchFilter] = useState<string>('ALL');
+  const [branchFilter, setBranchFilter] = useState<string>(isBranchHead && userBranchId ? String(userBranchId) : 'ALL');
   const [dateFromFilter, setDateFromFilter] = useState<string>('');
   const [dateToFilter, setDateToFilter] = useState<string>('');
   const [agentFilter, setAgentFilter] = useState<string>('');
@@ -278,9 +291,74 @@ const LoanManagement: React.FC = () => {
   const [agents, setAgents] = useState<AgentPerformance[]>([]);
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'quarter'>('month');
-  const [selectedBranch, setSelectedBranch] = useState<string>('all');
+  const [selectedBranch, setSelectedBranch] = useState<string>(isBranchHead && userBranchId ? String(userBranchId) : 'all');
+    // Lock branch filter for branch heads
+    useEffect(() => {
+      if (isBranchHead && userBranchId) {
+        setBranchFilter(String(userBranchId));
+        setSelectedBranch(String(userBranchId));
+      }
+    }, [isBranchHead, userBranchId]);
   const [branchesList, setBranchesList] = useState<any[]>([]);
   const [loansToDisburseCount, setLoansToDisburseCount] = useState(0);
+  const lockedBranchId = isBranchHead && userBranchId ? Number(userBranchId) : undefined;
+  const fallbackBranchName = currentUser?.branchName || (currentUser as any)?.branch?.name || (currentUser as any)?.branch || undefined;
+
+  const enforcedBranchId = useMemo(() => {
+    if (lockedBranchId) {
+      return lockedBranchId;
+    }
+    if (branchFilter && branchFilter !== 'ALL') {
+      const parsed = Number(branchFilter);
+      if (!Number.isNaN(parsed)) {
+        return parsed;
+      }
+      const branchMatch = branchesList.find(b => b.name === branchFilter || String(b.id) === String(branchFilter));
+      if (branchMatch?.id !== undefined) {
+        const asNumber = Number(branchMatch.id);
+        return Number.isNaN(asNumber) ? undefined : asNumber;
+      }
+    }
+    return undefined;
+  }, [lockedBranchId, branchFilter, branchesList]);
+
+  const enforcedBranchName = useMemo(() => {
+    if (enforcedBranchId) {
+      const branchMatch = branchesList.find(b => String(b.id) === String(enforcedBranchId));
+      if (branchMatch?.name) {
+        return branchMatch.name;
+      }
+    }
+    if (branchFilter && branchFilter !== 'ALL') {
+      return branchFilter;
+    }
+    return fallbackBranchName;
+  }, [enforcedBranchId, branchesList, branchFilter, fallbackBranchName]);
+
+  const branchSelectOptions = useMemo(() => {
+    const optionsSource = (branchesList && branchesList.length > 0)
+      ? branchesList.map((b: any) => ({
+          value: String(b.id ?? b.name ?? ''),
+          label: b.name || String(b.id ?? '')
+        }))
+      : Array.from(new Set(loans.map(l => l.branch))).filter(Boolean).sort().map(branch => ({
+          value: branch,
+          label: branch
+        }));
+
+    const normalized = [...optionsSource];
+    if (lockedBranchId) {
+      const lockedValue = String(lockedBranchId);
+      const alreadyPresent = normalized.some(option => option.value === lockedValue);
+      if (!alreadyPresent) {
+        normalized.push({
+          value: lockedValue,
+          label: enforcedBranchName || `Succursale ${lockedValue}`
+        });
+      }
+    }
+    return normalized;
+  }, [branchesList, loans, lockedBranchId, enforcedBranchName]);
 
   // Payments state
   const [payments, setPayments] = useState<PaymentResponse[]>([]);
@@ -304,7 +382,7 @@ const LoanManagement: React.FC = () => {
 
   useEffect(() => {
     loadLoans();
-  }, [activeTab, currentPage, pageSize, statusFilter, typeFilter, branchFilter]);
+  }, [activeTab, currentPage, pageSize, statusFilter, typeFilter, branchFilter, enforcedBranchId]);
 
   // Map LoanStatus (frontend enum) to backend request string
   const loanStatusRequestMap: Record<LoanStatus, string> = {
@@ -321,7 +399,7 @@ const LoanManagement: React.FC = () => {
 
   useEffect(() => {
     applyFilters();
-  }, [loans, searchTerm, statusFilter, typeFilter, currencyFilter, branchFilter, dateFromFilter, dateToFilter, activeTab]);
+  }, [loans, searchTerm, statusFilter, typeFilter, currencyFilter, branchFilter, dateFromFilter, dateToFilter, activeTab, enforcedBranchId, enforcedBranchName]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -378,8 +456,8 @@ const LoanManagement: React.FC = () => {
         // Always fetch active/overdue loans as well as approved applications so we can reliably
         // detect which approved applications have already been disbursed (linked to an active loan).
         const [activeLoans, approvedApplications] = await Promise.all([
-          microcreditLoanApplicationService.getActiveLoans(),
-          (microcreditLoanApplicationService as any).getApprovedLoans()
+          microcreditLoanApplicationService.getActiveLoans(enforcedBranchId),
+          microcreditLoanApplicationService.getApprovedLoans(enforcedBranchId)
         ]);
 
         // Convert active loans to Loan format (only present when activeTab === 'loans')
@@ -399,13 +477,23 @@ const LoanManagement: React.FC = () => {
           );
           const paidAmount = roundCurrency(loan.paidAmount ?? loan.amountPaid ?? (principalAmount - remainingBalance));
           const currency = (loan.currency === 'USD' ? 'USD' : 'HTG') as 'HTG' | 'USD';
+          const resolvedCustomerId = safeString(
+            loan.customerId ??
+            loan.borrowerId ??
+            loan.customer?.id ??
+            loan.borrower?.id ??
+            loan.customerCode ??
+            loan.customer?.accountNumber ??
+            loan.borrower?.accountNumber ??
+            loan.id
+          );
 
           return {
             id: loan.id,
             loanNumber: loan.loanNumber || `LOAN-${loan.id.substring(0, 8)}`,
             loanRecordId: loan.id,
             applicationId: loan.applicationId || loan.application?.id,
-            customerId: loan.customerId || loan.borrowerId || '',
+            customerId: resolvedCustomerId,
             customerCode: loan.customer?.accountNumber ?? loan.borrower?.accountNumber ?? undefined,
             customerName: (loan.customer ?? loan.borrower)
               ? `${(loan.customer ?? loan.borrower).firstName} ${(loan.customer ?? loan.borrower).lastName}`.trim()
@@ -456,13 +544,19 @@ const LoanManagement: React.FC = () => {
           const monthlyPaymentWithFee = roundCurrency(monthlyPayment + distributedFeePortion);
           const loanRecordId = app.loanId || app.loanRecordId || app.loan?.id;
           const currency = (app.currency === 'USD' ? 'USD' : 'HTG') as 'HTG' | 'USD';
+          const resolvedCustomerId = safeString(
+            app.borrowerId ??
+            (app as any).customerCode ??
+            app.borrower?.accountNumber ??
+            app.id
+          );
 
           return {
             id: loanRecordId || app.id,
             loanRecordId: loanRecordId || undefined,
             applicationId: app.id,
             loanNumber: app.applicationNumber || `APP-${app.id.substring(0, 8)}`,
-            customerId: app.borrowerId || '',
+            customerId: resolvedCustomerId,
             customerCode: app.customerCode ?? app.borrower?.accountNumber ?? app.borrowerId ?? undefined,
             customerName: app.customerName ?? (app.borrower ? `${app.borrower.firstName} ${app.borrower.lastName}`.trim() : 'Client'),
             customerPhone: app.customerPhone ?? app.borrower?.contact?.phone ?? app.borrower?.contact?.phoneNumber,
@@ -605,9 +699,13 @@ const LoanManagement: React.FC = () => {
         }
         
         if (typeFilter !== 'ALL') requestParams.loanType = typeFilter;
-        if (branchFilter !== 'ALL') {
-          const branchObj = branchesList.find(b => b.name === branchFilter || b.id === branchFilter);
-          if (branchObj) requestParams.branchId = branchObj.id;
+        if (enforcedBranchId) {
+          requestParams.branchId = enforcedBranchId;
+        } else if (branchFilter !== 'ALL') {
+          const branchObj = branchesList.find(b => b.name === branchFilter || String(b.id) === branchFilter);
+          if (branchObj?.id !== undefined) {
+            requestParams.branchId = Number(branchObj.id);
+          }
         }
         const page = await microcreditLoanApplicationService.getApplicationsPage(requestParams);
         const applications = page.applications;
@@ -623,13 +721,19 @@ const LoanManagement: React.FC = () => {
     const processingFee = approvedAmount > 0 ? roundCurrency(approvedAmount * 0.05) : 0;
     const distributedFeePortion = app.requestedDurationMonths > 0 ? roundCurrency(processingFee / app.requestedDurationMonths) : 0;
     const monthlyPaymentWithFee = roundCurrency(monthlyPayment + distributedFeePortion);
+    const resolvedCustomerId = safeString(
+      app.borrowerId ??
+      (app as any).customerCode ??
+      app.borrower?.accountNumber ??
+      app.id
+    );
           
           return {
             id: app.id,
             loanRecordId: app.loanId || undefined,
             applicationId: app.id,
             loanNumber: app.applicationNumber || `APP-${app.id.substring(0, 8)}`,
-            customerId: app.borrowerId || '',
+            customerId: resolvedCustomerId,
             customerCode: app.borrower?.accountNumber,
             savingsAccountNumber: (app as any).savingsAccountNumber || app.borrower?.accountNumber,
             customerName: app.borrower 
@@ -715,8 +819,8 @@ const LoanManagement: React.FC = () => {
     // est aussi mis à jour quand on est sur l'onglet overview (sinon restait à 0 ou ancien état)
     try {
       const [activeLoansForCount, approvedApplicationsForCount] = await Promise.all([
-        microcreditLoanApplicationService.getActiveLoans(),
-        (microcreditLoanApplicationService as any).getApprovedLoans()
+        microcreditLoanApplicationService.getActiveLoans(enforcedBranchId),
+        microcreditLoanApplicationService.getApprovedLoans(enforcedBranchId)
       ]);
       const disbursedIds = new Set(activeLoansForCount.map((l: any) => l.applicationId || l.application?.id).filter(Boolean));
       const notYetDisbursed = approvedApplicationsForCount.filter((app: any) => !disbursedIds.has(app.id));
@@ -751,6 +855,29 @@ const LoanManagement: React.FC = () => {
       }
       setLoading(false);
     }
+  };
+
+  const handleBranchFilterChange = (value: string) => {
+    if (lockedBranchId) {
+      setBranchFilter(String(lockedBranchId));
+      return;
+    }
+    setBranchFilter(value);
+  };
+
+  const branchMatchesFilter = (branchValue?: string, branchIdValue?: string | number) => {
+    if (enforcedBranchId) {
+      const enforcedKey = String(enforcedBranchId);
+      const matchesId = branchIdValue !== undefined
+        ? String(branchIdValue) === enforcedKey
+        : String(branchValue ?? '') === enforcedKey;
+      const matchesName = enforcedBranchName ? branchValue === enforcedBranchName : false;
+      return matchesId || matchesName;
+    }
+    if (branchFilter && branchFilter !== 'ALL') {
+      return branchValue === branchFilter || String(branchValue ?? '') === branchFilter;
+    }
+    return true;
   };
 
   const applyFilters = () => {
@@ -791,10 +918,8 @@ const LoanManagement: React.FC = () => {
       filtered = filtered.filter(loan => loan.currency === currencyFilter);
     }
 
-    // Branch filter
-    if (branchFilter !== 'ALL' && branchFilter) {
-      filtered = filtered.filter(loan => loan.branch === branchFilter);
-    }
+    // Branch filter (enforced for branch heads)
+    filtered = filtered.filter(loan => branchMatchesFilter(loan.branch, (loan as any).branchId));
 
     // Date range filter — for disbursement tab, filter by approvedAt when available, otherwise createdAt
     if (dateFromFilter) {
@@ -936,7 +1061,7 @@ const LoanManagement: React.FC = () => {
           loanRecordId: app.loanId || loan.loanRecordId,
           applicationId: app.id,
           loanNumber: app.applicationNumber || loan.loanNumber,
-          customerId: app.borrowerId || loan.customerId,
+          customerId: safeString(app.borrowerId ?? loan.customerId, loan.customerId),
           customerCode: app.borrower?.accountNumber || loan.customerCode,
           customerName: app.customerName ?? (app.borrower ? `${app.borrower.firstName} ${app.borrower.lastName}` : loan.customerName),
           customerPhone: app.customerPhone ?? app.borrower?.contact?.phone ?? app.borrower?.contact?.phoneNumber ?? loan.customerPhone,
@@ -1007,7 +1132,7 @@ const LoanManagement: React.FC = () => {
           id: fullLoan.id || loan.id,
           loanRecordId: fullLoan.id || loan.loanRecordId,
           loanNumber: fullLoan.loanNumber ?? loan.loanNumber,
-          customerId: fullLoan.borrowerId ?? loan.customerId,
+          customerId: safeString(fullLoan.borrowerId ?? loan.customerId, loan.customerId),
           customerName: fullLoan.borrowerName ?? loan.customerName,
           principalAmount,
           interestRate: normalizedAnnualRate,
@@ -1395,7 +1520,7 @@ const LoanManagement: React.FC = () => {
           const matchesSearch = (l.loanNumber && l.loanNumber.toLowerCase().includes(term)) || (l.customerName && l.customerName.toLowerCase().includes(term)) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
           if (!matchesSearch) return false;
         }
-        if (branchFilter !== 'ALL' && l.branch !== branchFilter) return false;
+        if (!branchMatchesFilter(l.branch, (l as any).branchId)) return false;
         if (currencyFilter !== 'ALL' && l.currency !== currencyFilter) return false;
         const days = l.daysOverdue || 0;
         if (overdueDaysFilter === '1-30' && (days < 1 || days > 30)) return false;
@@ -1494,7 +1619,7 @@ const LoanManagement: React.FC = () => {
         paymentsDateFrom || undefined,
         paymentsDateTo || undefined,
         paymentsStatusFilter !== 'ALL' ? paymentsStatusFilter : undefined,
-        branchFilter !== 'ALL' ? parseInt(branchFilter) : undefined
+        enforcedBranchId
       );
       
       // Ensure branchName is populated for each payment by falling back to the branch list
@@ -1521,30 +1646,33 @@ const LoanManagement: React.FC = () => {
     if (activeTab === 'payments') {
       loadPayments();
     }
-  }, [activeTab, paymentsPage, paymentsPageSize, paymentsStatusFilter, paymentsDateFrom, paymentsDateTo, branchFilter]);
+  }, [activeTab, paymentsPage, paymentsPageSize, paymentsStatusFilter, paymentsDateFrom, paymentsDateTo, branchFilter, enforcedBranchId]);
 
   // Dashboard functions
   const loadDashboardData = async () => {
     try {
       setDashboardLoading(true);
+      const dashboardBranchId = enforcedBranchId ?? (selectedBranch !== 'all' ? parseInt(selectedBranch) : undefined);
       
       // Load dashboard stats from the backend API and count of pending applications
       const [stats, pendingAppsPage, approvedAppsPage, activeLoansData] = await Promise.all([
         microcreditLoanApplicationService.getDashboardStats({
-          branchId: selectedBranch !== 'all' ? parseInt(selectedBranch) : undefined,
+          branchId: dashboardBranchId,
           dateRange: timeRange
         }),
         microcreditLoanApplicationService.getApplicationsPage({
           status: 'Submitted',
           page: 1,
-          pageSize: 1
+          pageSize: 1,
+          ...(dashboardBranchId ? { branchId: dashboardBranchId } : {})
         }),
         microcreditLoanApplicationService.getApplicationsPage({
           status: 'Approved',
           page: 1,
-          pageSize: 1
+          pageSize: 1,
+          ...(dashboardBranchId ? { branchId: dashboardBranchId } : {})
         }),
-        microcreditLoanApplicationService.getActiveLoans()
+        microcreditLoanApplicationService.getActiveLoans(dashboardBranchId)
       ]);
 
       // Extract data with proper field mapping
@@ -1600,8 +1728,11 @@ const LoanManagement: React.FC = () => {
       
       // Load chart data and agent performance
       const [chartData, agentPerformance] = await Promise.all([
-        microcreditLoanApplicationService.getPortfolioTrend(timeRange),
-        microcreditLoanApplicationService.getAgentPerformance()
+        microcreditLoanApplicationService.getPortfolioTrend(
+          timeRange,
+          dashboardBranchId
+        ),
+        microcreditLoanApplicationService.getAgentPerformance(dashboardBranchId)
       ]);
       
       setChartData(chartData);
@@ -1967,22 +2098,26 @@ const LoanManagement: React.FC = () => {
             <option value={LoanType.CREDIT_HYPOTHECAIRE}>Crédit Hypothécaire</option>
           </select>
           {/* Branch filter for loans and disbursement */}
-          <select
-            value={branchFilter}
-            onChange={(e) => setBranchFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-          >
-            <option value="ALL">Toutes les succursales</option>
-            {branchesList && branchesList.length > 0 ? (
-              branchesList.map((b: any) => (
-                <option key={b.id || b.name} value={b.name || b.id}>{b.name || b.id}</option>
-              ))
-            ) : (
-              Array.from(new Set(loans.map(l => l.branch))).filter(Boolean).sort().map(branch => (
-                <option key={branch} value={branch}>{branch}</option>
-              ))
+          <div className="flex items-center">
+            <select
+              value={branchFilter}
+              onChange={(e) => handleBranchFilterChange(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              disabled={!!lockedBranchId}
+            >
+              {!lockedBranchId && (
+                <option value="ALL">Toutes les succursales</option>
+              )}
+              {branchSelectOptions.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            {lockedBranchId && (
+              <span className="ml-2 text-xs text-gray-500 italic">
+                Verrouillé: {enforcedBranchName || `Succursale ${lockedBranchId}`}
+              </span>
             )}
-          </select>
+          </div>
           {/* Date filters: From & To */}
           <input
             type="date"
@@ -2000,35 +2135,39 @@ const LoanManagement: React.FC = () => {
           />
 
           {/* Currency Filter */}
-          <select
-            value={currencyFilter}
-            onChange={(e) => setCurrencyFilter(e.target.value as any)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-          >
-            <option value="ALL">Toutes devises</option>
-            <option value="HTG">HTG</option>
-            <option value="USD">USD</option>
-          </select>
-        </div>
-
-        <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
-          <span>{filteredLoans.length} prêt(s) trouvé(s)</span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleExportPdf}
-              className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              title="Exporter PDF"
-            >
-              Exporter PDF
-            </button>
-          {(searchTerm || statusFilter !== 'ALL' || typeFilter !== 'ALL' || currencyFilter !== 'ALL' || branchFilter !== 'ALL' || dateFromFilter || dateToFilter) && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Succursale
+                  {lockedBranchId && (
+                    <span className="ml-2 text-xs text-gray-500 italic">
+                      Verrouillé
+                    </span>
+                  )}
+                </label>
+                <select
+                  value={branchFilter}
+                  onChange={(e) => handleBranchFilterChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  disabled={!!lockedBranchId}
+                >
+                  {!lockedBranchId && (
+                    <option value="ALL">Toutes les succursales</option>
+                  )}
+                  {branchSelectOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+          {(searchTerm || statusFilter !== 'ALL' || typeFilter !== 'ALL' || currencyFilter !== 'ALL' || (!lockedBranchId && branchFilter !== 'ALL') || dateFromFilter || dateToFilter) && (
             <button
               onClick={() => {
                 setSearchTerm('');
                 setStatusFilter('ALL');
                 setTypeFilter('ALL');
                 setCurrencyFilter('ALL');
-                setBranchFilter('ALL');
+                handleBranchFilterChange('ALL');
                 setDateFromFilter('');
                 setDateToFilter('');
               }}
@@ -2039,7 +2178,6 @@ const LoanManagement: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
       )}
 
       {/* Applications Table (Nouvelles Demandes) */}
@@ -2090,19 +2228,14 @@ const LoanManagement: React.FC = () => {
                   <label className="text-xs text-gray-500 block mb-1">Succursale</label>
                   <select
                     value={branchFilter}
-                    onChange={(e) => setBranchFilter(e.target.value)}
+                    onChange={(e) => handleBranchFilterChange(e.target.value)}
                     className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    disabled={!!lockedBranchId}
                   >
-                    <option value="ALL">Tout</option>
-                    {branchesList && branchesList.length > 0 ? (
-                      branchesList.map((b: any) => (
-                        <option key={b.id || b.name} value={b.name || b.id}>{b.name || b.id}</option>
-                      ))
-                    ) : (
-                      Array.from(new Set(loans.map(l => l.branch))).filter(Boolean).sort().map(branch => (
-                        <option key={branch} value={branch}>{branch}</option>
-                      ))
-                    )}
+                    {!lockedBranchId && <option value="ALL">Tout</option>}
+                    {branchSelectOptions.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
                   </select>
                 </div>
                 {/* Date From Filter */}
@@ -2666,13 +2799,14 @@ const LoanManagement: React.FC = () => {
                 </label>
                 <select
                   value={branchFilter}
-                  onChange={(e) => setBranchFilter(e.target.value)}
+                  onChange={(e) => handleBranchFilterChange(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  disabled={!!lockedBranchId}
                 >
-                  <option value="ALL">Toutes</option>
-                  {branchesList.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
+                  {!lockedBranchId && <option value="ALL">Toutes</option>}
+                  {branchSelectOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
@@ -2724,12 +2858,12 @@ const LoanManagement: React.FC = () => {
             </div>
 
             {/* Clear Filters Button */}
-            {(searchTerm || branchFilter !== 'ALL' || currencyFilter !== 'ALL' || overdueDaysFilter !== 'ALL' || agentFilter) && (
+            {(searchTerm || (!lockedBranchId && branchFilter !== 'ALL') || currencyFilter !== 'ALL' || overdueDaysFilter !== 'ALL' || agentFilter) && (
               <div className="flex justify-end mb-4">
                 <button
                   onClick={() => {
                     setSearchTerm('');
-                    setBranchFilter('ALL');
+                    handleBranchFilterChange('ALL');
                     setCurrencyFilter('ALL');
                     setOverdueDaysFilter('ALL');
                     setAgentFilter('');
@@ -2757,7 +2891,7 @@ const LoanManagement: React.FC = () => {
                       const matchesSearch = (l.loanNumber && l.loanNumber.toLowerCase().includes(term)) || (l.customerName && l.customerName.toLowerCase().includes(term)) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
                       if (!matchesSearch) return false;
                     }
-                    if (branchFilter !== 'ALL' && l.branch !== branchFilter) return false;
+                    if (!branchMatchesFilter(l.branch, (l as any).branchId)) return false;
                     if (currencyFilter !== 'ALL' && l.currency !== currencyFilter) return false;
                     const days = l.daysOverdue || 0;
                     if (overdueDaysFilter === '1-30' && (days < 1 || days > 30)) return false;
@@ -2783,7 +2917,7 @@ const LoanManagement: React.FC = () => {
                       const matchesSearch = (l.loanNumber && l.loanNumber.toLowerCase().includes(term)) || (l.customerName && l.customerName.toLowerCase().includes(term)) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
                       if (!matchesSearch) return false;
                     }
-                    if (branchFilter !== 'ALL' && l.branch !== branchFilter) return false;
+                    if (!branchMatchesFilter(l.branch, (l as any).branchId)) return false;
                     if (currencyFilter !== 'ALL' && l.currency !== currencyFilter) return false;
                     const days = l.daysOverdue || 0;
                     if (overdueDaysFilter === '1-30' && (days < 1 || days > 30)) return false;
@@ -2809,7 +2943,7 @@ const LoanManagement: React.FC = () => {
                       const matchesSearch = (l.loanNumber && l.loanNumber.toLowerCase().includes(term)) || (l.customerName && l.customerName.toLowerCase().includes(term)) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
                       if (!matchesSearch) return false;
                     }
-                    if (branchFilter !== 'ALL' && l.branch !== branchFilter) return false;
+                    if (!branchMatchesFilter(l.branch, (l as any).branchId)) return false;
                     if (currencyFilter !== 'ALL' && l.currency !== currencyFilter) return false;
                     const days = l.daysOverdue || 0;
                     if (overdueDaysFilter === '1-30' && (days < 1 || days > 30)) return false;
@@ -2835,7 +2969,7 @@ const LoanManagement: React.FC = () => {
                       const matchesSearch = (l.loanNumber && l.loanNumber.toLowerCase().includes(term)) || (l.customerName && l.customerName.toLowerCase().includes(term)) || (l.customerPhone && l.customerPhone.toLowerCase().includes(term));
                       if (!matchesSearch) return false;
                     }
-                    if (branchFilter !== 'ALL' && l.branch !== branchFilter) return false;
+                    if (!branchMatchesFilter(l.branch, (l as any).branchId)) return false;
                     if (currencyFilter !== 'ALL' && l.currency !== currencyFilter) return false;
                     const days = l.daysOverdue || 0;
                     if (overdueDaysFilter === '1-30' && (days < 1 || days > 30)) return false;
@@ -2898,7 +3032,7 @@ const LoanManagement: React.FC = () => {
                         }
                         
                         // Filtre par succursale
-                        if (branchFilter !== 'ALL' && loan.branch !== branchFilter) return false;
+                        if (!branchMatchesFilter(loan.branch, (loan as any).branchId)) return false;
                         
                         // Filtre par devise
                         if (currencyFilter !== 'ALL' && loan.currency !== currencyFilter) return false;
@@ -3003,7 +3137,7 @@ const LoanManagement: React.FC = () => {
                     const matchesSearch = (loan.loanNumber && loan.loanNumber.toLowerCase().includes(term)) || (loan.customerName && loan.customerName.toLowerCase().includes(term)) || (loan.customerPhone && loan.customerPhone.toLowerCase().includes(term));
                     if (!matchesSearch) return false;
                   }
-                  if (branchFilter !== 'ALL' && loan.branch !== branchFilter) return false;
+                  if (!branchMatchesFilter(loan.branch, (loan as any).branchId)) return false;
                   if (currencyFilter !== 'ALL' && loan.currency !== currencyFilter) return false;
                   const days = loan.daysOverdue || 0;
                   if (overdueDaysFilter === '1-30' && (days < 1 || days > 30)) return false;
@@ -3016,7 +3150,7 @@ const LoanManagement: React.FC = () => {
                     <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">Aucun prêt trouvé</h3>
                     <p className="text-gray-600">
-                      {(searchTerm || branchFilter !== 'ALL' || currencyFilter !== 'ALL' || overdueDaysFilter !== 'ALL' || agentFilter)
+                      {(searchTerm || (!lockedBranchId && branchFilter !== 'ALL') || currencyFilter !== 'ALL' || overdueDaysFilter !== 'ALL' || agentFilter)
                         ? 'Aucun prêt ne correspond aux filtres sélectionnés.'
                         : 'Excellent! Tous les clients sont à jour dans leurs paiements.'}
                     </p>
@@ -3133,30 +3267,41 @@ const LoanManagement: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Succursale
                 </label>
-                <select
-                  value={branchFilter}
-                  onChange={(e) => setBranchFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="ALL">Toutes les succursales</option>
-                  {branchesList.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
+                {lockedBranchId ? (
+                  <div className="px-3 py-2 border border-gray-200 rounded-lg bg-gray-50">
+                    <p className="text-sm font-medium text-gray-900">
+                      {enforcedBranchName || `Succursale ${lockedBranchId}`}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Succursale verrouillée pour votre profil manager.
+                    </p>
+                  </div>
+                ) : (
+                  <select
+                    value={branchFilter}
+                    onChange={(e) => setBranchFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="ALL">Toutes les succursales</option>
+                    {branchesList.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
 
             {/* Clear Filters Button */}
-            {(paymentsStatusFilter !== 'ALL' || paymentsDateFrom || paymentsDateTo || branchFilter !== 'ALL' || paymentsSearchTerm) && (
+            {(paymentsStatusFilter !== 'ALL' || paymentsDateFrom || paymentsDateTo || (!lockedBranchId && branchFilter !== 'ALL') || paymentsSearchTerm) && (
               <div className="flex justify-end mb-4">
                 <button
                   onClick={() => {
                     setPaymentsStatusFilter('ALL');
                     setPaymentsDateFrom('');
                     setPaymentsDateTo('');
-                    setBranchFilter('ALL');
+                    handleBranchFilterChange('ALL');
                     setPaymentsSearchTerm('');
                   }}
                   className="text-primary-600 hover:text-primary-700 font-medium text-sm flex items-center gap-2"
@@ -3322,7 +3467,11 @@ const LoanManagement: React.FC = () => {
       {/* Reports Tab */}
       {activeTab === 'reports' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <LoanReports />
+          <LoanReports
+            enforcedBranchId={enforcedBranchId}
+            enforcedBranchName={enforcedBranchName}
+            isBranchLocked={Boolean(lockedBranchId)}
+          />
         </div>
       )}
 

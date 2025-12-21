@@ -12,6 +12,7 @@ using StackExchange.Redis;
 using System.Text;
 using Microsoft.Extensions.FileProviders;
 using System.IO;
+using Microsoft.Extensions.Logging;
 
 // Enable legacy timestamp behavior to avoid exceptions when DateTime Kind is Unspecified
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
@@ -82,6 +83,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("CashierPolicy", policy => policy.RequireRole("SuperAdmin", "Manager", "Cashier"));
     options.AddPolicy("CreditPolicy", policy => policy.RequireRole("SuperAdmin", "Manager", "Employee"));
     options.AddPolicy("EmployeePolicy", policy => policy.RequireRole("SuperAdmin", "Manager", "Employee", "Support"));
+    options.AddPolicy("RequireManagerOrAbove", policy => policy.RequireRole("SuperAdmin", "Manager", "BranchSupervisor"));
 });
 
 // Register services
@@ -121,12 +123,26 @@ builder.Services.AddScoped<IBranchService, BranchService>();
 builder.Services.AddScoped<IInterBranchTransferService, InterBranchTransferService>();
 builder.Services.AddScoped<IBranchReportService, BranchReportService>();
 
+// Notification Service
+builder.Services.AddScoped<INotificationService, NotificationService>();
+
 // Redis Configuration
 builder.Services.AddSingleton<IConnectionMultiplexer>(provider =>
 {
     var configuration = provider.GetRequiredService<IConfiguration>();
-    var connectionString = configuration.GetConnectionString("Redis") ?? "localhost:6379";
-    return ConnectionMultiplexer.Connect(connectionString);
+    var logger = provider.GetRequiredService<ILoggerFactory>().CreateLogger("Redis");
+
+    var connectionString = configuration.GetConnectionString("Redis") ?? "localhost:6379,abortConnect=false";
+    var options = ConfigurationOptions.Parse(connectionString, true);
+
+    // Ensure the multiplexer keeps retrying even if Redis is temporarily unavailable at startup
+    options.AbortOnConnectFail = false;
+    options.ConnectRetry = Math.Max(options.ConnectRetry, 3);
+    options.ReconnectRetryPolicy ??= new ExponentialRetry(5000);
+
+    logger.LogInformation("Connecting to Redis using endpoints: {Endpoints}", string.Join(", ", options.EndPoints));
+
+    return ConnectionMultiplexer.Connect(options);
 });
 builder.Services.AddScoped<ICacheService, CacheService>();
 

@@ -23,7 +23,7 @@ public class InterBranchTransferController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin")]
+    [Authorize(Roles = "Admin,Manager,SuperAdmin")]
     public async Task<ActionResult<InterBranchTransferDto>> CreateTransfer([FromBody] CreateInterBranchTransferDto dto)
     {
         try
@@ -104,7 +104,7 @@ public class InterBranchTransferController : ControllerBase
     }
 
     [HttpPut("{transferId}/approve")]
-    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin")]
+    [Authorize(Roles = "Admin,Manager,SuperAdmin")]
     public async Task<ActionResult<InterBranchTransferDto>> ApproveTransfer(Guid transferId)
     {
         try
@@ -129,7 +129,7 @@ public class InterBranchTransferController : ControllerBase
     }
 
     [HttpPut("{transferId}/reject")]
-    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin")]
+    [Authorize(Roles = "Admin,Manager,SuperAdmin")]
     public async Task<ActionResult<InterBranchTransferDto>> RejectTransfer(Guid transferId, [FromBody] RejectInterBranchTransferDto dto)
     {
         try
@@ -154,7 +154,7 @@ public class InterBranchTransferController : ControllerBase
     }
 
     [HttpPut("{transferId}/process")]
-    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin")]
+    [Authorize(Roles = "Admin,Manager,SuperAdmin")]
     public async Task<ActionResult<InterBranchTransferDto>> ProcessTransfer(Guid transferId, [FromBody] ProcessInterBranchTransferDto dto)
     {
         try
@@ -179,7 +179,7 @@ public class InterBranchTransferController : ControllerBase
     }
 
     [HttpPut("{transferId}/dispatch")]
-    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin")]
+    [Authorize(Roles = "Admin,Manager,SuperAdmin")]
     public async Task<ActionResult<InterBranchTransferDto>> DispatchTransfer(Guid transferId, [FromBody] DispatchInterBranchTransferDto dto)
     {
         try
@@ -206,7 +206,7 @@ public class InterBranchTransferController : ControllerBase
     }
 
     [HttpPut("{transferId}/cancel")]
-    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin")]
+    [Authorize(Roles = "Admin,Manager,SuperAdmin")]
     public async Task<ActionResult<InterBranchTransferDto>> CancelTransfer(Guid transferId, [FromBody] RejectInterBranchTransferDto dto)
     {
         try
@@ -231,7 +231,7 @@ public class InterBranchTransferController : ControllerBase
     }
 
     [HttpGet("consolidated-report")]
-    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin")]
+    [Authorize(Roles = "Admin,Manager,SuperAdmin")]
     public async Task<ActionResult<ConsolidatedTransferReportDto>> GetConsolidatedReport([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
     {
         try
@@ -276,7 +276,7 @@ public class InterBranchTransferController : ControllerBase
     }
     
     [HttpGet("branch/{branchId}/summary")]
-    [Authorize(Roles = "Admin,Manager,BranchSupervisor,SuperAdmin,Director")]
+    [Authorize(Roles = "Admin,Manager,SuperAdmin,Director")]
     public async Task<ActionResult<BranchTransferSummaryDto>> GetBranchTransferSummary(int branchId, [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
     {
         try

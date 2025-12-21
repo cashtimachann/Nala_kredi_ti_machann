@@ -201,6 +201,11 @@ namespace NalaCreditAPI.Controllers
 
                 // Update manager's branch assignment
                 manager.BranchId = branchId;
+
+                // Also set branch.ManagerId and branch.ManagerName for consistency
+                branch.ManagerId = manager.Id;
+                branch.ManagerName = $"{manager.FirstName ?? string.Empty} {manager.LastName ?? string.Empty}".Trim();
+
                 await _context.SaveChangesAsync();
 
                 return Ok(new { message = "Responsable assigné avec succès" });

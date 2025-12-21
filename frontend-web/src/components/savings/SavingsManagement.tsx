@@ -44,6 +44,12 @@ interface CurrencyBreakdown {
 }
 
 const SavingsManagement: React.FC = () => {
+  const currentUser = apiService.getCurrentUser();
+  const userBranchId = currentUser?.branchId;
+  const roleNorm = (currentUser?.role || '').toString().toLowerCase().replace(/[\s_-]+/g, '');
+  const isBranchHead = ['manager','branchsupervisor','chefdesuccursale','branchmanager','assistantmanager','chefdesuccursal'].includes(roleNorm);
+  const effectiveBranchId = isBranchHead ? userBranchId : undefined;
+  const isBranchLocked = Boolean(effectiveBranchId);
   const [activeTab, setActiveTab] = useState<SavingsTab>('overview');
   const [stats, setStats] = useState<SavingsStats>({
     totalCustomers: 0,
@@ -92,9 +98,9 @@ const SavingsManagement: React.FC = () => {
       // 1) Tous comptes, 2) transactions récentes (page 1), 3) transactions d'aujourd'hui (filtrées)
       const todayIso = new Date().toISOString().slice(0, 10);
       const [accounts, transactions, transactionsToday] = await Promise.all([
-        apiService.getSavingsAccounts({}),
-        apiService.getSavingsTransactions({}),
-        apiService.getSavingsTransactions({ dateFrom: todayIso, dateTo: todayIso, pageSize: 2000 })
+        apiService.getSavingsAccounts(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
+        apiService.getSavingsTransactions(effectiveBranchId ? { branchId: effectiveBranchId } : {}),
+        apiService.getSavingsTransactions({ dateFrom: todayIso, dateTo: todayIso, pageSize: 2000, ...(effectiveBranchId ? { branchId: effectiveBranchId } : {}) })
       ]);
 
       // Calculer les statistiques
@@ -585,13 +591,13 @@ const SavingsManagement: React.FC = () => {
       case 'overview':
         return renderOverview();
       case 'customers':
-        return <SavingsCustomerManagement />;
+        return <SavingsCustomerManagement effectiveBranchId={effectiveBranchId} isBranchLocked={isBranchLocked} />;
       case 'accounts':
-        return <CompleteSavingsAccountManagement />;
+        return <CompleteSavingsAccountManagement effectiveBranchId={effectiveBranchId} isBranchLocked={isBranchLocked} />;
       case 'transactions':
-        return <SavingsTransactionManagement />;
+        return <SavingsTransactionManagement effectiveBranchId={effectiveBranchId} isBranchLocked={isBranchLocked} />;
       case 'reports':
-        return <SavingsReports />;
+        return <SavingsReports effectiveBranchId={effectiveBranchId} isBranchLocked={isBranchLocked} />;
       default:
         return renderOverview();
     }

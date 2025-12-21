@@ -156,9 +156,12 @@ export class ClientAccountService extends BaseApiService {
     }
   }
 
-  async getClientAccountStats(): Promise<ClientAccountStats> {
+  async getClientAccountStats(branchId?: number): Promise<ClientAccountStats> {
     try {
-      const response = await this.get<any>('/ClientAccount/statistics');
+      const url = branchId !== undefined && branchId !== null
+        ? `/ClientAccount/statistics?branchId=${encodeURIComponent(String(branchId))}`
+        : '/ClientAccount/statistics';
+      const response = await this.get<any>(url);
       const stats = response || {};
       // Map backend dictionaries to frontend expectations
       const mapTypeKey = (k: string): AccountType => {
