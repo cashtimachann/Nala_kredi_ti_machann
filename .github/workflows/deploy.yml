@@ -9,7 +9,8 @@ on:
 env:
   SERVER_IP: 142.93.78.111
   DEPLOY_PATH: /var/www/nala-credit
-  DOMAIN: admin.nalakreditimachann.com
+  ADMIN_DOMAIN: admin.nalakreditimachann.com
+  BRANCH_DOMAIN: branch.nalakreditimachann.com
 
 jobs:
   deploy:
@@ -40,7 +41,8 @@ jobs:
         run: |
           echo "🚀 Deploying to: ${{ env.SERVER_IP }}"
           echo "📁 Deploy path: ${{ env.DEPLOY_PATH }}"
-          echo "🌐 Domain: ${{ env.DOMAIN }}"
+          echo "🌐 Admin Domain: ${{ env.ADMIN_DOMAIN }}"
+          echo "🌐 Branch Domain: ${{ env.BRANCH_DOMAIN }}"
           echo "📦 Commit: ${{ github.sha }}"
           echo "👤 Author: ${{ github.actor }}"
       
@@ -120,7 +122,8 @@ jobs:
             
             echo ""
             echo "🌐 Application available at:"
-            echo "   https://${{ env.DOMAIN }}"
+            echo "   Admin:  https://${{ env.ADMIN_DOMAIN }}"
+            echo "   Branch: https://${{ env.BRANCH_DOMAIN }}"
           ENDSSH
       
       - name: 🧪 Health check
@@ -130,15 +133,26 @@ jobs:
           # Wait for services to fully start
           sleep 20
           
-          # Check HTTP redirect
-          echo "Checking HTTP redirect..."
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ env.DOMAIN }} || echo "000")
-          echo "HTTP Status: $HTTP_STATUS"
+          # Check Admin Domain
+          echo "Checking Admin Domain (${{ env.ADMIN_DOMAIN }})..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ env.ADMIN_DOMAIN }} || echo "000")
+          echo "Admin HTTP Status: $HTTP_STATUS"
+          
+          # Check Branch Domain
+          echo "Checking Branch Domain (${{ env.BRANCH_DOMAIN }})..."
+          BRANCH_HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ env.BRANCH_DOMAIN }} || echo "000")
+          echo "Branch HTTP Status: $BRANCH_HTTP_STATUS"
           
           if [ "$HTTP_STATUS" != "301" ] && [ "$HTTP_STATUS" != "200" ]; then
-            echo "⚠️  HTTP redirect check: $HTTP_STATUS (expected 301 or 200)"
+            echo "⚠️  Admin HTTP redirect check: $HTTP_STATUS (expected 301 or 200)"
           else
-            echo "✅ HTTP redirect working"
+            echo "✅ Admin HTTP redirect working"
+          fi
+          
+          if [ "$BRANCH_HTTP_STATUS" != "301" ] && [ "$BRANCH_HTTP_STATUS" != "200" ]; then
+            echo "⚠️  Branch HTTP redirect check: $BRANCH_HTTP_STATUS (expected 301 or 200)"
+          else
+            echo "✅ Branch HTTP redirect working"
           fi
           
           # Check HTTPS with retries
@@ -148,17 +162,33 @@ jobs:
           HTTPS_STATUS="000"
           
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            HTTPS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --insecure https://${{ env.DOMAIN }} || echo "000")
-            echo "Attempt $((RETRY_COUNT + 1)): HTTPS Status: $HTTPS_STATUS"
+            HTTPS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --insecure https://${{ env.ADMIN_DOMAIN }} || echo "000")
+            echo "Admin HTTPS Attempt $((RETRY_COUNT + 1)): Status $HTTPS_STATUS"
             
             if [ "$HTTPS_STATUS" = "200" ]; then
-              echo "✅ HTTPS check passed!"
+              echo "✅ Admin HTTPS check passed!"
               break
             fi
             
             RETRY_COUNT=$((RETRY_COUNT + 1))
             if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-              echo "Retrying in 10 seconds..."
+              sleep 10
+            fi
+          done
+          
+          # Check Branch HTTPS
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            BRANCH_HTTPS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --insecure https://${{ env.BRANCH_DOMAIN }} || echo "000")
+            echo "Branch HTTPS Attempt $((RETRY_COUNT + 1)): Status $BRANCH_HTTPS_STATUS"
+            
+            if [ "$BRANCH_HTTPS_STATUS" = "200" ]; then
+              echo "✅ Branch HTTPS check passed!"
+              break
+            fi
+            
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
               sleep 10
             fi
           done
@@ -194,7 +224,8 @@ jobs:
           echo "Status: ${{ job.status }}"
           echo "Commit: ${{ github.sha }}"
           echo "Author: ${{ github.actor }}"
-          echo "URL: https://${{ env.DOMAIN }}"
+          echo "Admin URL: https://${{ env.ADMIN_DOMAIN }}"
+          echo "Branch URL: https://${{ env.BRANCH_DOMAIN }}"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       
       - name: 💬 Notify on failure

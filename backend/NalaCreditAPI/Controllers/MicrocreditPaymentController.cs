@@ -204,7 +204,7 @@ namespace NalaCreditAPI.Controllers
         /// Annuler un paiement
         /// </summary>
         [HttpPost("{id}/cancel")]
-        [Authorize(Roles = "Admin,Manager")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager")]
         public async Task<ActionResult<MicrocreditPaymentDto>> CancelPayment(Guid id, [FromBody] CancelPaymentDto dto)
         {
             try
@@ -242,7 +242,7 @@ namespace NalaCreditAPI.Controllers
         /// Obtenir les paiements en attente de confirmation
         /// </summary>
         [HttpGet("pending")]
-        [Authorize(Roles = "Admin,Manager,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,LoanOfficer")]
         public async Task<ActionResult<IList<MicrocreditPaymentDto>>> GetPendingPayments([FromQuery] int branchId = 0)
         {
             try
@@ -288,7 +288,7 @@ namespace NalaCreditAPI.Controllers
         /// Obtenir les statistiques de paiements
         /// </summary>
         [HttpGet("statistics")]
-        [Authorize(Roles = "Admin,Manager,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,LoanOfficer")]
         public async Task<ActionResult<PaymentStatisticsDto>> GetPaymentStatistics(
             [FromQuery] DateTime? fromDate = null,
             [FromQuery] DateTime? toDate = null,

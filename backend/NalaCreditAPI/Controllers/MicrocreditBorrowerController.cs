@@ -29,7 +29,7 @@ namespace NalaCreditAPI.Controllers
         /// Créer un nouvel emprunteur
         /// </summary>
         [HttpPost]
-        [Authorize(Roles = "Admin,Manager,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,LoanOfficer")]
         public async Task<ActionResult<MicrocreditBorrowerDto>> CreateBorrower([FromBody] CreateMicrocreditBorrowerDto dto)
         {
             try
@@ -260,7 +260,7 @@ namespace NalaCreditAPI.Controllers
         /// Mettre à jour un emprunteur
         /// </summary>
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin,Manager,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,LoanOfficer")]
         public async Task<ActionResult<MicrocreditBorrowerDto>> UpdateBorrower(Guid id, [FromBody] UpdateMicrocreditBorrowerDto dto)
         {
             try
@@ -547,7 +547,7 @@ namespace NalaCreditAPI.Controllers
         /// Calculer le score de crédit d'un emprunteur
         /// </summary>
         [HttpPost("{id}/calculate-credit-score")]
-        [Authorize(Roles = "Admin,Manager,LoanOfficer")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager,LoanOfficer")]
         public async Task<ActionResult<CreditScoreDto>> CalculateCreditScore(Guid id)
         {
             try
@@ -586,7 +586,7 @@ namespace NalaCreditAPI.Controllers
         /// Obtenir la segmentation des clients
         /// </summary>
         [HttpGet("segmentation")]
-        [Authorize(Roles = "Admin,Manager")]
+        [Authorize(Roles = "SuperAdmin,Admin,Manager")]
         public async Task<ActionResult<ClientSegmentationDto>> GetClientSegmentation()
         {
             try
