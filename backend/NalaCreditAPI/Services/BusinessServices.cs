@@ -46,7 +46,8 @@ public class AuthService : IAuthService
             new Claim("FirstName", user.FirstName ?? "Unknown"),
             new Claim("LastName", user.LastName ?? "Unknown"),
             new Claim("Role", user.Role.ToString()),
-            new Claim(ClaimTypes.Role, GetRoleName(user.Role))
+            new Claim(ClaimTypes.Role, GetRoleName(user.Role)),
+            new Claim("AllowedDomain", GetAllowedDomain(user.Role))
         };
 
         if (user.BranchId.HasValue)
@@ -79,6 +80,20 @@ public class AuthService : IAuthService
             UserRole.SupportTechnique => "SupportTechnique",
             UserRole.SuperAdmin => "SuperAdmin",
             _ => "Unknown"
+        };
+    }
+
+    private string GetAllowedDomain(UserRole role)
+    {
+        return role switch
+        {
+            UserRole.Manager => "branch",  // Branch Manager only on branch domain
+            UserRole.SuperAdmin => "admin", // SuperAdmin only on admin domain
+            UserRole.Admin => "admin",      // Admin only on admin domain
+            UserRole.SupportTechnique => "admin", // Support only on admin domain
+            UserRole.Cashier => "branch",   // Cashier on branch domain
+            UserRole.Employee => "branch",  // Employee on branch domain
+            _ => "branch"
         };
     }
 

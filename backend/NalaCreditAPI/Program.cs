@@ -265,6 +265,7 @@ if (Directory.Exists(uploadsPath))
 }
 
 app.UseAuthentication();
+app.UseMiddleware<NalaCreditAPI.Middleware.DomainAuthorizationMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();
