@@ -5,9 +5,12 @@
 FROM node:18-alpine AS build
 WORKDIR /app
 
+# Set NODE_OPTIONS to limit memory usage and improve performance
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+
 # Copy package files and install dependencies (cached layer)
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --prefer-offline --no-audit --loglevel=error
 
 # Copy source code
 COPY . ./
