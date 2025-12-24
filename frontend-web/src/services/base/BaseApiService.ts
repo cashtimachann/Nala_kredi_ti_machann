@@ -43,9 +43,9 @@ export abstract class BaseApiService {
       },
     });
 
-    console.log('🔧 BaseApiService initialized:', {
-      baseURL: this.api.defaults.baseURL
-    });
+    // console.log('🔧 BaseApiService initialized:', {
+    //   baseURL: this.api.defaults.baseURL
+    // });
 
     this.setupInterceptors();
   }
@@ -55,11 +55,11 @@ export abstract class BaseApiService {
     this.api.interceptors.request.use(
       (config) => {
         const token = this.getAuthToken();
-        console.log('🔐 BaseApiService Interceptor - Token found:', !!token, 'for URL:', config.url);
+        // console.log('🔐 BaseApiService Interceptor - Token found:', !!token, 'for URL:', config.url);
         
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
-          console.log('✅ BaseApiService Authorization header set for:', config.url);
+          // console.log('✅ BaseApiService Authorization header set for:', config.url);
         } else {
           console.warn('⚠️ BaseApiService No token found for request:', config.url);
         }
@@ -74,7 +74,7 @@ export abstract class BaseApiService {
     // Response interceptor pour gérer les erreurs d'authentification - USING clearAuthToken() CONSISTENTLY
     this.api.interceptors.response.use(
       (response) => {
-        console.log('✅ BaseApiService Response received:', response.status, response.config.url);
+        // console.log('✅ BaseApiService Response received:', response.status, response.config.url);
         return response;
       },
       (error) => {
@@ -120,22 +120,22 @@ export abstract class BaseApiService {
       localStorage.getItem('authToken');
     
     // When a token is present, decode its payload for debugging (role, expiry, etc.)
-    if (token) {
-      try {
-        const parts = token.split('.');
-        if (parts.length === 3) {
-          const payload = parts[1];
-          const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
-          console.log('🔑 BaseApiService getAuthToken result: token present. Decoded payload:', decoded);
-        } else {
-          console.log('🔑 BaseApiService getAuthToken result: token present (non-JWT)');
-        }
-      } catch (err) {
-        console.warn('⚠️ BaseApiService failed to decode token payload for debug:', err);
-      }
-    } else {
-      console.log('🔑 BaseApiService getAuthToken result: no token');
-    }
+    // if (token) {
+    //   try {
+    //     const parts = token.split('.');
+    //     if (parts.length === 3) {
+    //       const payload = parts[1];
+    //       const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    //       console.log('🔑 BaseApiService getAuthToken result: token present. Decoded payload:', decoded);
+    //     } else {
+    //       console.log('🔑 BaseApiService getAuthToken result: token present (non-JWT)');
+    //     }
+    //   } catch (err) {
+    //     console.warn('⚠️ BaseApiService failed to decode token payload for debug:', err);
+    //   }
+    // } else {
+    //   console.log('🔑 BaseApiService getAuthToken result: no token');
+    // }
 
     return token;
   }
@@ -154,10 +154,10 @@ export abstract class BaseApiService {
   }
 
   protected async request<T>(config: AxiosRequestConfig): Promise<T> {
-    console.log('🚀 BaseApiService Making request:', config.method?.toUpperCase(), config.url);
+    // console.log('🚀 BaseApiService Making request:', config.method?.toUpperCase(), config.url);
     try {
       const response: AxiosResponse<T> = await this.api.request(config);
-      console.log('✅ BaseApiService Request successful:', response.status, config.url);
+      // console.log('✅ BaseApiService Request successful:', response.status, config.url);
       return response.data;
     } catch (error) {
       console.error('❌ BaseApiService Request failed:', {
@@ -180,10 +180,10 @@ export abstract class BaseApiService {
       const now = Date.now();
       const cached = BaseApiService.cache.get(key) as CacheEntry<T> | undefined;
       if (cached && cached.expiresAt > now) {
-        console.log('💾 BaseApiService Cache hit for:', url);
+        // console.log('💾 BaseApiService Cache hit for:', url);
         return cached.data;
       }
-      console.log('🔍 BaseApiService Cache miss for:', url);
+      // console.log('🔍 BaseApiService Cache miss for:', url);
       const data = await this.request<T>({ ...config, method: 'GET', url });
       BaseApiService.cache.set(key, { data, expiresAt: now + ttlMs });
       return data;

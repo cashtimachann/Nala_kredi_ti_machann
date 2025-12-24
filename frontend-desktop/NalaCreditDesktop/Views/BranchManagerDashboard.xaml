@@ -557,9 +557,47 @@
                                 Padding="20" 
                                 Margin="10,0">
                             <StackPanel>
-                                <TextBlock Text="💵 Sessions Caisse Actives" 
-                                           Style="{StaticResource SubHeaderTextStyle}" 
-                                           Margin="0,0,0,15"/>
+                                <Grid Margin="0,0,0,15">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="💵 Sessions Caisse Actives" 
+                                               Style="{StaticResource SubHeaderTextStyle}"/>
+                                    <Button Grid.Column="1"
+                                            Content="➕ Ouvrir Session"
+                                            Click="OpenCashierSession_Click"
+                                            Background="#16A085"
+                                            Foreground="White"
+                                            BorderThickness="0"
+                                            Padding="12,6"
+                                            FontSize="12"
+                                            FontWeight="SemiBold"
+                                            Cursor="Hand">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="#16A085"/>
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}" 
+                                                                    CornerRadius="5"
+                                                                    Padding="{TemplateBinding Padding}">
+                                                                <ContentPresenter HorizontalAlignment="Center" 
+                                                                                VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="#138D75"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </Grid>
                                 
                                 <DataGrid x:Name="ActiveCashSessionsGrid"
                                           AutoGenerateColumns="False"

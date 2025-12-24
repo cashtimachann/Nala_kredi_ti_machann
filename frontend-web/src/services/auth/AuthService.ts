@@ -46,6 +46,25 @@ export interface CreditAgentDashboard {
   averageTicketSize: number;
 }
 
+export interface CashManagementStats {
+  depositsCount: number;
+  depositsHTG: number;
+  depositsUSD: number;
+  withdrawalsCount: number;
+  withdrawalsHTG: number;
+  withdrawalsUSD: number;
+  exchangeCount: number;
+  exchangeHTGIn: number;
+  exchangeHTGOut: number;
+  exchangeUSDIn: number;
+  exchangeUSDOut: number;
+  recoveriesCount: number;
+  recoveriesHTG: number;
+  recoveriesUSD: number;
+  netHTG: number;
+  netUSD: number;
+}
+
 export interface BranchSupervisorDashboard {
   todayTransactionVolume: number;
   todayTransactionCount: number;
@@ -56,6 +75,7 @@ export interface BranchSupervisorDashboard {
   pendingCreditApprovals: number;
   averageTransactionTime: number;
   cashierPerformance: CashierPerformance[];
+  cashManagement?: CashManagementStats;
 }
 
 export interface CashierPerformance {

@@ -190,6 +190,25 @@ public class ApiService
     public async Task<BranchSupervisorDashboard?> GetBranchSupervisorDashboardAsync() =>
         await GetAsync<BranchSupervisorDashboard>("dashboard/branch-supervisor");
 
+    // ========================================
+    // BRANCH MANAGER DASHBOARD ENDPOINTS
+    // ========================================
+
+    public async Task<BranchManagerStats?> GetBranchManagerStatsAsync() =>
+        await GetAsync<BranchManagerStats>("branch/dashboard/stats");
+
+    public async Task<List<PendingValidation>?> GetPendingValidationsAsync() =>
+        await GetAsync<List<PendingValidation>>("branch/validations/pending");
+
+    public async Task<List<CashSession>?> GetActiveCashSessionsAsync() =>
+        await GetAsync<List<CashSession>>("branch/cash-sessions/active");
+
+    public async Task<List<TeamMember>?> GetTeamPerformanceAsync() =>
+        await GetAsync<List<TeamMember>>("branch/team/performance");
+
+    public async Task<List<PendingLoan>?> GetPendingLoansAsync() =>
+        await GetAsync<List<PendingLoan>>("branch/loans/pending");
+
         // NOTE: Client account DTOs (transaction history and item) were previously
         // nested inside the ApiService class which made them unavailable to other
         // files that reference them (they must be referenced as ApiService.T). Move
@@ -255,6 +274,24 @@ public class ApiService
         {
             return ApiResult.Failure(ex.Message);
         }
+    }
+
+    // Manager methods for opening/closing cashier sessions
+    public async Task<ApiResult<List<CashierInfo>?>> GetCashiersAsync()
+    {
+        return await GetAsyncResult<List<CashierInfo>>("users/cashiers");
+    }
+
+    public async Task<ApiResult<object?>> OpenCashSessionForCashierAsync(string cashierId, decimal openingBalanceHTG, decimal openingBalanceUSD)
+    {
+        var payload = new
+        {
+            CashierId = cashierId,
+            OpeningBalanceHTG = openingBalanceHTG,
+            OpeningBalanceUSD = openingBalanceUSD
+        };
+
+        return await PostAsync<object>("cashsession/open-for-cashier", payload);
     }
 
     public async Task<bool> ProcessDepositAsync(int accountId, decimal amount, Currency currency, int? branchId = null, string? cashierName = null, string? cashierCaisseNumber = null)
@@ -1059,7 +1096,7 @@ public class ApiService
         return result.IsSuccess ? result.Data : null;
     }
 
-    private async Task<T?> PostAsync<T>(string endpoint, object? data) where T : class
+    public async Task<ApiResult<T?>> PostAsync<T>(string endpoint, object? data) where T : class
     {
         try
         {
@@ -1079,16 +1116,21 @@ public class ApiService
 
             if (!response.IsSuccessStatusCode)
             {
-                return null;
+                var errorRaw = await response.Content.ReadAsStringAsync();
+                var message = ExtractErrorMessage(errorRaw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+                return ApiResult<T?>.Failure(message);
             }
+
             var responseJson = await response.Content.ReadAsStringAsync();
-            return string.IsNullOrWhiteSpace(responseJson)
-                ? null
+            var resultData = string.IsNullOrWhiteSpace(responseJson)
+                ? default(T)
                 : JsonConvert.DeserializeObject<T>(responseJson);
+            
+            return ApiResult<T?>.Success(resultData);
         }
-        catch
+        catch (Exception ex)
         {
-            return null;
+            return ApiResult<T?>.Failure(ex.Message);
         }
     }
 
@@ -1317,8 +1359,12 @@ public class CashierDashboard
     public decimal TotalOutgoing { get; set; }
     public decimal UsdSalesAmount { get; set; }
     public decimal UsdPurchaseAmount { get; set; }
+    public int CreditPaymentsCount { get; set; }
+    public decimal CreditPaymentsAmountHTG { get; set; }
+    public decimal CreditPaymentsAmountUSD { get; set; }
     public DateTime? LastTransactionTime { get; set; }
     public List<CashierTransaction> RecentTransactions { get; set; } = new();
+    public List<CreditPaymentHistory> CreditPaymentHistory { get; set; } = new();
 }
 
 public class CashierTransaction
@@ -1336,6 +1382,22 @@ public class CashierTransaction
     public DateTime CreatedAt { get; set; }
 }
 
+public class CreditPaymentHistory
+{
+    public string PaymentNumber { get; set; } = string.Empty;
+    public string ReceiptNumber { get; set; } = string.Empty;
+    public string LoanNumber { get; set; } = string.Empty;
+    public string CustomerName { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public decimal PrincipalAmount { get; set; }
+    public decimal InterestAmount { get; set; }
+    public decimal PenaltyAmount { get; set; }
+    public string Currency { get; set; } = string.Empty;
+    public string PaymentMethod { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+}
+
 public class CreditAgentDashboard
 {
     public int ActiveCreditsCount { get; set; }
@@ -1346,16 +1408,7 @@ public class CreditAgentDashboard
     public double RepaymentRate { get; set; }
 }
 
-public class BranchSupervisorDashboard
-{
-    public decimal TodayTransactionVolume { get; set; }
-    public int TodayTransactionCount { get; set; }
-    public int ActiveCashiers { get; set; }
-    public int NewAccountsToday { get; set; }
-    public decimal BranchCreditPortfolio { get; set; }
-    public int ActiveCredits { get; set; }
-    public int PendingCreditApprovals { get; set; }
-}
+// BranchSupervisorDashboard is now defined in Models/BranchManagerModels.cs
 
 public class BranchDto
 {
@@ -1516,4 +1569,15 @@ public class CurrentAccountTransactionRequest
         public decimal Amount { get; set; }
         public decimal BalanceAfter { get; set; }
         public string Reference { get; set; } = string.Empty;
+    }
+
+    // Cashier Info for Manager
+    public class CashierInfo
+    {
+        public string Id { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public bool HasActiveSession { get; set; }
+        public string DisplayName => $"{FirstName} {LastName}{(HasActiveSession ? " (Session active)" : "")}";
     }

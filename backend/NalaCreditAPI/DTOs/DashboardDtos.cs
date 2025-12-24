@@ -24,8 +24,12 @@ public class CashierDashboardDto
     public decimal TotalOutgoing { get; set; }
     public decimal UsdSalesAmount { get; set; }
     public decimal UsdPurchaseAmount { get; set; }
+    public int CreditPaymentsCount { get; set; }
+    public decimal CreditPaymentsAmountHTG { get; set; }
+    public decimal CreditPaymentsAmountUSD { get; set; }
     public DateTime? LastTransactionTime { get; set; }
     public List<CashierTransactionDto> RecentTransactions { get; set; } = new();
+    public List<CreditPaymentHistoryDto> CreditPaymentHistory { get; set; } = new();
 }
 
 public class CashierTransactionDto
@@ -39,6 +43,22 @@ public class CashierTransactionDto
     public string AccountLabel { get; set; } = string.Empty;
     public string CustomerName { get; set; } = string.Empty;
     public string ProcessedBy { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+}
+
+public class CreditPaymentHistoryDto
+{
+    public string PaymentNumber { get; set; } = string.Empty;
+    public string ReceiptNumber { get; set; } = string.Empty;
+    public string LoanNumber { get; set; } = string.Empty;
+    public string CustomerName { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public decimal PrincipalAmount { get; set; }
+    public decimal InterestAmount { get; set; }
+    public decimal PenaltyAmount { get; set; }
+    public string Currency { get; set; } = string.Empty;
+    public string PaymentMethod { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
 }
@@ -66,6 +86,36 @@ public class BranchSupervisorDashboardDto
     public int PendingCreditApprovals { get; set; }
     public decimal AverageTransactionTime { get; set; }
     public List<CashierPerformanceDto> CashierPerformance { get; set; } = new();
+    public CashManagementDto CashManagement { get; set; } = new();
+}
+
+public class CashManagementDto
+{
+    // Dépôts (entrées de cash)
+    public int DepositsCount { get; set; }
+    public decimal DepositsHTG { get; set; }
+    public decimal DepositsUSD { get; set; }
+    
+    // Retraits (sorties de cash)
+    public int WithdrawalsCount { get; set; }
+    public decimal WithdrawalsHTG { get; set; }
+    public decimal WithdrawalsUSD { get; set; }
+    
+    // Opérations de change
+    public int ExchangeCount { get; set; }
+    public decimal ExchangeHTGIn { get; set; }  // HTG reçu
+    public decimal ExchangeHTGOut { get; set; }  // HTG donné
+    public decimal ExchangeUSDIn { get; set; }  // USD reçu
+    public decimal ExchangeUSDOut { get; set; }  // USD donné
+    
+    // Recouvrements (entrées de cash)
+    public int RecoveriesCount { get; set; }
+    public decimal RecoveriesHTG { get; set; }
+    public decimal RecoveriesUSD { get; set; }
+    
+    // Bilans nets
+    public decimal NetHTG { get; set; }
+    public decimal NetUSD { get; set; }
 }
 
 public class CashierPerformanceDto

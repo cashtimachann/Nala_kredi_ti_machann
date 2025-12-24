@@ -94,6 +94,7 @@ const BranchSupervisorDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [branch, setBranch] = useState<Branch | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'cash' | 'history' | 'reports'>('overview');
+  const [cashManagementStats, setCashManagementStats] = useState<any>(null);
   // Removed duplicate tab navigation; use global sidebar
 
   useEffect(() => {
@@ -117,6 +118,11 @@ const BranchSupervisorDashboard: React.FC = () => {
           portfolioValue: dashboardData.branchCreditPortfolio || prev.portfolioValue,
           monthlyPerformance: dashboardData.averageTransactionTime || prev.monthlyPerformance
         }));
+
+        // Store cash management stats if available
+        if (dashboardData.cashManagement) {
+          setCashManagementStats(dashboardData.cashManagement);
+        }
       }
 
       // Load recent transactions, pending accounts and branch details from API
@@ -504,7 +510,7 @@ const BranchSupervisorDashboard: React.FC = () => {
 
         {/* Cash Management Tab */}
         {activeTab === 'cash' && branch && (
-          <CashManagement branchId={branch.id} />
+          <CashManagement branchId={branch.id} cashManagementStats={cashManagementStats} />
         )}
 
         {/* Transaction History Tab */}

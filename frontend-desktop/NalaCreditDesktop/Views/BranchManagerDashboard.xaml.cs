@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Threading;
 using NalaCreditDesktop.Services;
+using NalaCreditDesktop.Models;
 using System.Threading.Tasks;
 
 namespace NalaCreditDesktop.Views
@@ -12,10 +13,10 @@ namespace NalaCreditDesktop.Views
         private DispatcherTimer _timer;
         private readonly ApiService _apiService;
 
-        public BranchManagerDashboard()
+        public BranchManagerDashboard(ApiService? apiService = null)
         {
             InitializeComponent();
-            _apiService = new ApiService(new System.Net.Http.HttpClient());
+            _apiService = apiService ?? new ApiService(new System.Net.Http.HttpClient());
             InitializeTimer();
             LoadDashboardDataAsync();
         }
@@ -38,10 +39,18 @@ namespace NalaCreditDesktop.Views
         {
             try
             {
-                // TODO: Get user info from authentication service
-                UserNameText.Text = "Chef de Succursale - Chargement...";
+                // Get user info from authentication service
+                var user = _apiService.CurrentUser;
+                if (user != null)
+                {
+                    UserNameText.Text = $"{user.FirstName} {user.LastName} - Manager";
+                }
+                else
+                {
+                    UserNameText.Text = "Chef de Succursale";
+                }
 
-                // TODO: Load real statistics from API
+                // Load real statistics from API
                 await LoadStatisticsAsync();
                 await LoadPendingValidationsAsync();
                 await LoadActiveCashSessionsAsync();
@@ -59,58 +68,187 @@ namespace NalaCreditDesktop.Views
 
         private async Task LoadStatisticsAsync()
         {
-            // TODO: Call API to get dashboard statistics
-            // var stats = await _apiService.GetAsync<DashboardStats>("dashboard/stats");
-            
-            // For now, show loading state
-            TotalTransactionsText.Text = "...";
-            ActiveCashiersText.Text = "...";
-            PendingApprovalsText.Text = "...";
-            PerformanceScoreText.Text = "...";
-            CashBalanceHTGText.Text = "...";
-            CashBalanceUSDText.Text = "...";
-            NewAccountsText.Text = "...";
-            ActiveLoansText.Text = "...";
-            StaffPresentText.Text = "...";
-            AlertBadge.Text = "...";
+            try
+            {
+                // Show loading state
+                TotalTransactionsText.Text = "...";
+                ActiveCashiersText.Text = "...";
+                PendingApprovalsText.Text = "...";
+                PerformanceScoreText.Text = "...";
+                CashBalanceHTGText.Text = "...";
+                CashBalanceUSDText.Text = "...";
+                NewAccountsText.Text = "...";
+                ActiveLoansText.Text = "...";
+                StaffPresentText.Text = "...";
+                AlertBadge.Text = "...";
 
-            await Task.CompletedTask;
+                // Use branch-supervisor endpoint like web dashboard for comprehensive data
+                var dashboard = await _apiService.GetBranchSupervisorDashboardAsync();
+
+                if (dashboard != null)
+                {
+                    // Display data from branch-supervisor endpoint
+                    TotalTransactionsText.Text = dashboard.TodayTransactionCount.ToString();
+                    
+                    // Active cashiers from dashboard
+                    var activeCashiers = dashboard.ActiveCashiers;
+                    ActiveCashiersText.Text = activeCashiers > 0 ? $"{activeCashiers}" : "0";
+                    
+                    // Pending approvals
+                    var pendingApprovals = dashboard.PendingCreditApprovals;
+                    PendingApprovalsText.Text = pendingApprovals.ToString();
+                    
+                    // Performance based on average transaction time
+                    var avgTime = dashboard.AverageTransactionTime;
+                    PerformanceScoreText.Text = avgTime > 0 ? $"{avgTime:F1}min" : "N/A";
+                    
+                    // Cash management stats if available
+                    if (dashboard.CashManagement != null)
+                    {
+                        var netHTG = dashboard.CashManagement.NetHTG;
+                        var netUSD = dashboard.CashManagement.NetUSD;
+                        CashBalanceHTGText.Text = $"{netHTG:N0} HTG";
+                        CashBalanceUSDText.Text = $"{netUSD:N2} USD";
+                    }
+                    else
+                    {
+                        CashBalanceHTGText.Text = "0 HTG";
+                        CashBalanceUSDText.Text = "0 USD";
+                    }
+                    
+                    // Use new accounts today
+                    NewAccountsText.Text = dashboard.NewAccountsToday.ToString();
+                    
+                    // Active credits
+                    ActiveLoansText.Text = dashboard.ActiveCredits.ToString();
+                    
+                    // Staff present (use transaction count as indicator of activity)
+                    var txCount = dashboard.TodayTransactionCount;
+                    StaffPresentText.Text = txCount > 0 ? $"{activeCashiers}" : "0";
+                    
+                    // Alerts based on pending approvals
+                    var alerts = pendingApprovals > 5 ? 1 : 0;
+                    AlertBadge.Text = alerts > 0 ? alerts.ToString() : "0";
+                    AlertBadge.Visibility = alerts > 0 ? Visibility.Visible : Visibility.Collapsed;
+                }
+                else
+                {
+                    // Show error or empty state
+                    TotalTransactionsText.Text = "0";
+                    ActiveCashiersText.Text = "0";
+                    PendingApprovalsText.Text = "0";
+                    PerformanceScoreText.Text = "N/A";
+                    CashBalanceHTGText.Text = "0 HTG";
+                    CashBalanceUSDText.Text = "0 USD";
+                    NewAccountsText.Text = "0";
+                    ActiveLoansText.Text = "0";
+                    StaffPresentText.Text = "0";
+                    AlertBadge.Text = "0";
+                    AlertBadge.Visibility = Visibility.Collapsed;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Show error with more details
+                TotalTransactionsText.Text = "0";
+                ActiveCashiersText.Text = "0";
+                PendingApprovalsText.Text = "0";
+                PerformanceScoreText.Text = "Erreur";
+                CashBalanceHTGText.Text = "0 HTG";
+                CashBalanceUSDText.Text = "0 USD";
+                NewAccountsText.Text = "0";
+                ActiveLoansText.Text = "0";
+                StaffPresentText.Text = "0";
+                AlertBadge.Text = "!";
+                AlertBadge.Visibility = Visibility.Visible;
+                
+                MessageBox.Show(
+                    $"Erreur lors du chargement des statistiques:\n{ex.Message}\n\nVérifiez que le backend est démarré et que vous êtes connecté.",
+                    "Erreur de Connexion",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
         }
 
         private async Task LoadPendingValidationsAsync()
         {
-            // TODO: Call API to get pending validations
-            // var validations = await _apiService.GetAsync<List<PendingValidation>>("branch/validations/pending");
-            
-            // For now, show empty list
-            var emptyList = new ObservableCollection<PendingValidation>();
-            PendingValidationsList.ItemsSource = emptyList;
+            try
+            {
+                // Call API to get pending validations
+                var validations = await _apiService.GetPendingValidationsAsync();
 
-            await Task.CompletedTask;
+                if (validations != null && validations.Count > 0)
+                {
+                    var validationsList = new ObservableCollection<PendingValidation>(validations);
+                    PendingValidationsList.ItemsSource = validationsList;
+                }
+                else
+                {
+                    // Show empty list
+                    var emptyList = new ObservableCollection<PendingValidation>();
+                    PendingValidationsList.ItemsSource = emptyList;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Fail silently, show empty list
+                var emptyList = new ObservableCollection<PendingValidation>();
+                PendingValidationsList.ItemsSource = emptyList;
+            }
         }
 
         private async Task LoadActiveCashSessionsAsync()
         {
-            // TODO: Call API to get active cash sessions
-            // var sessions = await _apiService.GetAsync<List<CashSession>>("branch/cash-sessions/active");
-            
-            // For now, show empty grid
-            var emptySessions = new ObservableCollection<CashSession>();
-            ActiveCashSessionsGrid.ItemsSource = emptySessions;
+            try
+            {
+                // Call API to get active cash sessions
+                var sessions = await _apiService.GetActiveCashSessionsAsync();
 
-            await Task.CompletedTask;
+                if (sessions != null && sessions.Count > 0)
+                {
+                    var sessionsList = new ObservableCollection<CashSession>(sessions);
+                    ActiveCashSessionsGrid.ItemsSource = sessionsList;
+                }
+                else
+                {
+                    // Show empty grid
+                    var emptySessions = new ObservableCollection<CashSession>();
+                    ActiveCashSessionsGrid.ItemsSource = emptySessions;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Fail silently, show empty grid
+                var emptySessions = new ObservableCollection<CashSession>();
+                ActiveCashSessionsGrid.ItemsSource = emptySessions;
+            }
         }
 
         private async Task LoadTeamPerformanceAsync()
         {
-            // TODO: Call API to get team performance
-            // var performance = await _apiService.GetAsync<List<TeamMember>>("branch/team/performance");
-            
-            // For now, show empty list
-            var emptyTeam = new ObservableCollection<TeamMember>();
-            TeamPerformanceList.ItemsSource = emptyTeam;
+            try
+            {
+                // Call API to get team performance
+                var performance = await _apiService.GetTeamPerformanceAsync();
 
-            await Task.CompletedTask;
+                if (performance != null && performance.Count > 0)
+                {
+                    var performanceList = new ObservableCollection<TeamMember>(performance);
+                    TeamPerformanceList.ItemsSource = performanceList;
+                }
+                else
+                {
+                    // Show empty list
+                    var emptyTeam = new ObservableCollection<TeamMember>();
+                    TeamPerformanceList.ItemsSource = emptyTeam;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Fail silently, show empty list
+                var emptyTeam = new ObservableCollection<TeamMember>();
+                TeamPerformanceList.ItemsSource = emptyTeam;
+            }
         }
 
         // ========================================
@@ -585,26 +723,55 @@ namespace NalaCreditDesktop.Views
                 this.Close();
             }
         }
-    }
+        private async void OpenCashierSession_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dialog = new OpenCashierSessionDialog(_apiService)
+                {
+                    Owner = this
+                };
 
-    // Data Models
-    public class PendingValidation
-    {
-        public string Type { get; set; } = string.Empty;
-        public string Description { get; set; } = string.Empty;
-    }
+                var result = dialog.ShowDialog();
+                if (result != true || string.IsNullOrEmpty(dialog.SelectedCashierId))
+                {
+                    return;
+                }
 
-    public class CashSession
-    {
-        public string Cashier { get; set; } = string.Empty;
-        public string StartTime { get; set; } = string.Empty;
-        public string TransCount { get; set; } = string.Empty;
-    }
-
-    public class TeamMember
-    {
-        public string Name { get; set; } = string.Empty;
-        public string Role { get; set; } = string.Empty;
-        public string Score { get; set; } = string.Empty;
-    }
+                // Call API to open cash session for cashier
+                var apiResult = await _apiService.OpenCashSessionForCashierAsync(
+                    dialog.SelectedCashierId,
+                    dialog.OpeningBalanceHTG,
+                    dialog.OpeningBalanceUSD
+                );
+                
+                if (apiResult.IsSuccess)
+                {
+                    MessageBox.Show(
+                        "Session de caisse ouverte avec succès pour le caissier!",
+                        "Succès",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    
+                    // Refresh the dashboard to show the new session
+                    await LoadActiveCashSessionsAsync();
+                }
+                else
+                {
+                    MessageBox.Show(
+                        apiResult.ErrorMessage ?? "Erreur lors de l'ouverture de la session",
+                        "Erreur",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Erreur: {ex.Message}",
+                    "Erreur",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }    }
 }

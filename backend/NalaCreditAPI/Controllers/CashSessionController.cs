@@ -117,13 +117,166 @@ public class CashSessionController : ControllerBase
         try
         {
             var today = DateTime.UtcNow.Date;
+            var tomorrow = today.AddDays(1);
 
             var activeSessions = await _context.CashSessions
                 .Include(cs => cs.User)
                 .Where(cs => cs.BranchId == branchId && 
                             cs.Status == CashSessionStatus.Open && 
                             cs.SessionStart.Date == today)
-                .Select(cs => new
+                .ToListAsync();
+
+            var sessionResults = new List<object>();
+
+            foreach (var cs in activeSessions)
+            {
+                // Count transactions from Transaction table
+                var transactionCount = await _context.Transactions
+                    .CountAsync(t => t.CashSessionId == cs.Id);
+
+                // Deposits from multiple sources
+                var depositsHTG = 
+                    await _context.Transactions
+                        .Where(t => t.CashSessionId == cs.Id && 
+                                   t.Currency == Currency.HTG && 
+                                   t.Type == TransactionType.Deposit)
+                        .SumAsync(t => (decimal?)t.Amount) ?? 0;
+                
+                depositsHTG += 
+                    await _context.SavingsTransactions
+                        .Where(t => t.ProcessedBy == cs.UserId && 
+                                   t.Currency == SavingsCurrency.HTG && 
+                                   t.Type == SavingsTransactionType.Deposit &&
+                                   t.ProcessedAt >= today && t.ProcessedAt < tomorrow)
+                        .SumAsync(t => (decimal?)t.Amount) ?? 0;
+                
+                depositsHTG += 
+                    await _context.CurrentAccountTransactions
+                        .Where(t => t.ProcessedBy == cs.UserId && 
+                                   t.Currency == ClientCurrency.HTG && 
+                                   t.Type == SavingsTransactionType.Deposit &&
+                                   t.ProcessedAt >= today && t.ProcessedAt < tomorrow)
+                        .SumAsync(t => (decimal?)t.Amount) ?? 0;
+
+                var depositsUSD = 
+                    await _context.Transactions
+                        .Where(t => t.CashSessionId == cs.Id && 
+                                   t.Currency == Currency.USD && 
+                                   t.Type == TransactionType.Deposit)
+                        .SumAsync(t => (decimal?)t.Amount) ?? 0;
+                
+                depositsUSD += 
+                    await _context.SavingsTransactions
+                        .Where(t => t.ProcessedBy == cs.UserId && 
+                                   t.Currency == SavingsCurrency.USD && 
+                                   t.Type == SavingsTransactionType.Deposit &&
+                                   t.ProcessedAt >= today && t.ProcessedAt < tomorrow)
+                        .SumAsync(t => (decimal?)t.Amount) ?? 0;
+                
+                depositsUSD += 
+                    await _context.CurrentAccountTransactions
+                        .Where(t => t.ProcessedBy == cs.UserId && 
+                                   t.Currency == ClientCurrency.USD && 
+                                   t.Type == SavingsTransactionType.Deposit &&
+                                   t.ProcessedAt >= today && t.ProcessedAt < tomorrow)
+                        .SumAsync(t => (decimal?)t.Amount) ?? 0;
+
+                // Withdrawals from multiple sources
+                var withdrawalsHTG = 
+                    await _context.Transactions
+                        .Where(t => t.CashSessionId == cs.Id && 
+                                   t.Currency == Currency.HTG && 
+                                   t.Type == TransactionType.Withdrawal)
+                        .SumAsync(t => (decimal?)t.Amount) ?? 0;
+                
+                withdrawalsHTG += 
+                    await _context.SavingsTransactions
+                        .Where(t => t.ProcessedBy == cs.UserId && 
+                                   t.Currency == SavingsCurrency.HTG && 
+                                   t.Type == SavingsTransactionType.Withdrawal &&
+                                   t.ProcessedAt >= today && t.ProcessedAt < tomorrow)
+                        .SumAsync(t => (decimal?)t.Amount) ?? 0;
+                
+                withdrawalsHTG += 
+                    await _context.CurrentAccountTransactions
+                        .Where(t => t.ProcessedBy == cs.UserId && 
+                                   t.Currency == ClientCurrency.HTG && 
+                                   t.Type == SavingsTransactionType.Withdrawal &&
+                                   t.ProcessedAt >= today && t.ProcessedAt < tomorrow)
+                        .SumAsync(t => (decimal?)t.Amount) ?? 0;
+
+                var withdrawalsUSD = 
+                    await _context.Transactions
+                        .Where(t => t.CashSessionId == cs.Id && 
+                                   t.Currency == Currency.USD && 
+                                   t.Type == TransactionType.Withdrawal)
+                        .SumAsync(t => (decimal?)t.Amount) ?? 0;
+                
+                withdrawalsUSD += 
+                    await _context.SavingsTransactions
+                        .Where(t => t.ProcessedBy == cs.UserId && 
+                                   t.Currency == SavingsCurrency.USD && 
+                                   t.Type == SavingsTransactionType.Withdrawal &&
+                                   t.ProcessedAt >= today && t.ProcessedAt < tomorrow)
+                        .SumAsync(t => (decimal?)t.Amount) ?? 0;
+                
+                withdrawalsUSD += 
+                    await _context.CurrentAccountTransactions
+                        .Where(t => t.ProcessedBy == cs.UserId && 
+                                   t.Currency == ClientCurrency.USD && 
+                                   t.Type == SavingsTransactionType.Withdrawal &&
+                                   t.ProcessedAt >= today && t.ProcessedAt < tomorrow)
+                        .SumAsync(t => (decimal?)t.Amount) ?? 0;
+
+                // Exchanges
+                var exchangeHTGIn = 
+                    await _context.ExchangeTransactions
+                        .Where(et => et.ProcessedBy == cs.UserId && 
+                                    et.FromCurrency == CurrencyType.USD &&
+                                    et.CreatedAt >= today && et.CreatedAt < tomorrow)
+                        .SumAsync(et => (decimal?)et.ToAmount) ?? 0;
+
+                var exchangeHTGOut = 
+                    await _context.ExchangeTransactions
+                        .Where(et => et.ProcessedBy == cs.UserId && 
+                                    et.FromCurrency == CurrencyType.HTG &&
+                                    et.CreatedAt >= today && et.CreatedAt < tomorrow)
+                        .SumAsync(et => (decimal?)et.FromAmount) ?? 0;
+
+                var exchangeUSDIn = 
+                    await _context.ExchangeTransactions
+                        .Where(et => et.ProcessedBy == cs.UserId && 
+                                    et.FromCurrency == CurrencyType.HTG &&
+                                    et.CreatedAt >= today && et.CreatedAt < tomorrow)
+                        .SumAsync(et => (decimal?)et.ToAmount) ?? 0;
+
+                var exchangeUSDOut = 
+                    await _context.ExchangeTransactions
+                        .Where(et => et.ProcessedBy == cs.UserId && 
+                                    et.FromCurrency == CurrencyType.USD &&
+                                    et.CreatedAt >= today && et.CreatedAt < tomorrow)
+                        .SumAsync(et => (decimal?)et.FromAmount) ?? 0;
+
+                // Recoveries (credit payments)
+                var recoveriesHTG = 
+                    await _context.MicrocreditPayments
+                        .Where(p => p.ProcessedBy == cs.UserId && 
+                                   p.Currency == MicrocreditCurrency.HTG &&
+                                   p.PaymentDate == DateOnly.FromDateTime(today))
+                        .SumAsync(p => (decimal?)p.Amount) ?? 0;
+
+                var recoveriesUSD = 
+                    await _context.MicrocreditPayments
+                        .Where(p => p.ProcessedBy == cs.UserId && 
+                                   p.Currency == MicrocreditCurrency.USD &&
+                                   p.PaymentDate == DateOnly.FromDateTime(today))
+                        .SumAsync(p => (decimal?)p.Amount) ?? 0;
+
+                // Calculate current balance
+                var currentBalanceHTG = cs.OpeningBalanceHTG + depositsHTG - withdrawalsHTG + exchangeHTGIn - exchangeHTGOut + recoveriesHTG;
+                var currentBalanceUSD = cs.OpeningBalanceUSD + depositsUSD - withdrawalsUSD + exchangeUSDIn - exchangeUSDOut + recoveriesUSD;
+
+                sessionResults.Add(new
                 {
                     cs.Id,
                     cs.UserId,
@@ -132,44 +285,23 @@ public class CashSessionController : ControllerBase
                     cs.OpeningBalanceUSD,
                     cs.SessionStart,
                     DurationMinutes = (int)(DateTime.UtcNow - cs.SessionStart).TotalMinutes,
-                    TransactionCount = _context.Transactions
-                        .Count(t => t.CashSessionId == cs.Id),
-                    TotalDepositHTG = _context.Transactions
-                        .Where(t => t.CashSessionId == cs.Id && 
-                                   t.Currency == Currency.HTG && 
-                                   t.Type == TransactionType.Deposit)
-                        .Sum(t => (decimal?)t.Amount) ?? 0,
-                    TotalDepositUSD = _context.Transactions
-                        .Where(t => t.CashSessionId == cs.Id && 
-                                   t.Currency == Currency.USD && 
-                                   t.Type == TransactionType.Deposit)
-                        .Sum(t => (decimal?)t.Amount) ?? 0,
-                    TotalWithdrawalHTG = _context.Transactions
-                        .Where(t => t.CashSessionId == cs.Id && 
-                                   t.Currency == Currency.HTG && 
-                                   t.Type == TransactionType.Withdrawal)
-                        .Sum(t => (decimal?)t.Amount) ?? 0,
-                    TotalWithdrawalUSD = _context.Transactions
-                        .Where(t => t.CashSessionId == cs.Id && 
-                                   t.Currency == Currency.USD && 
-                                   t.Type == TransactionType.Withdrawal)
-                        .Sum(t => (decimal?)t.Amount) ?? 0,
-                    CurrentBalanceHTG = cs.OpeningBalanceHTG + 
-                        (_context.Transactions
-                            .Where(t => t.CashSessionId == cs.Id && t.Currency == Currency.HTG)
-                            .Sum(t => (decimal?)
-                                (t.Type == TransactionType.Deposit ? t.Amount : 
-                                 t.Type == TransactionType.Withdrawal ? -t.Amount : 0)) ?? 0),
-                    CurrentBalanceUSD = cs.OpeningBalanceUSD + 
-                        (_context.Transactions
-                            .Where(t => t.CashSessionId == cs.Id && t.Currency == Currency.USD)
-                            .Sum(t => (decimal?)
-                                (t.Type == TransactionType.Deposit ? t.Amount : 
-                                 t.Type == TransactionType.Withdrawal ? -t.Amount : 0)) ?? 0)
-                })
-                .ToListAsync();
+                    TransactionCount = transactionCount,
+                    TotalDepositHTG = depositsHTG,
+                    TotalDepositUSD = depositsUSD,
+                    TotalWithdrawalHTG = withdrawalsHTG,
+                    TotalWithdrawalUSD = withdrawalsUSD,
+                    ExchangeHTGIn = exchangeHTGIn,
+                    ExchangeHTGOut = exchangeHTGOut,
+                    ExchangeUSDIn = exchangeUSDIn,
+                    ExchangeUSDOut = exchangeUSDOut,
+                    RecoveriesHTG = recoveriesHTG,
+                    RecoveriesUSD = recoveriesUSD,
+                    CurrentBalanceHTG = currentBalanceHTG,
+                    CurrentBalanceUSD = currentBalanceUSD
+                });
+            }
 
-            return Ok(activeSessions);
+            return Ok(sessionResults);
         }
         catch (Exception ex)
         {

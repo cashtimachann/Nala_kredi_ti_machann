@@ -121,6 +121,15 @@ namespace NalaCreditDesktop.ViewModels
         [ObservableProperty]
         private decimal usdPurchaseAmount;
 
+        [ObservableProperty]
+        private int creditPaymentsCount;
+
+        [ObservableProperty]
+        private decimal creditPaymentsAmountHTG;
+
+        [ObservableProperty]
+        private decimal creditPaymentsAmountUSD;
+
         // Raw dashboard model for XAML bindings that expect a single DashboardData object
         [ObservableProperty]
         private CashierDashboardDto? dashboardData;
@@ -200,6 +209,29 @@ namespace NalaCreditDesktop.ViewModels
 
         [ObservableProperty]
         private ObservableCollection<ExchangeHistoryItem> exchangeHistory = new();
+
+        #endregion
+
+        #region Credit Payment History
+
+        public class CreditPaymentHistoryItem
+        {
+            public DateTime Time { get; set; }
+            public string PaymentNumber { get; set; } = string.Empty;
+            public string ReceiptNumber { get; set; } = string.Empty;
+            public string LoanNumber { get; set; } = string.Empty;
+            public string CustomerName { get; set; } = string.Empty;
+            public decimal Amount { get; set; }
+            public decimal PrincipalAmount { get; set; }
+            public decimal InterestAmount { get; set; }
+            public decimal PenaltyAmount { get; set; }
+            public string Currency { get; set; } = string.Empty;
+            public string PaymentMethod { get; set; } = string.Empty;
+            public string Status { get; set; } = string.Empty;
+        }
+
+        [ObservableProperty]
+        private ObservableCollection<CreditPaymentHistoryItem> creditPaymentHistory = new();
 
         #endregion
 
@@ -421,6 +453,9 @@ namespace NalaCreditDesktop.ViewModels
             WithdrawalsAmountUSD = dashboard.WithdrawalsAmountUSD;
             UsdSalesAmount = dashboard.UsdSalesAmount;
             UsdPurchaseAmount = dashboard.UsdPurchaseAmount;
+            CreditPaymentsCount = dashboard.CreditPaymentsCount;
+            CreditPaymentsAmountHTG = dashboard.CreditPaymentsAmountHTG;
+            CreditPaymentsAmountUSD = dashboard.CreditPaymentsAmountUSD;
 
             ClientsServedCount = dashboard.ClientsServed;
             TransactionsProcessedCount = dashboard.TransactionCount;
@@ -456,6 +491,28 @@ namespace NalaCreditDesktop.ViewModels
                 .ToList() ?? new();
 
             RecentTransactions = new ObservableCollection<TransactionSummary>(transactions);
+
+            // Load credit payment history
+            var creditPayments = dashboard.CreditPaymentHistory?
+                .OrderByDescending(p => p.CreatedAt)
+                .Select(p => new CreditPaymentHistoryItem
+                {
+                    Time = p.CreatedAt,
+                    PaymentNumber = p.PaymentNumber,
+                    ReceiptNumber = p.ReceiptNumber,
+                    LoanNumber = p.LoanNumber,
+                    CustomerName = p.CustomerName,
+                    Amount = p.Amount,
+                    PrincipalAmount = p.PrincipalAmount,
+                    InterestAmount = p.InterestAmount,
+                    PenaltyAmount = p.PenaltyAmount,
+                    Currency = p.Currency,
+                    PaymentMethod = p.PaymentMethod,
+                    Status = p.Status
+                })
+                .ToList() ?? new();
+
+            CreditPaymentHistory = new ObservableCollection<CreditPaymentHistoryItem>(creditPayments);
 
             UpdateBalanceIndicator();
             CheckAlerts();
@@ -687,7 +744,10 @@ namespace NalaCreditDesktop.ViewModels
             }
         }
 
-        [RelayCommand]
+        // NOTE: Cette fonctionnalité a été désactivée pour les caissiers.
+        // Seul le chef de succursale peut ouvrir une session de caisse pour les caissiers.
+        // Conservé pour référence mais non accessible depuis l'interface caissier.
+        /*[RelayCommand]
         private async Task OpenCashSession()
         {
             try
@@ -729,7 +789,7 @@ namespace NalaCreditDesktop.ViewModels
                 MessageBox.Show($"Erreur: {ex.Message}", "Erreur", 
                                MessageBoxButton.OK, MessageBoxImage.Error);
             }
-        }
+        }*/
 
         [RelayCommand]
         private async Task CloseCashier()

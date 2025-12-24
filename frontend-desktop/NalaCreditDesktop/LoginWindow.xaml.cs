@@ -58,7 +58,7 @@ namespace NalaCreditDesktop
                     "Employee" or "Secretary" or "Secrétaire" or "SecretaireAdministratif" => new Views.SecretaryDashboard(),
                     
                     // Backend Role: Manager (2) → Chef de Succursale ⭐ FIXED!
-                    "Manager" or "BranchManager" or "Chef de Succursale" or "ChefDeSuccursale" => new Views.BranchManagerDashboard(),
+                    "Manager" or "BranchManager" or "Chef de Succursale" or "ChefDeSuccursale" => new Views.BranchManagerDashboard(_apiService),
                     
                     // Backend Role: Admin (3) → Administrateur Système
                     "Admin" or "Administrator" or "Administrateur" or "AdministrateurSysteme" => ShowUnderDevelopmentAndReturnDefault("Administrateur Système"),

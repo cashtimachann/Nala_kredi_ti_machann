@@ -1,6 +1,10 @@
 # Script pou lanse Desktop App NalaCredit
 Write-Host "🖥️  Ap lanse Desktop App NalaCredit..." -ForegroundColor Cyan
 
+# Konfigire environment variable pou API lokal
+$env:NALACREDIT_API_URL = "http://localhost:5000/api"
+Write-Host "🔧 API URL: $env:NALACREDIT_API_URL" -ForegroundColor Yellow
+
 # Verifye si desktop app deja ap kouri
 $existingProcess = Get-Process -Name "NalaCreditDesktop" -ErrorAction SilentlyContinue
 
@@ -24,16 +28,29 @@ Write-Host "🔨 Ap konpile desktop app..." -ForegroundColor Yellow
 dotnet build --configuration Debug
 
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "✅ Konpilasyon reyisi!" -ForegroundColor Green
-    Write-Host "🚀 Ap lanse aplikasyon..." -ForegroundColor Cyan
+    Write-Host "Konpilasyon reyisi!" -ForegroundColor Green
+    Write-Host "Ap lanse aplikasyon..." -ForegroundColor Cyan
     Write-Host ""
     
-    # Lanse aplikasyon
-    Start-Process ".\bin\Debug\net8.0-windows\NalaCreditDesktop.exe"
+    # Get the full path to the executable
+    $exePath = Join-Path (Get-Location) "bin\Debug\net8.0-windows\NalaCreditDesktop.exe"
     
-    Write-Host "✅ Desktop app lanse!" -ForegroundColor Green
-    Write-Host "ℹ️  Backend URL: http://localhost:5000/api" -ForegroundColor Cyan
+    if (Test-Path $exePath) {
+        # Lanse aplikasyon avèk environment variable
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo.FileName = $exePath
+        $process.StartInfo.WorkingDirectory = Split-Path $exePath
+        $process.StartInfo.UseShellExecute = $false
+        $process.StartInfo.EnvironmentVariables["NALACREDIT_API_URL"] = "http://localhost:5000/api"
+        $null = $process.Start()
+        
+        Write-Host "Desktop app lanse!" -ForegroundColor Green
+        Write-Host "Backend URL: http://localhost:5000/api" -ForegroundColor Cyan
+    } else {
+        Write-Host "Fichye executable pa jwenn: $exePath" -ForegroundColor Red
+        exit 1
+    }
 } else {
-    Write-Host "❌ Erè nan konpilasyon. Verifye erè yo anlè." -ForegroundColor Red
+    Write-Host "Ere nan konpilasyon. Verifye ere yo anle." -ForegroundColor Red
     exit 1
 }

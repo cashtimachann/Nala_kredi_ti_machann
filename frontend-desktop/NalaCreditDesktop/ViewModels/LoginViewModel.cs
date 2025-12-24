@@ -54,17 +54,55 @@ public partial class LoginViewModel : ObservableObject
                 CurrentUser = result.User;
                 _apiService.SetAuthToken(result.Token);
                 
-                // Navigate to main window
+                // Navigate to appropriate dashboard based on user role
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    var dashboard = new NalaCreditDesktop.Views.CashierDashboard(_apiService);
-                    dashboard.Show();
+                    string userRole = result.User.Role;
                     
-                    // Close login window
-                    Application.Current.Windows
-                        .OfType<Window>()
-                        .FirstOrDefault(w => w.GetType() == typeof(LoginWindow))
-                        ?.Close();
+                    // Map backend role to appropriate dashboard
+                    Window? dashboardWindow = userRole switch
+                    {
+                        // Backend Role: Cashier (0)
+                        "Cashier" or "Caissier" => new NalaCreditDesktop.Views.CashierDashboard(_apiService),
+                        
+                        // Backend Role: Employee (1) → Secrétaire or Agent de Crédit
+                        "Employee" or "Secretary" or "Secrétaire" or "SecretaireAdministratif" => new NalaCreditDesktop.Views.SecretaryDashboard(),
+                        
+                        // Backend Role: Manager (2) → Chef de Succursale
+                        "Manager" or "BranchManager" or "Chef de Succursale" or "ChefDeSuccursale" => new NalaCreditDesktop.Views.BranchManagerDashboard(_apiService),
+                        
+                        // Backend Role: Admin (3) → Administrateur Système
+                        "Admin" or "Administrator" or "Administrateur" or "AdministrateurSysteme" => new NalaCreditDesktop.Views.CashierDashboard(_apiService), // Temp fallback
+                        
+                        // Backend Role: SupportTechnique (4) → Support Technique
+                        "SupportTechnique" or "Support" or "Secretaire" => new NalaCreditDesktop.Views.SecretaryDashboard(),
+                        
+                        // Backend Role: SuperAdmin (5) → Super Administrateur
+                        "SuperAdmin" or "Direction" or "DirectionGenerale" => new NalaCreditDesktop.Views.CashierDashboard(_apiService), // Temp fallback
+                        
+                        // Unknown role - show error
+                        _ => null
+                    };
+                    
+                    if (dashboardWindow != null)
+                    {
+                        if (Application.Current != null)
+                        {
+                            Application.Current.MainWindow = dashboardWindow;
+                        }
+                        
+                        dashboardWindow.Show();
+                        
+                        // Close login window
+                        Application.Current.Windows
+                            .OfType<Window>()
+                            .FirstOrDefault(w => w.GetType() == typeof(LoginWindow))
+                            ?.Close();
+                    }
+                    else
+                    {
+                        ErrorMessage = $"Rôle non reconnu: {userRole}";
+                    }
                 });
             }
             else

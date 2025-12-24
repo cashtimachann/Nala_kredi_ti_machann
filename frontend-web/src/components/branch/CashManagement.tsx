@@ -40,6 +40,12 @@ interface CashSession {
   totalDepositUSD?: number;
   totalWithdrawalHTG?: number;
   totalWithdrawalUSD?: number;
+  exchangeHTGIn?: number;
+  exchangeHTGOut?: number;
+  exchangeUSDIn?: number;
+  exchangeUSDOut?: number;
+  recoveriesHTG?: number;
+  recoveriesUSD?: number;
   currentBalanceHTG?: number;
   currentBalanceUSD?: number;
 }
@@ -52,11 +58,31 @@ interface Cashier {
   hasOpenSession: boolean;
 }
 
-interface CashManagementProps {
-  branchId: number;
+interface CashManagementStats {
+  depositsCount: number;
+  depositsHTG: number;
+  depositsUSD: number;
+  withdrawalsCount: number;
+  withdrawalsHTG: number;
+  withdrawalsUSD: number;
+  exchangeCount: number;
+  exchangeHTGIn: number;
+  exchangeHTGOut: number;
+  exchangeUSDIn: number;
+  exchangeUSDOut: number;
+  recoveriesCount: number;
+  recoveriesHTG: number;
+  recoveriesUSD: number;
+  netHTG: number;
+  netUSD: number;
 }
 
-const CashManagement: React.FC<CashManagementProps> = ({ branchId }) => {
+interface CashManagementProps {
+  branchId: number;
+  cashManagementStats?: CashManagementStats;
+}
+
+const CashManagement: React.FC<CashManagementProps> = ({ branchId, cashManagementStats }) => {
   const [activeSessions, setActiveSessions] = useState<CashSession[]>([]);
   const [todaySummary, setTodaySummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -84,7 +110,31 @@ const CashManagement: React.FC<CashManagementProps> = ({ branchId }) => {
       
       // Load active sessions
       const active = await apiService.getActiveCashSessions(branchId);
-      setActiveSessions(active || []);
+      // Normalize session data from PascalCase to camelCase if needed
+      const normalizedSessions = (active || []).map((session: any) => ({
+        id: session.id ?? session.Id,
+        userId: session.userId ?? session.UserId,
+        cashierName: session.cashierName ?? session.CashierName,
+        openingBalanceHTG: session.openingBalanceHTG ?? session.OpeningBalanceHTG,
+        openingBalanceUSD: session.openingBalanceUSD ?? session.OpeningBalanceUSD,
+        sessionStart: session.sessionStart ?? session.SessionStart,
+        durationMinutes: session.durationMinutes ?? session.DurationMinutes,
+        transactionCount: session.transactionCount ?? session.TransactionCount,
+        totalDepositHTG: session.totalDepositHTG ?? session.TotalDepositHTG ?? 0,
+        totalDepositUSD: session.totalDepositUSD ?? session.TotalDepositUSD ?? 0,
+        totalWithdrawalHTG: session.totalWithdrawalHTG ?? session.TotalWithdrawalHTG ?? 0,
+        totalWithdrawalUSD: session.totalWithdrawalUSD ?? session.TotalWithdrawalUSD ?? 0,
+        exchangeHTGIn: session.exchangeHTGIn ?? session.ExchangeHTGIn ?? 0,
+        exchangeHTGOut: session.exchangeHTGOut ?? session.ExchangeHTGOut ?? 0,
+        exchangeUSDIn: session.exchangeUSDIn ?? session.ExchangeUSDIn ?? 0,
+        exchangeUSDOut: session.exchangeUSDOut ?? session.ExchangeUSDOut ?? 0,
+        recoveriesHTG: session.recoveriesHTG ?? session.RecoveriesHTG ?? 0,
+        recoveriesUSD: session.recoveriesUSD ?? session.RecoveriesUSD ?? 0,
+        currentBalanceHTG: session.currentBalanceHTG ?? session.CurrentBalanceHTG ?? 0,
+        currentBalanceUSD: session.currentBalanceUSD ?? session.CurrentBalanceUSD ?? 0,
+        status: session.status ?? session.Status
+      }));
+      setActiveSessions(normalizedSessions);
 
       // Load today's summary
       const summary = await apiService.getTodayCashSessionSummary(branchId);
@@ -261,6 +311,129 @@ const CashManagement: React.FC<CashManagementProps> = ({ branchId }) => {
             </button>
           </div>
 
+          {/* Detailed Cash Management Statistics */}
+          {cashManagementStats && (
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">Statistiques Détaillées</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Deposits */}
+                <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-green-700">Dépôts</h4>
+                    <TrendingUp className="h-5 w-5 text-green-600" />
+                  </div>
+                  <p className="text-2xl font-bold text-green-700 mb-2">
+                    {cashManagementStats.depositsCount}
+                  </p>
+                  <div className="space-y-1">
+                    <p className="text-sm text-green-600">
+                      HTG: {formatCurrency(cashManagementStats.depositsHTG, 'HTG')}
+                    </p>
+                    <p className="text-sm text-green-600">
+                      USD: {formatCurrency(cashManagementStats.depositsUSD, 'USD')}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Withdrawals */}
+                <div className="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-red-700">Retraits</h4>
+                    <TrendingDown className="h-5 w-5 text-red-600" />
+                  </div>
+                  <p className="text-2xl font-bold text-red-700 mb-2">
+                    {cashManagementStats.withdrawalsCount}
+                  </p>
+                  <div className="space-y-1">
+                    <p className="text-sm text-red-600">
+                      HTG: {formatCurrency(cashManagementStats.withdrawalsHTG, 'HTG')}
+                    </p>
+                    <p className="text-sm text-red-600">
+                      USD: {formatCurrency(cashManagementStats.withdrawalsUSD, 'USD')}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Exchanges */}
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-blue-700">Changes</h4>
+                    <RefreshCw className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <p className="text-2xl font-bold text-blue-700 mb-2">
+                    {cashManagementStats.exchangeCount}
+                  </p>
+                  <div className="space-y-1">
+                    <p className="text-xs text-blue-600 flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3" />
+                      HTG In: {formatCurrency(cashManagementStats.exchangeHTGIn, 'HTG')}
+                    </p>
+                    <p className="text-xs text-blue-600 flex items-center gap-1">
+                      <TrendingDown className="h-3 w-3" />
+                      HTG Out: {formatCurrency(cashManagementStats.exchangeHTGOut, 'HTG')}
+                    </p>
+                    <p className="text-xs text-blue-600 flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3" />
+                      USD In: {formatCurrency(cashManagementStats.exchangeUSDIn, 'USD')}
+                    </p>
+                    <p className="text-xs text-blue-600 flex items-center gap-1">
+                      <TrendingDown className="h-3 w-3" />
+                      USD Out: {formatCurrency(cashManagementStats.exchangeUSDOut, 'USD')}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Recoveries */}
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-purple-700">Recouvrements</h4>
+                    <DollarSign className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <p className="text-2xl font-bold text-purple-700 mb-2">
+                    {cashManagementStats.recoveriesCount}
+                  </p>
+                  <div className="space-y-1">
+                    <p className="text-sm text-purple-600">
+                      HTG: {formatCurrency(cashManagementStats.recoveriesHTG, 'HTG')}
+                    </p>
+                    <p className="text-sm text-purple-600">
+                      USD: {formatCurrency(cashManagementStats.recoveriesUSD, 'USD')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Net Balances */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div className="bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-gray-300 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                    <Wallet className="h-4 w-4" />
+                    Bilan Net HTG
+                  </h4>
+                  <p className={`text-3xl font-bold ${cashManagementStats.netHTG >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                    {formatCurrency(cashManagementStats.netHTG, 'HTG')}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Dépôts + Changes In + Recouvrements - Retraits - Changes Out
+                  </p>
+                </div>
+
+                <div className="bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-gray-300 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                    <Wallet className="h-4 w-4" />
+                    Bilan Net USD
+                  </h4>
+                  <p className={`text-3xl font-bold ${cashManagementStats.netUSD >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                    {formatCurrency(cashManagementStats.netUSD, 'USD')}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Dépôts + Changes In + Recouvrements - Retraits - Changes Out
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4">
@@ -333,7 +506,7 @@ const CashManagement: React.FC<CashManagementProps> = ({ branchId }) => {
                     Dépôts:
                   </span>
                   <span className="font-semibold text-green-600">
-                    {formatCurrency(todaySummary.totalDepositHTG, 'HTG')}
+                    {formatCurrency(cashManagementStats?.depositsHTG ?? todaySummary.totalDepositHTG, 'HTG')}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -342,13 +515,38 @@ const CashManagement: React.FC<CashManagementProps> = ({ branchId }) => {
                     Retraits:
                   </span>
                   <span className="font-semibold text-red-600">
-                    {formatCurrency(todaySummary.totalWithdrawalHTG, 'HTG')}
+                    {formatCurrency(cashManagementStats?.withdrawalsHTG ?? todaySummary.totalWithdrawalHTG, 'HTG')}
                   </span>
                 </div>
+                {cashManagementStats && (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-blue-600 flex items-center gap-1">
+                        <RefreshCw className="h-4 w-4" />
+                        Change (In/Out):
+                      </span>
+                      <span className="font-semibold text-blue-600">
+                        {formatCurrency(cashManagementStats.exchangeHTGIn, 'HTG')} / {formatCurrency(cashManagementStats.exchangeHTGOut, 'HTG')}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-purple-600 flex items-center gap-1">
+                        <DollarSign className="h-4 w-4" />
+                        Recouvrements:
+                      </span>
+                      <span className="font-semibold text-purple-600">
+                        {formatCurrency(cashManagementStats.recoveriesHTG, 'HTG')}
+                      </span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between items-center border-t pt-2">
                   <span className="text-sm text-gray-600">Solde Fermeture:</span>
                   <span className="font-bold text-gray-900">
-                    {formatCurrency(todaySummary.totalClosingBalanceHTG, 'HTG')}
+                    {formatCurrency(
+                      todaySummary.totalOpeningBalanceHTG + (cashManagementStats?.netHTG ?? 0),
+                      'HTG'
+                    )}
                   </span>
                 </div>
               </div>
@@ -373,7 +571,7 @@ const CashManagement: React.FC<CashManagementProps> = ({ branchId }) => {
                     Dépôts:
                   </span>
                   <span className="font-semibold text-green-600">
-                    {formatCurrency(todaySummary.totalDepositUSD, 'USD')}
+                    {formatCurrency(cashManagementStats?.depositsUSD ?? todaySummary.totalDepositUSD, 'USD')}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -382,13 +580,38 @@ const CashManagement: React.FC<CashManagementProps> = ({ branchId }) => {
                     Retraits:
                   </span>
                   <span className="font-semibold text-red-600">
-                    {formatCurrency(todaySummary.totalWithdrawalUSD, 'USD')}
+                    {formatCurrency(cashManagementStats?.withdrawalsUSD ?? todaySummary.totalWithdrawalUSD, 'USD')}
                   </span>
                 </div>
+                {cashManagementStats && (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-blue-600 flex items-center gap-1">
+                        <RefreshCw className="h-4 w-4" />
+                        Change (In/Out):
+                      </span>
+                      <span className="font-semibold text-blue-600">
+                        {formatCurrency(cashManagementStats.exchangeUSDIn, 'USD')} / {formatCurrency(cashManagementStats.exchangeUSDOut, 'USD')}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-purple-600 flex items-center gap-1">
+                        <DollarSign className="h-4 w-4" />
+                        Recouvrements:
+                      </span>
+                      <span className="font-semibold text-purple-600">
+                        {formatCurrency(cashManagementStats.recoveriesUSD, 'USD')}
+                      </span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between items-center border-t pt-2">
                   <span className="text-sm text-gray-600">Solde Fermeture:</span>
                   <span className="font-bold text-gray-900">
-                    {formatCurrency(todaySummary.totalClosingBalanceUSD, 'USD')}
+                    {formatCurrency(
+                      todaySummary.totalOpeningBalanceUSD + (cashManagementStats?.netUSD ?? 0),
+                      'USD'
+                    )}
                   </span>
                 </div>
               </div>
@@ -456,6 +679,18 @@ const CashManagement: React.FC<CashManagementProps> = ({ branchId }) => {
                         -{new Intl.NumberFormat('fr-HT').format(session.totalWithdrawalHTG || 0)}
                       </span>
                     </div>
+                    <div className="flex justify-between text-sm text-blue-600">
+                      <span>Change (In/Out):</span>
+                      <span className="font-semibold text-xs">
+                        +{new Intl.NumberFormat('fr-HT').format(session.exchangeHTGIn || 0)} / -{new Intl.NumberFormat('fr-HT').format(session.exchangeHTGOut || 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm text-purple-600">
+                      <span>Recouvrements:</span>
+                      <span className="font-semibold">
+                        +{new Intl.NumberFormat('fr-HT').format(session.recoveriesHTG || 0)}
+                      </span>
+                    </div>
                     <div className="flex justify-between text-sm font-bold border-t mt-1 pt-1">
                       <span>Solde actuel:</span>
                       <span>{new Intl.NumberFormat('fr-HT').format(session.currentBalanceHTG || 0)}</span>
@@ -480,6 +715,18 @@ const CashManagement: React.FC<CashManagementProps> = ({ branchId }) => {
                       <span>Retraits:</span>
                       <span className="font-semibold">
                         -${new Intl.NumberFormat('en-US').format(session.totalWithdrawalUSD || 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm text-blue-600">
+                      <span>Change (In/Out):</span>
+                      <span className="font-semibold text-xs">
+                        +${new Intl.NumberFormat('en-US').format(session.exchangeUSDIn || 0)} / -${new Intl.NumberFormat('en-US').format(session.exchangeUSDOut || 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm text-purple-600">
+                      <span>Recouvrements:</span>
+                      <span className="font-semibold">
+                        +${new Intl.NumberFormat('en-US').format(session.recoveriesUSD || 0)}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm font-bold border-t mt-1 pt-1">

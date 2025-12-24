@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using NalaCreditAPI.Data;
 using NalaCreditAPI.Models;
 using NalaCreditAPI.DTOs;
+using NalaCreditAPI.Utilities;
 using System.Security.Claims;
 
 namespace NalaCreditAPI.Controllers;
@@ -69,6 +70,14 @@ public class DashboardController : ControllerBase
             .OrderByDescending(t => t.ProcessedAt)
             .ToListAsync();
 
+        // Get today's microcredit payments processed by this user
+        var todayMicrocreditPayments = await _context.MicrocreditPayments
+            .AsNoTracking()
+            .Include(p => p.Loan)
+                .ThenInclude(l => l.Borrower)
+            .Where(p => p.ProcessedBy == userId && p.CreatedAt >= today && p.CreatedAt < tomorrow && p.Status == MicrocreditPaymentStatus.Completed)
+            .ToListAsync();
+
         // Preload account info to display client name + account number in recent list
         var savingsAccountNumbers = todaySavings.Select(t => t.AccountNumber).Distinct().ToList();
         var savingsAccounts = await _context.SavingsAccounts
@@ -91,6 +100,10 @@ public class DashboardController : ControllerBase
 
         var withdrawalTransactions = todayTransactions
             .Where(t => t.Type == TransactionType.Withdrawal)
+            .ToList();
+
+        var creditPaymentTransactions = todayTransactions
+            .Where(t => t.Type == TransactionType.CreditPayment)
             .ToList();
 
         var savingsDeposits = todaySavings
@@ -123,11 +136,27 @@ public class DashboardController : ControllerBase
             .Where(t => t.Type == TransactionType.CurrencyExchange)
             .ToList();
 
+        // Get today's exchange transactions from the ExchangeTransactions table
+        // Use CreatedAt with UTC date range to align with other modules
+        // Get ALL exchange transactions from the branch today (not just this cashier)
+        // Also check for local time to catch transactions created with DateTime.Now before the fix
+        var branchGuid = BranchIntegrationHelper.FromLegacyId(user.BranchId!.Value);
+        var localToday = DateTime.Today;
+        var localTomorrow = localToday.AddDays(1);
+        
+        var todayExchangeTransactions = await _context.ExchangeTransactions
+            .AsNoTracking()
+            .Where(t => t.BranchId == branchGuid && 
+                        ((t.CreatedAt >= today && t.CreatedAt < tomorrow) ||  // UTC dates
+                         (t.CreatedAt >= localToday && t.CreatedAt < localTomorrow)) && // Local dates
+                        t.Status == ExchangeTransactionStatus.Completed)
+            .ToListAsync();
+
         // Diagnostic logging to help investigate missing dashboard totals
         try
         {
-            _logger?.LogInformation("Cashier dashboard for user {UserId} on {Date} - transactions: {Total}, deposits: {Deposits}, withdrawals: {Withdrawals}, exchanges: {Exchanges}",
-                userId, today.ToString("yyyy-MM-dd"), todayTransactions.Count, depositTransactions.Count, withdrawalTransactions.Count, exchangeTransactions.Count);
+            _logger?.LogInformation("Cashier dashboard for user {UserId} on {Date} - transactions: {Total}, deposits: {Deposits}, withdrawals: {Withdrawals}, exchanges: {Exchanges}, actualExchanges: {ActualExchanges}",
+                userId, today.ToString("yyyy-MM-dd"), todayTransactions.Count, depositTransactions.Count, withdrawalTransactions.Count, exchangeTransactions.Count, todayExchangeTransactions.Count);
         }
         catch
         {
@@ -154,6 +183,24 @@ public class DashboardController : ControllerBase
             + savingsDepositsUSD
             + currentAccountDepositsUSD;
 
+        // Calculate credit payments (loan repayments come into cash)
+        var creditPaymentsHTG = creditPaymentTransactions
+            .Where(t => t.Currency == Currency.HTG)
+            .Sum(t => t.Amount);
+
+        var creditPaymentsUSD = creditPaymentTransactions
+            .Where(t => t.Currency == Currency.USD)
+            .Sum(t => t.Amount);
+
+        // Calculate microcredit payments (loan repayments come into cash)
+        var microcreditPaymentsHTG = todayMicrocreditPayments
+            .Where(p => p.Currency == MicrocreditCurrency.HTG)
+            .Sum(p => p.Amount);
+
+        var microcreditPaymentsUSD = todayMicrocreditPayments
+            .Where(p => p.Currency == MicrocreditCurrency.USD)
+            .Sum(p => p.Amount);
+
         var withdrawalsAmountHTG = withdrawalTransactions
             .Where(t => t.Currency == Currency.HTG)
             .Sum(t => t.Amount);
@@ -170,7 +217,10 @@ public class DashboardController : ControllerBase
                 : t.Amount)
             + currentAccountDeposits.Sum(t => t.Currency == ClientCurrency.USD && t.ExchangeRate.HasValue
                 ? t.Amount * t.ExchangeRate.Value
-                : t.Amount);
+                : t.Amount)
+            + creditPaymentTransactions.Sum(ConvertToHTG)
+            + microcreditPaymentsHTG
+            + (microcreditPaymentsUSD * 160); // Convert USD to HTG for total (using approximate rate);
 
         var totalWithdrawalsEquivalent = withdrawalTransactions.Sum(ConvertToHTG)
             + savingsWithdrawals.Sum(t => t.Currency == SavingsCurrency.USD && t.ExchangeRate.HasValue
@@ -180,13 +230,41 @@ public class DashboardController : ControllerBase
                 ? t.Amount * t.ExchangeRate.Value
                 : t.Amount);
 
+        // Calculate net impact of exchange transactions on cash balances
+        // When client buys USD (HTG → USD): HTG leaves cash, USD enters cash
+        // When client sells USD (USD → HTG): USD leaves cash, HTG enters cash
+        decimal exchangeNetHTG = 0;
+        decimal exchangeNetUSD = 0;
+
+        foreach (var exchange in todayExchangeTransactions)
+        {
+            if (exchange.FromCurrency == CurrencyType.HTG && exchange.ToCurrency == CurrencyType.USD)
+            {
+                // Client buys USD with HTG: HTG comes in, USD goes out
+                exchangeNetHTG += exchange.FromAmount;
+                exchangeNetUSD -= exchange.ToAmount;
+            }
+            else if (exchange.FromCurrency == CurrencyType.USD && exchange.ToCurrency == CurrencyType.HTG)
+            {
+                // Client sells USD for HTG: USD comes in, HTG goes out
+                exchangeNetUSD += exchange.FromAmount;
+                exchangeNetHTG -= exchange.ToAmount;
+            }
+        }
+
         var cashBalanceHTG = (activeCashSession?.OpeningBalanceHTG ?? 0)
             + totalDepositsEquivalent
-            - totalWithdrawalsEquivalent;
+            - totalWithdrawalsEquivalent
+            + exchangeNetHTG
+            + creditPaymentsHTG
+            + microcreditPaymentsHTG;
 
         var cashBalanceUSD = (activeCashSession?.OpeningBalanceUSD ?? 0)
             + depositsAmountUSD
-            - withdrawalsAmountUSD;
+            - withdrawalsAmountUSD
+            + exchangeNetUSD
+            + creditPaymentsUSD
+            + microcreditPaymentsUSD;
 
         var clientsServed = todayTransactions
             .Select(t => t.AccountId)
@@ -291,6 +369,27 @@ public class DashboardController : ControllerBase
             .Take(10)
             .ToList();
 
+        // Build credit payment history
+        var creditPaymentHistory = todayMicrocreditPayments
+            .OrderByDescending(p => p.CreatedAt)
+            .Take(20)
+            .Select(p => new CreditPaymentHistoryDto
+            {
+                PaymentNumber = p.PaymentNumber,
+                ReceiptNumber = p.ReceiptNumber,
+                LoanNumber = p.Loan?.LoanNumber ?? "N/A",
+                CustomerName = p.Loan?.Borrower?.FullName ?? "N/A",
+                Amount = p.Amount,
+                PrincipalAmount = p.PrincipalAmount,
+                InterestAmount = p.InterestAmount,
+                PenaltyAmount = p.PenaltyAmount,
+                Currency = p.Currency.ToString(),
+                PaymentMethod = p.PaymentMethod.ToString(),
+                Status = p.Status.ToString(),
+                CreatedAt = p.CreatedAt.ToLocalTime()
+            })
+            .ToList();
+
         return Ok(new CashierDashboardDto
         {
             CashSessionStatus = activeCashSession?.Status.ToString() ?? "Closed",
@@ -302,7 +401,7 @@ public class DashboardController : ControllerBase
             OpeningBalanceUSD = activeCashSession?.OpeningBalanceUSD ?? 0,
             TodayDeposits = totalDepositsEquivalent,
             TodayWithdrawals = totalWithdrawalsEquivalent,
-            TodayExchanges = exchangeTransactions.Count,
+            TodayExchanges = todayExchangeTransactions.Count,
             ClientsServed = clientsServed,
             TransactionCount = todayTransactions.Count + todaySavings.Count + todayCurrentAccountTransactions.Count,
             DepositsCount = depositTransactions.Count + savingsDeposits.Count + currentAccountDeposits.Count,
@@ -313,14 +412,19 @@ public class DashboardController : ControllerBase
             WithdrawalsAmountUSD = withdrawalsAmountUSD,
             TotalIncoming = totalDepositsEquivalent,
             TotalOutgoing = totalWithdrawalsEquivalent,
-            UsdSalesAmount = exchangeTransactions
-                .Where(t => t.Currency == Currency.USD)
-                .Sum(t => t.Amount),
-            UsdPurchaseAmount = exchangeTransactions
-                .Where(t => t.Currency == Currency.HTG)
-                .Sum(t => t.Amount),
+            CreditPaymentsCount = creditPaymentTransactions.Count + todayMicrocreditPayments.Count,
+            CreditPaymentsAmountHTG = creditPaymentsHTG + microcreditPaymentsHTG,
+            CreditPaymentsAmountUSD = creditPaymentsUSD + microcreditPaymentsUSD,
+            // Show HTG amount paid out when selling USD (USD→HTG)
+            UsdSalesAmount = todayExchangeTransactions
+                .Where(t => t.FromCurrency == CurrencyType.USD && t.ToCurrency == CurrencyType.HTG)
+                .Sum(t => t.ToAmount),
+            UsdPurchaseAmount = todayExchangeTransactions
+                .Where(t => t.FromCurrency == CurrencyType.HTG && t.ToCurrency == CurrencyType.USD)
+                .Sum(t => t.ToAmount),
             LastTransactionTime = recentTransactions.FirstOrDefault()?.CreatedAt,
-            RecentTransactions = recentTransactions
+            RecentTransactions = recentTransactions,
+            CreditPaymentHistory = creditPaymentHistory
         });
     }
 
@@ -389,6 +493,37 @@ public class DashboardController : ControllerBase
             .Include(t => t.User)
             .ToListAsync();
 
+        // Get today's savings transactions
+        var todaySavings = await _context.SavingsTransactions
+            .AsNoTracking()
+            .Where(t => t.BranchId == branchId && t.ProcessedAt >= today && t.ProcessedAt < tomorrow)
+            .ToListAsync();
+
+        // Get today's current account transactions
+        var todayCurrentAccountTransactions = await _context.CurrentAccountTransactions
+            .AsNoTracking()
+            .Where(t => t.BranchId == branchId && t.ProcessedAt >= today && t.ProcessedAt < tomorrow)
+            .ToListAsync();
+
+        // Get today's microcredit payments
+        var todayMicrocreditPayments = await _context.MicrocreditPayments
+            .AsNoTracking()
+            .Where(p => p.BranchId == branchId && p.CreatedAt >= today && p.CreatedAt < tomorrow && p.Status == MicrocreditPaymentStatus.Completed)
+            .ToListAsync();
+
+        // Get today's exchange transactions
+        var branchGuid = BranchIntegrationHelper.FromLegacyId(branchId);
+        var localToday = DateTime.Today;
+        var localTomorrow = localToday.AddDays(1);
+        
+        var todayExchangeTransactions = await _context.ExchangeTransactions
+            .AsNoTracking()
+            .Where(t => t.BranchId == branchGuid && 
+                        ((t.CreatedAt >= today && t.CreatedAt < tomorrow) ||
+                         (t.CreatedAt >= localToday && t.CreatedAt < localTomorrow)) &&
+                        t.Status == ExchangeTransactionStatus.Completed)
+            .ToListAsync();
+
         // Active cash sessions
         var activeCashSessions = await _context.CashSessions
             .Include(cs => cs.User)
@@ -422,6 +557,91 @@ public class DashboardController : ControllerBase
             SessionStart = cs.SessionStart
         }).ToList();
 
+        // Calculate cash management statistics
+        var depositTransactions = todayTransactions.Where(t => t.Type == TransactionType.Deposit).ToList();
+        var withdrawalTransactions = todayTransactions.Where(t => t.Type == TransactionType.Withdrawal).ToList();
+        var creditPaymentTransactions = todayTransactions.Where(t => t.Type == TransactionType.CreditPayment).ToList();
+        
+        var savingsDeposits = todaySavings.Where(t => t.Type == SavingsTransactionType.Deposit).ToList();
+        var savingsWithdrawals = todaySavings.Where(t => t.Type == SavingsTransactionType.Withdrawal).ToList();
+        
+        var currentAccountDeposits = todayCurrentAccountTransactions.Where(t => t.Type == SavingsTransactionType.Deposit).ToList();
+        var currentAccountWithdrawals = todayCurrentAccountTransactions.Where(t => t.Type == SavingsTransactionType.Withdrawal).ToList();
+
+        // Dépôts
+        var depositsHTG = depositTransactions.Where(t => t.Currency == Currency.HTG).Sum(t => t.Amount)
+            + savingsDeposits.Where(t => t.Currency == SavingsCurrency.HTG).Sum(t => t.Amount)
+            + currentAccountDeposits.Where(t => t.Currency == ClientCurrency.HTG).Sum(t => t.Amount);
+            
+        var depositsUSD = depositTransactions.Where(t => t.Currency == Currency.USD).Sum(t => t.Amount)
+            + savingsDeposits.Where(t => t.Currency == SavingsCurrency.USD).Sum(t => t.Amount)
+            + currentAccountDeposits.Where(t => t.Currency == ClientCurrency.USD).Sum(t => t.Amount);
+        
+        var depositsCount = depositTransactions.Count + savingsDeposits.Count + currentAccountDeposits.Count;
+
+        // Retraits
+        var withdrawalsHTG = withdrawalTransactions.Where(t => t.Currency == Currency.HTG).Sum(t => t.Amount)
+            + savingsWithdrawals.Where(t => t.Currency == SavingsCurrency.HTG).Sum(t => t.Amount)
+            + currentAccountWithdrawals.Where(t => t.Currency == ClientCurrency.HTG).Sum(t => t.Amount);
+            
+        var withdrawalsUSD = withdrawalTransactions.Where(t => t.Currency == Currency.USD).Sum(t => t.Amount)
+            + savingsWithdrawals.Where(t => t.Currency == SavingsCurrency.USD).Sum(t => t.Amount)
+            + currentAccountWithdrawals.Where(t => t.Currency == ClientCurrency.USD).Sum(t => t.Amount);
+        
+        var withdrawalsCount = withdrawalTransactions.Count + savingsWithdrawals.Count + currentAccountWithdrawals.Count;
+
+        // Recouvrements (paiements de crédit)
+        var recoveriesHTG = creditPaymentTransactions.Where(t => t.Currency == Currency.HTG).Sum(t => t.Amount)
+            + todayMicrocreditPayments.Where(p => p.Currency == MicrocreditCurrency.HTG).Sum(p => p.Amount);
+            
+        var recoveriesUSD = creditPaymentTransactions.Where(t => t.Currency == Currency.USD).Sum(t => t.Amount)
+            + todayMicrocreditPayments.Where(p => p.Currency == MicrocreditCurrency.USD).Sum(p => p.Amount);
+        
+        var recoveriesCount = creditPaymentTransactions.Count + todayMicrocreditPayments.Count;
+
+        // Operations de change
+        decimal exchangeHTGIn = 0, exchangeHTGOut = 0, exchangeUSDIn = 0, exchangeUSDOut = 0;
+        
+        foreach (var exchange in todayExchangeTransactions)
+        {
+            if (exchange.FromCurrency == CurrencyType.HTG && exchange.ToCurrency == CurrencyType.USD)
+            {
+                // Client achète USD avec HTG: HTG entre, USD sort
+                exchangeHTGIn += exchange.FromAmount;
+                exchangeUSDOut += exchange.ToAmount;
+            }
+            else if (exchange.FromCurrency == CurrencyType.USD && exchange.ToCurrency == CurrencyType.HTG)
+            {
+                // Client vend USD pour HTG: USD entre, HTG sort
+                exchangeUSDIn += exchange.FromAmount;
+                exchangeHTGOut += exchange.ToAmount;
+            }
+        }
+
+        // Calcul des bilans nets
+        var netHTG = depositsHTG - withdrawalsHTG + exchangeHTGIn - exchangeHTGOut + recoveriesHTG;
+        var netUSD = depositsUSD - withdrawalsUSD + exchangeUSDIn - exchangeUSDOut + recoveriesUSD;
+
+        var cashManagement = new CashManagementDto
+        {
+            DepositsCount = depositsCount,
+            DepositsHTG = depositsHTG,
+            DepositsUSD = depositsUSD,
+            WithdrawalsCount = withdrawalsCount,
+            WithdrawalsHTG = withdrawalsHTG,
+            WithdrawalsUSD = withdrawalsUSD,
+            ExchangeCount = todayExchangeTransactions.Count,
+            ExchangeHTGIn = exchangeHTGIn,
+            ExchangeHTGOut = exchangeHTGOut,
+            ExchangeUSDIn = exchangeUSDIn,
+            ExchangeUSDOut = exchangeUSDOut,
+            RecoveriesCount = recoveriesCount,
+            RecoveriesHTG = recoveriesHTG,
+            RecoveriesUSD = recoveriesUSD,
+            NetHTG = netHTG,
+            NetUSD = netUSD
+        };
+
         return Ok(new ManagerDashboardDto
         {
             TodayTransactionVolume = todayTransactionVolume,
@@ -434,7 +654,8 @@ public class DashboardController : ControllerBase
             ActiveCredits = branchCredits.Count,
             PendingCreditApprovals = pendingApprovals,
             AverageTransactionTime = 2.5m, // Placeholder until timing metrics implemented
-            CashierPerformance = cashierPerformance
+            CashierPerformance = cashierPerformance,
+            CashManagement = cashManagement
         });
     }
 

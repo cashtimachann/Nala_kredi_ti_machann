@@ -84,6 +84,51 @@ namespace NalaCreditAPI.Controllers
             }
         }
 
+        [HttpGet("cashiers")]
+        [Authorize(Roles = "Manager,Admin,SuperAdmin")]
+        public async Task<ActionResult<IEnumerable<CashierInfoDto>>> GetCashiers()
+        {
+            try
+            {
+                var managerId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                var manager = await _context.Users.FindAsync(managerId);
+
+                if (manager == null)
+                {
+                    return Unauthorized(new { message = "Manager non trouvé" });
+                }
+
+                // Get cashiers from the same branch as the manager
+                var cashiers = await _context.Users
+                    .Where(u => u.Role == UserRole.Cashier && 
+                               u.IsActive &&
+                               (manager.Role == UserRole.SuperAdmin || u.BranchId == manager.BranchId))
+                    .ToListAsync();
+
+                // Check for active sessions
+                var cashierIds = cashiers.Select(c => c.Id).ToList();
+                var activeSessions = await _context.CashSessions
+                    .Where(cs => cashierIds.Contains(cs.UserId) && cs.Status == CashSessionStatus.Open)
+                    .Select(cs => cs.UserId)
+                    .ToListAsync();
+
+                var cashierInfos = cashiers.Select(c => new CashierInfoDto
+                {
+                    Id = c.Id,
+                    FirstName = c.FirstName,
+                    LastName = c.LastName,
+                    Email = c.Email!,
+                    HasActiveSession = activeSessions.Contains(c.Id)
+                }).ToList();
+
+                return Ok(cashierInfos);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Erreur lors du chargement des caissiers", error = ex.Message });
+            }
+        }
+
         [HttpGet("{id}")]
         public async Task<ActionResult<UserInfoDto>> GetUser(string id)
         {
@@ -114,5 +159,14 @@ namespace NalaCreditAPI.Controllers
                 return StatusCode(500, new { message = "Erreur lors du chargement de l'utilisateur", error = ex.Message });
             }
         }
+    }
+
+    public class CashierInfoDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public bool HasActiveSession { get; set; }
     }
 }

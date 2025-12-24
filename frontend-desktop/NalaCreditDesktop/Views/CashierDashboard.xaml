@@ -256,11 +256,12 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <!-- Alertes -->
                 <StackPanel Grid.Row="0" x:Name="AlertsPanel">
-                    <!-- Message session fermée -->
+                    <!-- Message session fermée - Manager seulement -->
                     <Border Background="#FFF3E0" 
                             BorderBrush="#FF9800" 
                             BorderThickness="2" 
@@ -278,46 +279,14 @@
                                 </Style.Triggers>
                             </Style>
                         </Border.Style>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="ℹ️" FontSize="20" Margin="0,0,10,0"/>
-                                <TextBlock Text="La session de caisse est fermée. Cliquez pour ouvrir une nouvelle session." 
-                                           FontWeight="SemiBold" 
-                                           Foreground="#E65100"
-                                           FontSize="14"
-                                           VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <Button Grid.Column="1"
-                                    Command="{Binding OpenCashSessionCommand}"
-                                    Background="#FF9800"
-                                    Foreground="White"
-                                    BorderThickness="0"
-                                    Padding="20,10"
-                                    FontWeight="Bold"
-                                    FontSize="14"
-                                    Cursor="Hand">
-                                <Button.Template>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}" 
-                                                CornerRadius="5"
-                                                Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter HorizontalAlignment="Center" 
-                                                            VerticalAlignment="Center"/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="#F57C00"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Button.Template>
-                                🔓 OUVRIR SESSION
-                            </Button>
-                        </Grid>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="ℹ️" FontSize="20" Margin="0,0,10,0"/>
+                            <TextBlock Text="La session de caisse est fermée. Veuillez contacter votre chef de succursale pour ouvrir une nouvelle session." 
+                                       FontWeight="SemiBold" 
+                                       Foreground="#E65100"
+                                       FontSize="14"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
                     </Border>
                     
                     <!-- Alerte warning -->
@@ -466,6 +435,7 @@
 
                             <!-- Opérations de change -->
                             <TextBlock Text="🔄 Opérations de Change" FontWeight="Bold" Foreground="#3498DB" Margin="0,15,0,10" FontSize="16"/>
+                            <TextBlock Text="{Binding TodayExchanges, StringFormat=Nombre: {0}}" Foreground="#3498DB" Margin="0,0,0,10"/>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -483,6 +453,39 @@
                                     <StackPanel>
                                         <TextBlock Text="Achat USD" FontWeight="SemiBold" Foreground="#155724" Margin="0,0,0,5"/>
                                         <TextBlock Text="{Binding UsdPurchaseAmount, StringFormat='USD: ${0:N2}'}" FontSize="14" Foreground="#155724" FontWeight="Bold"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <Separator Margin="0,10"/>
+
+                            <!-- Paiements de Crédits -->
+                            <TextBlock Text="💰 Recouvrements Crédits" FontWeight="Bold" Foreground="#8E44AD" Margin="0,15,0,10" FontSize="16"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <Border Grid.Column="0" Margin="0,0,5,0" Background="#E8DAEF" CornerRadius="8" Padding="15">
+                                    <StackPanel>
+                                        <TextBlock Text="Nombre" FontWeight="SemiBold" Foreground="#6C3483" Margin="0,0,0,5"/>
+                                        <TextBlock Text="{Binding CreditPaymentsCount}" FontSize="18" Foreground="#6C3483" FontWeight="Bold"/>
+                                    </StackPanel>
+                                </Border>
+                                
+                                <Border Grid.Column="1" Margin="5,0" Background="#E8DAEF" CornerRadius="8" Padding="15">
+                                    <StackPanel>
+                                        <TextBlock Text="HTG" FontWeight="SemiBold" Foreground="#6C3483" Margin="0,0,0,5"/>
+                                        <TextBlock Text="{Binding CreditPaymentsAmountHTG, StringFormat='{}{0:N0}'}" FontSize="14" Foreground="#6C3483" FontWeight="Bold"/>
+                                    </StackPanel>
+                                </Border>
+                                
+                                <Border Grid.Column="2" Margin="5,0,0,0" Background="#E8DAEF" CornerRadius="8" Padding="15">
+                                    <StackPanel>
+                                        <TextBlock Text="USD" FontWeight="SemiBold" Foreground="#6C3483" Margin="0,0,0,5"/>
+                                        <TextBlock Text="{Binding CreditPaymentsAmountUSD, StringFormat='${0:N2}'}" FontSize="14" Foreground="#6C3483" FontWeight="Bold"/>
                                     </StackPanel>
                                 </Border>
                             </Grid>
@@ -654,6 +657,64 @@
                                 <DataGridTextColumn Header="Statut"
                                                     Binding="{Binding Status}"
                                                     Width="100"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Historique des recouvrements de crédits (aujourd'hui) -->
+                <Border Grid.Row="5" Style="{StaticResource CardStyle}">
+                    <StackPanel>
+                        <Grid>
+                            <TextBlock Text="💰 Historique Recouvrements Crédits (Aujourd'hui)" Style="{StaticResource HeaderTextStyle}"/>
+                            <Button HorizontalAlignment="Right"
+                                    Content="Actualiser"
+                                    Padding="10,5"
+                                    Background="Transparent"
+                                    BorderBrush="#BDC3C7"
+                                    Command="{Binding RefreshTransactionsCommand}"/>
+                        </Grid>
+
+                        <DataGrid ItemsSource="{Binding CreditPaymentHistory}"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  Style="{StaticResource ModernDataGridStyle}"
+                                  Height="260"
+                                  Margin="0,10">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Heure"
+                                                    Binding="{Binding Time, StringFormat='{}{0:HH:mm:ss}'}"
+                                                    Width="90"/>
+                                <DataGridTextColumn Header="N° Paiement"
+                                                    Binding="{Binding PaymentNumber}"
+                                                    Width="120"/>
+                                <DataGridTextColumn Header="N° Prêt"
+                                                    Binding="{Binding LoanNumber}"
+                                                    Width="120"/>
+                                <DataGridTextColumn Header="Client"
+                                                    Binding="{Binding CustomerName}"
+                                                    Width="*"/>
+                                <DataGridTextColumn Header="Capital"
+                                                    Binding="{Binding PrincipalAmount, StringFormat='{}{0:N2}'}"
+                                                    Width="100"/>
+                                <DataGridTextColumn Header="Intérêt"
+                                                    Binding="{Binding InterestAmount, StringFormat='{}{0:N2}'}"
+                                                    Width="100"/>
+                                <DataGridTextColumn Header="Pénalité"
+                                                    Binding="{Binding PenaltyAmount, StringFormat='{}{0:N2}'}"
+                                                    Width="100"/>
+                                <DataGridTextColumn Header="Total"
+                                                    Binding="{Binding Amount, StringFormat='{}{0:N2}'}"
+                                                    Width="110"/>
+                                <DataGridTextColumn Header="Devise"
+                                                    Binding="{Binding Currency}"
+                                                    Width="70"/>
+                                <DataGridTextColumn Header="Méthode"
+                                                    Binding="{Binding PaymentMethod}"
+                                                    Width="100"/>
+                                <DataGridTextColumn Header="N° Reçu"
+                                                    Binding="{Binding ReceiptNumber}"
+                                                    Width="110"/>
                             </DataGrid.Columns>
                         </DataGrid>
                     </StackPanel>
