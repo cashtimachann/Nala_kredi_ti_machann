@@ -117,7 +117,21 @@ jobs:
               echo "⚠️  Frontend branch build failed, using existing image"
             }
             
-            echo "🔄 Restarting services..."
+            echo "� Setting up downloads folder..."
+            # Create downloads directory structure
+            mkdir -p /var/www/downloads/desktop
+            
+            # Copy download page and files
+            if [ -d "frontend-desktop/downloads" ]; then
+              cp -r frontend-desktop/downloads/* /var/www/downloads/
+              echo "✅ Downloads folder updated"
+            fi
+            
+            # Set proper permissions
+            chown -R www-data:www-data /var/www/downloads
+            chmod -R 755 /var/www/downloads
+            
+            echo "�🔄 Restarting services..."
             docker compose up -d
             
             echo "⏳ Waiting for services to start..."
