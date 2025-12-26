@@ -130,7 +130,28 @@ const SuperAdminCashManagement: React.FC = () => {
 
       // Load today's summary for stats
       const summaryData = await apiService.getTodayCashSessionSummary(selectedBranchId);
-      setCashManagementStats(summaryData);
+      
+      // Transform data to match expected format
+      const transformedStats: CashManagementStats = {
+        depositsCount: summaryData.TotalTransactions || 0,
+        depositsHTG: summaryData.TotalDepositHTG || 0,
+        depositsUSD: summaryData.TotalDepositUSD || 0,
+        withdrawalsCount: summaryData.TotalTransactions || 0,
+        withdrawalsHTG: summaryData.TotalWithdrawalHTG || 0,
+        withdrawalsUSD: summaryData.TotalWithdrawalUSD || 0,
+        exchangeCount: 0,
+        exchangeHTGIn: 0,
+        exchangeHTGOut: 0,
+        exchangeUSDIn: 0,
+        exchangeUSDOut: 0,
+        recoveriesCount: 0,
+        recoveriesHTG: 0,
+        recoveriesUSD: 0,
+        netHTG: (summaryData.TotalDepositHTG || 0) - (summaryData.TotalWithdrawalHTG || 0),
+        netUSD: (summaryData.TotalDepositUSD || 0) - (summaryData.TotalWithdrawalUSD || 0)
+      };
+      
+      setCashManagementStats(transformedStats);
     } catch (error) {
       console.error('Error loading cash management data:', error);
       toast.error('Erreur lors du chargement des données de caisse');
