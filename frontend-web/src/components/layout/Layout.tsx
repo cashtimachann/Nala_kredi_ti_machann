@@ -39,6 +39,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
   // Base navigation items
   const baseNavigation = [
     { name: 'Tableau de bord', icon: Home, href: '/dashboard', roles: ['all'] },
+    { name: 'Gestion Caisse', icon: DollarSign, href: '/cash-management', roles: ['SuperAdmin', 'Director', 'RegionalManager'] },
     { name: 'Comptes Clients', icon: UserCheck, href: '/client-accounts', roles: ['all'] },
     { name: 'Administrateurs', icon: Shield, href: '/admin/accounts', roles: ['SuperAdmin', 'SystemAdmin'] },
     { name: 'Succursales', icon: Building2, href: '/branches', roles: ['SuperAdmin', 'Director', 'RegionalManager'] },

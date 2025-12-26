@@ -30,6 +30,7 @@ import CurrentAccountReports from './components/admin/CurrentAccountReports';
 import TermSavingsManagement from './components/admin/TermSavingsManagement';
 import LoanManagement from './components/loans/LoanManagement';
 import AdminAccountList from './components/admin/AdminAccountList';
+import SuperAdminCashManagement from './components/admin/SuperAdminCashManagement';
 import ClientCreatePage from './pages/ClientCreatePage';
 import { UserInfo } from './services';
 import apiService from './services/apiService';
@@ -206,6 +207,20 @@ function App() {
               user ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <BranchManagement />
+                </Layout>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+
+          {/* Cash Management Route (SuperAdmin) */}
+          <Route
+            path="/cash-management"
+            element={
+              user ? (
+                <Layout user={user} onLogout={handleLogout}>
+                  <SuperAdminCashManagement />
                 </Layout>
               ) : (
                 <Navigate to="/login" replace />
