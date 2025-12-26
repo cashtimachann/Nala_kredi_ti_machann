@@ -517,6 +517,30 @@ public class CashSessionController : ControllerBase
                 return BadRequest(new { message = "Ce caissier a déjà une session ouverte" });
             }
 
+            // Validate that opening balance does not exceed branch available balance
+            int branchId = cashier.BranchId ?? 0;
+            if (branchId > 0)
+            {
+                // Calculate branch available balance (deposits - withdrawals - already allocated to open sessions)
+                var branchBalance = await CalculateBranchAvailableBalanceAsync(branchId);
+                
+                if (model.OpeningBalanceHTG > branchBalance.AvailableHTG)
+                {
+                    return BadRequest(new 
+                    { 
+                        message = $"Le montant d'ouverture HTG ({model.OpeningBalanceHTG:N2}) dépasse le solde disponible de la succursale ({branchBalance.AvailableHTG:N2})" 
+                    });
+                }
+                
+                if (model.OpeningBalanceUSD > branchBalance.AvailableUSD)
+                {
+                    return BadRequest(new 
+                    { 
+                        message = $"Le montant d'ouverture USD ({model.OpeningBalanceUSD:N2}) dépasse le solde disponible de la succursale ({branchBalance.AvailableUSD:N2})" 
+                    });
+                }
+            }
+
             var cashSession = new CashSession
             {
                 UserId = model.CashierId,
@@ -707,6 +731,97 @@ public class CashSessionController : ControllerBase
             _logger.LogError(ex, "Error getting cash session reports for branch {BranchId}", branchId);
             return StatusCode(500, new { message = "Erreur lors du chargement des rapports", error = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// Calculate the available balance for a branch (total balance - balance already allocated to open cash sessions)
+    /// </summary>
+    private async Task<(decimal AvailableHTG, decimal AvailableUSD)> CalculateBranchAvailableBalanceAsync(int branchId)
+    {
+        // Helper methods for currency comparison
+        bool IsHTG(object currency) => currency switch
+        {
+            Currency c => c == Currency.HTG,
+            SavingsCurrency sc => sc == SavingsCurrency.HTG,
+            ClientCurrency cc => cc == ClientCurrency.HTG,
+            _ => false
+        };
+
+        bool IsUSD(object currency) => currency switch
+        {
+            Currency c => c == Currency.USD,
+            SavingsCurrency sc => sc == SavingsCurrency.USD,
+            ClientCurrency cc => cc == ClientCurrency.USD,
+            _ => false
+        };
+
+        // Calculate total branch balance (deposits - withdrawals)
+        var baseTx = await _context.Transactions
+            .Where(t => t.BranchId == branchId && t.Status == TransactionStatus.Completed)
+            .ToListAsync();
+
+        var savingsTx = await _context.SavingsTransactions
+            .Where(t => t.BranchId == branchId && t.Status == SavingsTransactionStatus.Completed)
+            .ToListAsync();
+
+        var currentTx = await _context.CurrentAccountTransactions
+            .Where(t => t.BranchId == branchId && t.Status == SavingsTransactionStatus.Completed)
+            .ToListAsync();
+
+        var termTx = await _context.TermSavingsTransactions
+            .Where(t => t.BranchId == branchId && t.Status == SavingsTransactionStatus.Completed)
+            .ToListAsync();
+
+        var transfers = await _context.InterBranchTransfers
+            .Where(t => (t.FromBranchId == branchId || t.ToBranchId == branchId) && t.Status == TransferStatus.Completed)
+            .ToListAsync();
+
+        // Calculate HTG balance
+        var htgDeposits = 0m
+            + baseTx.Where(t => t.Type == TransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
+            + savingsTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
+            + currentTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
+            + termTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
+            + transfers.Where(t => t.ToBranchId == branchId && IsHTG(t.Currency)).Sum(t => t.Amount);
+
+        var htgWithdrawals = 0m
+            + baseTx.Where(t => t.Type == TransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
+            + savingsTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
+            + currentTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
+            + termTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
+            + transfers.Where(t => t.FromBranchId == branchId && IsHTG(t.Currency)).Sum(t => t.Amount);
+
+        // Calculate USD balance
+        var usdDeposits = 0m
+            + baseTx.Where(t => t.Type == TransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
+            + savingsTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
+            + currentTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
+            + termTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
+            + transfers.Where(t => t.ToBranchId == branchId && IsUSD(t.Currency)).Sum(t => t.Amount);
+
+        var usdWithdrawals = 0m
+            + baseTx.Where(t => t.Type == TransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)
+            + savingsTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)
+            + currentTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)
+            + termTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)
+            + transfers.Where(t => t.FromBranchId == branchId && IsUSD(t.Currency)).Sum(t => t.Amount);
+
+        var totalBalanceHTG = htgDeposits - htgWithdrawals;
+        var totalBalanceUSD = usdDeposits - usdWithdrawals;
+
+        // Calculate balance already allocated to open cash sessions
+        var openSessions = await _context.CashSessions
+            .Where(cs => cs.BranchId == branchId && cs.Status == CashSessionStatus.Open)
+            .ToListAsync();
+
+        var allocatedHTG = openSessions.Sum(cs => cs.OpeningBalanceHTG);
+        var allocatedUSD = openSessions.Sum(cs => cs.OpeningBalanceUSD);
+
+        // Available balance = total balance - allocated balance
+        var availableHTG = totalBalanceHTG - allocatedHTG;
+        var availableUSD = totalBalanceUSD - allocatedUSD;
+
+        return (availableHTG, availableUSD);
     }
 }
 
