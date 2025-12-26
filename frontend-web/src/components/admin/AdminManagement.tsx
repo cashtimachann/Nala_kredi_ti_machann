@@ -11,7 +11,7 @@ import {
   AdminCreateRequest,
   AdminUpdateRequest
 } from '../../types/admin';
-import { Branch, BranchStatus } from '../../types/branch';
+import { Branch, BranchStatus, isBranchActive } from '../../types/branch';
 import AdminForm from './AdminForm';
 import apiService from '../../services/apiService';
 import toast from 'react-hot-toast';
@@ -54,8 +54,8 @@ const AdminManagement: React.FC<AdminManagementProps> = () => {
 
   const loadBranches = async () => {
     try {
-      const branchData = await apiService.getAllBranches();
-      setBranches(branchData.filter(b => b.status === BranchStatus.Active));
+        const branchData = await apiService.getAllBranches();
+        setBranches(branchData.filter(b => isBranchActive(b.status)));
     } catch (error) {
       console.error('Error loading branches:', error);
       toast.error('Erreur lors du chargement des succursales');

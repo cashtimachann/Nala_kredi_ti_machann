@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiService from '../../services/apiService';
-import { Branch, BranchStatus } from '../../types/branch';
+import { Branch, BranchStatus, isBranchActive } from '../../types/branch';
 import { useAuthStore } from '../../stores/authStore';
 
 const normalizeRole = (role?: string) =>
@@ -120,7 +120,7 @@ const AdminAccountCreation: React.FC<AdminAccountCreationProps> = ({
     const loadBranches = async () => {
       try {
         const branchData = await apiService.getAllBranches();
-        const activeBranches = branchData.filter(b => b.status === BranchStatus.Active);
+        const activeBranches = branchData.filter(b => isBranchActive(b.status));
 
         if (isBranchManager && hasManagerBranch) {
           const managerBranch = activeBranches.find(b => Number(b.id) === managerBranchId);

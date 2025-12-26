@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Users,
   Search,
@@ -120,6 +120,7 @@ interface AdminAccount {
   assignedBranches?: string[];
   assignedBranchIds?: string[];
   lastLogin?: string;
+  branchId?: number;
 }
 
 const AdminAccountList: React.FC = () => {
@@ -152,6 +153,85 @@ const AdminAccountList: React.FC = () => {
   const managerBranchName = currentUser?.branchName || null;
   const branchFilterLocked = isBranchManager && !!managerBranchId;
   const enforcedBranchFilter = branchFilterLocked && managerBranchId ? managerBranchId : branchFilter;
+
+  const normalizeBranchLabel = useCallback((value?: string | null) => {
+    if (!value) return '';
+    return value.toString().trim().toLowerCase().replace(/\s+/g, ' ');
+  }, []);
+
+  const branchLabelToId = useMemo(() => {
+    const map = new Map<string, number>();
+    branches.forEach(branch => {
+      const normalized = normalizeBranchLabel(branch.name ?? (branch as any).Name ?? '');
+      if (normalized && !map.has(normalized)) {
+        map.set(normalized, branch.id);
+      }
+    });
+    return map;
+  }, [branches, normalizeBranchLabel]);
+
+  const resolveBranchIdForAccount = useCallback((account: AdminAccount): number | undefined => {
+    if (account.branchId) {
+      return account.branchId;
+    }
+
+    if (account.assignedBranchIds?.length) {
+      const numericId = account.assignedBranchIds
+        .map(candidate => {
+          if (candidate === undefined || candidate === null || candidate === '') return undefined;
+          const parsed = Number(candidate);
+          return Number.isFinite(parsed) ? parsed : undefined;
+        })
+        .find((val): val is number => typeof val === 'number');
+      if (numericId !== undefined) {
+        return numericId;
+      }
+    }
+
+    if (account.assignedBranches?.length) {
+      const matchedByName = account.assignedBranches
+        .map(name => branchLabelToId.get(normalizeBranchLabel(name)))
+        .find((id): id is number => typeof id === 'number');
+      if (matchedByName !== undefined) {
+        return matchedByName;
+      }
+    }
+
+    if (isBranchManager && managerBranchId) {
+      const parsed = Number(managerBranchId);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    return undefined;
+  }, [branchLabelToId, normalizeBranchLabel, isBranchManager, managerBranchId]);
+
+  useEffect(() => {
+    if (!branchLabelToId.size || accounts.length === 0) return;
+
+    setAccounts(prevAccounts => {
+      let hasChanges = false;
+      const updated = prevAccounts.map(account => {
+        if (account.branchId || !account.assignedBranches?.length) {
+          return account;
+        }
+
+        const resolved = account.assignedBranches
+          .map(name => branchLabelToId.get(normalizeBranchLabel(name)))
+          .find((id): id is number => typeof id === 'number');
+
+        if (resolved !== undefined) {
+          hasChanges = true;
+          return { ...account, branchId: resolved };
+        }
+
+        return account;
+      });
+
+      return hasChanges ? updated : prevAccounts;
+    });
+  }, [accounts, branchLabelToId, normalizeBranchLabel]);
 
   useEffect(() => {
     if (branchFilterLocked && managerBranchId) {
@@ -229,6 +309,17 @@ const AdminAccountList: React.FC = () => {
           if (id !== undefined && id !== null) {
             branchIds.push(String(id));
           }
+        }
+      });
+    }
+
+    const explicitIds = admin.assignedBranchIds || admin.branchIds || admin.BranchIds || [];
+    if (Array.isArray(explicitIds)) {
+      explicitIds.forEach((value) => {
+        if (value === undefined || value === null) return;
+        const strVal = typeof value === 'string' ? value.trim() : String(value);
+        if (strVal) {
+          branchIds.push(strVal);
         }
       });
     }
@@ -345,7 +436,29 @@ const AdminAccountList: React.FC = () => {
 
         const { branchNames, branchIds } = normalizeAssignedBranches(admin);
 
-        return {
+        const parseBranchId = (value: unknown): number | undefined => {
+          if (value === undefined || value === null || value === '') {
+            return undefined;
+          }
+          const numeric = typeof value === 'number' ? value : Number(value);
+          return Number.isFinite(numeric) ? numeric : undefined;
+        };
+
+        const directBranchId =
+          parseBranchId(admin.branchId) ??
+          parseBranchId(admin.BranchId) ??
+          parseBranchId(admin.branch?.id) ??
+          parseBranchId(admin.branch?.branchId) ??
+          parseBranchId(admin.primaryBranchId) ??
+          parseBranchId(admin.primaryBranch?.id) ??
+          parseBranchId(admin.primaryBranch?.branchId);
+
+        const fallbackBranchId = (() => {
+          const firstNumericId = branchIds.find((id) => /^\d+$/.test(id));
+          return firstNumericId ? Number(firstNumericId) : undefined;
+        })();
+
+        const finalAccount = {
           id: admin.id,
           fullName: admin.fullName,
           email: admin.email,
@@ -356,10 +469,24 @@ const AdminAccountList: React.FC = () => {
           status: admin.isActive ? AdminStatus.Active : AdminStatus.Inactive,
           assignedBranches: branchNames,
           assignedBranchIds: branchIds,
-          lastLogin: admin.lastLogin
+          lastLogin: admin.lastLogin,
+          branchId: directBranchId ?? fallbackBranchId
         };
+
+        // Log each admin for debugging
+        console.log('AdminAccountList - Mapped admin:', {
+          id: admin.id,
+          fullName: admin.fullName,
+          branchId: finalAccount.branchId,
+          assignedBranches: branchNames,
+          assignedBranchIds: branchIds,
+          rawAdmin: admin
+        });
+
+        return finalAccount;
       });
 
+      console.log('AdminAccountList - Total mapped accounts:', mappedAccounts.length);
       setAccounts(mappedAccounts);
     } catch (error: any) {
       console.error('Error loading accounts:', error);
@@ -767,9 +894,13 @@ const AdminAccountList: React.FC = () => {
 
   const handleEdit = (accountId: string) => {
     const account = accounts.find(acc => acc.id === accountId);
-    if (!account) return;
-    
-    setEditingAccount(account);
+    if (!account) {
+      toast.error('Compte introuvable');
+      return;
+    }
+
+    const resolvedBranchId = resolveBranchIdForAccount(account);
+    setEditingAccount({ ...account, branchId: resolvedBranchId });
     setShowEditModal(true);
   };
 
@@ -809,7 +940,11 @@ const AdminAccountList: React.FC = () => {
             phone: editingAccount.phone,
             department: editingAccount.department,
             adminType: editingAccount.adminType,
-            hireDate: editingAccount.hireDate  // ADD THIS!
+            hireDate: editingAccount.hireDate,
+            branchId: editingAccount.branchId,
+            // Pass assigned branches (names and explicit ids) so the modal can resolve when branchId is missing
+            assignedBranches: (editingAccount as any).assignedBranches || [],
+            assignedBranchIds: (editingAccount as any).assignedBranchIds || (editingAccount as any).branchIds || []
           }}
           onSuccess={handleEditSuccess}
           onCancel={handleEditCancel}

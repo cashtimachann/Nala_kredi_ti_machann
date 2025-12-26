@@ -15,10 +15,18 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiService } from '../../services/apiService';
-import { Branch, BranchStatus } from '../../types/branch';
+import { Branch, BranchStatus, isBranchActive } from '../../types/branch';
 import { useAuthStore } from '../../stores/authStore';
 const normalizeRole = (role?: string) =>
   role ? role.toLowerCase().replace(/[\s_-]+/g, '') : '';
+
+const parseBranchIdValue = (value: unknown): number | undefined => {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
+};
 
 const BRANCH_MANAGER_ROLE_KEYS = new Set<string>([
   'manager',
@@ -60,7 +68,10 @@ interface EditAdminModalProps {
     phone: string;
     department: string;
     adminType: AdminType;
-    hireDate?: string;  // ADD THIS
+    hireDate?: string;
+    branchId?: number;
+    assignedBranches?: string[];
+    assignedBranchIds?: string[];
   };
   onSuccess: () => void;
   onCancel: () => void;
@@ -74,10 +85,17 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [resolvedOnce, setResolvedOnce] = useState<boolean>(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const currentUser = useAuthStore(state => state.user);
+
+  // Reset resolvedOnce when userId changes (new user being edited)
+  useEffect(() => {
+    console.log('EditAdminModal - User changed, resetting resolvedOnce flag for userId:', userId);
+    setResolvedOnce(false);
+  }, [userId]);
   const normalizedRole = normalizeRole(currentUser?.role);
   const isBranchManager = BRANCH_MANAGER_ROLE_KEYS.has(normalizedRole);
   const managerBranchIdRaw = currentUser?.branchId ?? null;
@@ -91,6 +109,9 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({
     handleSubmit,
     setValue,
     clearErrors,
+    getValues,
+    watch,
+    reset,
     formState: { errors }
   } = useForm<EditAdminFormData>({
     defaultValues: {
@@ -100,9 +121,33 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({
       phone: currentData.phone,
       department: currentData.department,
       adminType: currentData.adminType,
-      branchId: isBranchManager && hasManagerBranch ? managerBranchId || undefined : undefined
+      branchId: undefined // Will be set after branches load
     }
   });
+
+  // Reset form when currentData changes (new user being edited)
+  useEffect(() => {
+    console.log('EditAdminModal - Resetting form for new user data');
+    reset({
+      firstName: currentData.fullName.split(' ')[0],
+      lastName: currentData.fullName.split(' ').slice(1).join(' '),
+      email: currentData.email,
+      phone: currentData.phone,
+      department: currentData.department,
+      adminType: currentData.adminType,
+      branchId: undefined // Will be set after branches load
+    });
+  }, [userId, reset, currentData]);
+
+  // Add console logging for debugging
+  useEffect(() => {
+    console.log('EditAdminModal - currentData:', {
+      branchId: currentData.branchId,
+      assignedBranches: currentData.assignedBranches,
+      assignedBranchIds: currentData.assignedBranchIds,
+      fullName: currentData.fullName
+    });
+  }, [currentData]);
 
   const adminTypes = [
     { value: AdminType.CAISSIER, label: 'Caissier' },
@@ -139,26 +184,199 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({
     ...(isBranchManager && hasManagerBranch ? {} : { required: 'La succursale est requise' })
   }), [isBranchManager, hasManagerBranch]);
 
-  useEffect(() => {
-    if (isBranchManager && hasManagerBranch && typeof managerBranchId === 'number') {
-      setValue('branchId', managerBranchId, { shouldValidate: true, shouldDirty: false });
-      clearErrors('branchId');
-    }
-  }, [isBranchManager, hasManagerBranch, managerBranchId, setValue, clearErrors]);
-
-  // Load branches
+  // Load branches (reruns when auth/role info hydrates)
   useEffect(() => {
     const loadBranches = async () => {
+      console.log('EditAdminModal - Starting to load branches...');
       try {
-        const branchData = await apiService.getAllBranches();
-        setBranches(branchData.filter(b => b.status === BranchStatus.Active));
+        const raw = await apiService.getAllBranches();
+        console.log('EditAdminModal - Raw branches response:', raw);
+        
+        // Robustly extract branches whether the API returns an array or wraps it
+        const extractCandidates = (payload: any): any[] => {
+          if (Array.isArray(payload)) return payload;
+          if (payload && typeof payload === 'object') {
+            const keys = ['branches', 'items', 'data', 'results', 'result'];
+            for (const k of keys) {
+              const v = (payload as any)[k];
+              if (Array.isArray(v)) return v;
+            }
+          }
+          return [];
+        };
+        const candidates = extractCandidates(raw);
+        console.log('EditAdminModal - Extracted candidates:', candidates);
+        
+        // Normalize minimal fields needed for UI
+        const normalized = candidates.map((b: any) => ({
+          id: b.id ?? b.Id ?? b.branchId ?? b.BranchId,
+          name: b.name ?? b.Name ?? `Succursale ${b.id ?? b.Id ?? ''}`,
+          code: b.code ?? b.Code ?? '',
+          commune: b.commune ?? b.Commune ?? '',
+          department: b.department ?? b.Department ?? '',
+          status: b.status ?? b.Status ?? 'Active'
+        })).filter((b: any) => b.id != null);
+
+        console.log('EditAdminModal - Normalized branches:', normalized);
+
+        const active = normalized.filter((b: any) => isBranchActive(b.status)) as any;
+        console.log('EditAdminModal - Active branches:', active);
+        
+        if (active.length) {
+          setBranches(active as any);
+        } else {
+          // If none marked active, still show all normalized branches to avoid empty select
+          if (normalized.length) {
+            setBranches(normalized as any);
+          }
+          // Fallback: if user is branch manager, attempt to fetch his branch directly
+          if (isBranchManager && hasManagerBranch && typeof managerBranchId === 'number') {
+            try {
+              const single = await apiService.getBranchById(managerBranchId);
+              setBranches([single] as any);
+            } catch (e) {
+              console.warn('Fallback getBranchById failed:', e);
+              if (!normalized.length) setBranches([]);
+            }
+          } else {
+            if (!normalized.length) setBranches([]);
+          }
+        }
+
+        // Now that branches are loaded, resolve the branchId
+        const currentFormBranch = parseBranchIdValue(getValues('branchId'));
+        console.log('EditAdminModal - Current form branchId before resolution:', currentFormBranch);
+        console.log('EditAdminModal - resolvedOnce flag:', resolvedOnce);
+        console.log('EditAdminModal - currentData.branchId:', currentData.branchId);
+        
+        // Check if we need to resolve: either not resolved yet, or branchId is empty, or doesn't match currentData
+        const parsedCurrentData = parseBranchIdValue(currentData.branchId);
+        const needsResolution = !resolvedOnce || 
+                               currentFormBranch === undefined || 
+                               currentFormBranch === null ||
+                               (parsedCurrentData !== undefined && currentFormBranch !== parsedCurrentData);
+        
+        console.log('EditAdminModal - needsResolution:', needsResolution, {
+          notResolvedYet: !resolvedOnce,
+          branchIdEmpty: currentFormBranch === undefined || currentFormBranch === null,
+          mismatch: parsedCurrentData !== undefined && currentFormBranch !== parsedCurrentData
+        });
+        
+        if (needsResolution) {
+          console.log('EditAdminModal - Starting branch resolution...');
+          
+          // Priority 1: If branch manager, use their branch
+          if (isBranchManager && hasManagerBranch && typeof managerBranchId === 'number') {
+            console.log('EditAdminModal: Setting branch manager branch ->', managerBranchId);
+            setValue('branchId', managerBranchId, { shouldValidate: true, shouldDirty: false });
+            clearErrors('branchId');
+            setResolvedOnce(true);
+            return;
+          }
+
+          // Priority 2: Check if currentData.branchId is already valid
+          const parsedCurrent = parseBranchIdValue(currentData.branchId);
+          console.log('EditAdminModal - Parsed currentData.branchId:', parsedCurrent);
+          if (parsedCurrent !== undefined && parsedCurrent !== null) {
+            console.log('EditAdminModal: Using currentData.branchId ->', parsedCurrent);
+            setValue('branchId', parsedCurrent, { shouldValidate: true, shouldDirty: false });
+            clearErrors('branchId');
+            setResolvedOnce(true);
+            return;
+          }
+
+          // Priority 3: Try explicit ids from assignedBranchIds
+          console.log('EditAdminModal - Checking assignedBranchIds:', currentData.assignedBranchIds);
+          const explicitIds = (currentData.assignedBranchIds || [])
+            .map((v) => {
+              const n = typeof v === 'number' ? v : Number(v);
+              return Number.isFinite(n) ? n : undefined;
+            })
+            .find((v): v is number => typeof v === 'number');
+
+          if (explicitIds !== undefined) {
+            console.log('EditAdminModal: resolved branchId from assignedBranchIds ->', explicitIds);
+            setValue('branchId', explicitIds, { shouldValidate: true, shouldDirty: false });
+            clearErrors('branchId');
+            setResolvedOnce(true);
+            return;
+          }
+
+          // Priority 4: Try matching by name from assignedBranches
+          console.log('EditAdminModal - Checking assignedBranches:', currentData.assignedBranches);
+          if (Array.isArray(currentData.assignedBranches) && currentData.assignedBranches.length && normalized.length) {
+            const normalizeStr = (s?: string) =>
+              (s || '')
+                .toString()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, ' ');
+
+            for (const name of currentData.assignedBranches) {
+              const target = normalizeStr(name);
+              console.log('EditAdminModal - Looking for branch matching:', name, '(normalized:', target + ')');
+              const matched = normalized.find((b: any) => {
+                const matches = normalizeStr(b.name) === target || 
+                               normalizeStr(b.code) === target || 
+                               normalizeStr(String(b.id)) === target || 
+                               (b.name && normalizeStr(b.name).includes(target));
+                if (matches) {
+                  console.log('EditAdminModal - Found match:', b);
+                }
+                return matches;
+              });
+              if (matched && matched.id !== undefined && matched.id !== null) {
+                console.log('EditAdminModal: resolved branchId from assignedBranches name ->', name, '=>', matched.id);
+                setValue('branchId', Number(matched.id), { shouldValidate: true, shouldDirty: false });
+                clearErrors('branchId');
+                setResolvedOnce(true);
+                return;
+              }
+            }
+          }
+
+          // Priority 5: Last resort - preselect first available branch to avoid empty selection
+          console.log('EditAdminModal - No branch found, checking first available...');
+          if ((currentFormBranch === undefined || currentFormBranch === null)) {
+            const list = (active.length ? active : normalized) as any[];
+            const first = list[0];
+            if (first && first.id != null) {
+              console.log('EditAdminModal: No branch found, using first available ->', first);
+              setValue('branchId', Number(first.id), { shouldValidate: true, shouldDirty: false });
+              clearErrors('branchId');
+              setResolvedOnce(true);
+            } else {
+              console.warn('EditAdminModal: No branches available at all!');
+            }
+          }
+        } else {
+          console.log('EditAdminModal - Skipping resolution, already resolved:', currentFormBranch);
+        }
       } catch (error) {
         console.error('Error loading branches:', error);
+        // Try a minimal fallback for branch managers
+        if (isBranchManager && hasManagerBranch && typeof managerBranchId === 'number') {
+          try {
+            const single = await apiService.getBranchById(managerBranchId);
+            setBranches([single] as any);
+            setValue('branchId', managerBranchId, { shouldValidate: true, shouldDirty: false });
+            clearErrors('branchId');
+            setResolvedOnce(true);
+          } catch (e) {
+            console.warn('Fallback getBranchById failed after error:', e);
+            setBranches([]);
+          }
+        } else {
+          setBranches([]);
+        }
       }
     };
-    
+
     loadBranches();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]); // Only re-run when userId changes (new user being edited)
 
   const onSubmit: SubmitHandler<EditAdminFormData> = async (data) => {
     try {
@@ -440,6 +658,7 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({
                 <div className="relative">
                   <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <select
+                    key={`branch-select-${userId}-${watch('branchId')}`}
                     {...register('branchId', branchRegisterOptions)}
                     disabled={isBranchManager && hasManagerBranch}
                     className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none ${
@@ -448,7 +667,7 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({
                   >
                     <option value="">Sélectionner une succursale</option>
                     {branchOptions.map((branch) => (
-                      <option key={branch.id} value={branch.id}>
+                      <option key={branch.id} value={Number(branch.id)}>
                         {branch.name} - {branch.commune || branch.department}
                       </option>
                     ))}

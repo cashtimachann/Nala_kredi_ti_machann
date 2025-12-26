@@ -8,8 +8,7 @@ BEGIN
         SELECT 1 FROM information_schema.columns 
         WHERE table_name = 'SavingsAccounts' AND column_name = 'SuspendedAt'
     ) THEN
-        ALTER TABLE "SavingsAccounts" ADD COLUMN "SuspendedAt" timestamp without time zone;
-        RAISE NOTICE 'Added SuspendedAt column';
+     ndedAt column';
     END IF;
 
     -- Add SuspendedBy

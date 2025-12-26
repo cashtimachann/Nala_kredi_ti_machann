@@ -25,7 +25,7 @@ import {
   FileText
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { Branch, BranchStatus } from '../../types/branch';
+import { Branch, BranchStatus, isBranchActive, isBranchInactive, isBranchUnderConstruction } from '../../types/branch';
 import apiService from '../../services/apiService';
 import BranchForm from './BranchForm';
 import BranchDetailsModal from './BranchDetailsModal';
@@ -110,7 +110,7 @@ const BranchManagement: React.FC<BranchManagementProps> = () => {
 
   const handleToggleBranchStatus = async (branch: Branch) => {
     try {
-      if (branch.status === BranchStatus.Active) {
+      if (isBranchActive(branch.status)) {
         await apiService.deactivateBranch(branch.id);
         toast.success('Succursale désactivée');
       } else {
@@ -183,31 +183,21 @@ const BranchManagement: React.FC<BranchManagementProps> = () => {
     setCurrentPage(1);
   }, [debouncedSearchTerm, statusFilter]);
 
-  const getStatusBadge = (status: BranchStatus) => {
-    const configs = {
-      [BranchStatus.Active]: { 
-        bg: 'bg-green-100', 
-        text: 'text-green-800', 
-        label: 'Active' 
-      },
-      [BranchStatus.Inactive]: { 
-        bg: 'bg-red-100', 
-        text: 'text-red-800', 
-        label: 'Inactive' 
-      },
-      [BranchStatus.UnderConstruction]: { 
-        bg: 'bg-yellow-100', 
-        text: 'text-yellow-800', 
-        label: 'En construction' 
-      }
-    };
-    
-    const config = configs[status];
-    return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
-        {config.label}
-      </span>
-    );
+  const getStatusBadge = (status: BranchStatus | string) => {
+    // Use robust helpers to determine status even if backend uses different case
+    if (isBranchActive(status)) {
+      return <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>;
+    }
+
+    if (isBranchInactive(status)) {
+      return <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Inactive</span>;
+    }
+
+    if (isBranchUnderConstruction(status)) {
+      return <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">En construction</span>;
+    }
+
+    return <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">{String(status)}</span>;
   };
 
   const formatCurrency = (amount: number, currency: string = 'HTG') => {
@@ -325,26 +315,21 @@ const BranchManagement: React.FC<BranchManagementProps> = () => {
           </style>
         </head>
         <body>
-          <div class="header">
-            <h1>📍 NALA KREDI - Liste des Succursales</h1>
-            <p>Rapport généré le ${today}</p>
-          </div>
-
           <div class="summary">
-            <div class="summary-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <div class="summary-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 8px; text-align: center;">
               <h3>${branches.length}</h3>
               <p>Total Succursales</p>
             </div>
             <div class="summary-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-              <h3>${branches.filter(b => b.status === BranchStatus.Active).length}</h3>
+              <h3>${branches.filter(b => isBranchActive(b.status)).length}</h3>
               <p>Actives</p>
             </div>
             <div class="summary-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
-              <h3>${branches.filter(b => b.status === BranchStatus.Inactive).length}</h3>
+              <h3>${branches.filter(b => isBranchInactive(b.status)).length}</h3>
               <p>Inactives</p>
             </div>
             <div class="summary-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
-              <h3>${branches.filter(b => b.status === BranchStatus.UnderConstruction).length}</h3>
+              <h3>${branches.filter(b => isBranchUnderConstruction(b.status)).length}</h3>
               <p>En Construction</p>
             </div>
           </div>
@@ -383,8 +368,8 @@ const BranchManagement: React.FC<BranchManagementProps> = () => {
                     <div style="font-size: 10px;">${branch.email}</div>
                     <div style="color: #6b7280; font-size: 10px;">${branch.phones[0] || 'N/A'}</div>
                   </td>
-                  <td class="status-${branch.status === BranchStatus.Active ? 'active' : branch.status === BranchStatus.Inactive ? 'inactive' : 'construction'}">
-                    ${branch.status === BranchStatus.Active ? '✓ Active' : branch.status === BranchStatus.Inactive ? '✗ Inactive' : '🔨 Construction'}
+                  <td class="status-${isBranchActive(branch.status) ? 'active' : isBranchInactive(branch.status) ? 'inactive' : 'construction'}">
+                    ${isBranchActive(branch.status) ? '✓ Active' : isBranchInactive(branch.status) ? '✗ Inactive' : '🔨 Construction'}
                   </td>
                   <td>${new Date(branch.openingDate).toLocaleDateString('fr-FR')}</td>
                   <td style="font-size: 10px;">
@@ -598,7 +583,7 @@ const BranchManagement: React.FC<BranchManagementProps> = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Succursales Actives</p>
               <p className="text-2xl font-bold text-green-600">
-                {branches.filter(b => b.status === BranchStatus.Active).length}
+                {branches.filter(b => isBranchActive(b.status)).length}
               </p>
             </div>
             <div className="p-3 bg-green-100 rounded-full">
@@ -612,7 +597,7 @@ const BranchManagement: React.FC<BranchManagementProps> = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Succursales Inactives</p>
               <p className="text-2xl font-bold text-red-600">
-                {branches.filter(b => b.status === BranchStatus.Inactive).length}
+                {branches.filter(b => isBranchInactive(b.status)).length}
               </p>
             </div>
             <div className="p-3 bg-red-100 rounded-full">
@@ -626,7 +611,7 @@ const BranchManagement: React.FC<BranchManagementProps> = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">En Construction</p>
               <p className="text-2xl font-bold text-yellow-600">
-                {branches.filter(b => b.status === BranchStatus.UnderConstruction).length}
+                {branches.filter(b => isBranchUnderConstruction(b.status)).length}
               </p>
             </div>
             <div className="p-3 bg-yellow-100 rounded-full">
@@ -758,13 +743,13 @@ const BranchManagement: React.FC<BranchManagementProps> = () => {
                       <button
                         onClick={() => handleToggleBranchStatus(branch)}
                         className={`p-2 rounded-lg transition-colors ${
-                          branch.status === BranchStatus.Active
+                          isBranchActive(branch.status)
                             ? 'bg-red-100 text-red-600 hover:bg-red-200'
                             : 'bg-green-100 text-green-600 hover:bg-green-200'
                         }`}
-                        title={branch.status === BranchStatus.Active ? 'Désactiver' : 'Activer'}
+                        title={isBranchActive(branch.status) ? 'Désactiver' : 'Activer'}
                       >
-                        {branch.status === BranchStatus.Active ? (
+                        {isBranchActive(branch.status) ? (
                           <PowerOff className="h-4 w-4" />
                         ) : (
                           <Power className="h-4 w-4" />

@@ -13,7 +13,7 @@ import {
   AdminLevel,
   AdminProfile
 } from '../../types/admin';
-import { Branch, BranchStatus } from '../../types/branch';
+import { Branch, BranchStatus, isBranchActive } from '../../types/branch';
 
 interface AdminFormProps {
   onSubmit: (data: AdminFormData) => void;
@@ -195,7 +195,7 @@ const AdminForm: React.FC<AdminFormProps> = ({
     return ADMIN_PERMISSIONS[type] || null;
   };
 
-  const activeBranches = branches.filter(b => b.status === BranchStatus.Active);
+  const activeBranches = branches.filter(b => isBranchActive(b.status));
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">

@@ -18,7 +18,7 @@ import {
   XCircle,
   AlertCircle
 } from 'lucide-react';
-import { Branch, BranchStatus } from '../../types/branch';
+import { Branch, BranchStatus, isBranchActive, isBranchInactive, isBranchUnderConstruction } from '../../types/branch';
 import apiService from '../../services/apiService';
 import toast from 'react-hot-toast';
 
@@ -183,35 +183,37 @@ const BranchDetailsModal: React.FC<BranchDetailsModalProps> = ({
     });
   };
 
-  const getStatusBadge = (status: BranchStatus) => {
-    const configs = {
-      [BranchStatus.Active]: { 
-        bg: 'bg-green-100', 
-        text: 'text-green-800', 
-        icon: CheckCircle,
-        label: 'Active' 
-      },
-      [BranchStatus.Inactive]: { 
-        bg: 'bg-red-100', 
-        text: 'text-red-800',
-        icon: XCircle, 
-        label: 'Inactive' 
-      },
-      [BranchStatus.UnderConstruction]: { 
-        bg: 'bg-yellow-100', 
-        text: 'text-yellow-800',
-        icon: AlertCircle, 
-        label: 'En construction' 
-      }
-    };
-    
-    const config = configs[status];
-    const Icon = config.icon;
-    
+  const getStatusBadge = (status: BranchStatus | string) => {
+    if (isBranchActive(status)) {
+      return (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+          <CheckCircle className="h-4 w-4 mr-1" />
+          Active
+        </span>
+      );
+    }
+
+    if (isBranchInactive(status)) {
+      return (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+          <XCircle className="h-4 w-4 mr-1" />
+          Inactive
+        </span>
+      );
+    }
+
+    if (isBranchUnderConstruction(status)) {
+      return (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
+          <AlertCircle className="h-4 w-4 mr-1" />
+          En construction
+        </span>
+      );
+    }
+
     return (
-      <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${config.bg} ${config.text}`}>
-        <Icon className="h-4 w-4 mr-1" />
-        {config.label}
+      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700">
+        {String(status)}
       </span>
     );
   };

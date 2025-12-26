@@ -24,6 +24,38 @@ export enum BranchStatus {
   UnderConstruction = 'UnderConstruction'
 }
 
+/**
+ * Robust check for an "active" branch status.
+ * Backend may return different case variants (e.g. 'ACTIVE'), so normalize.
+ */
+export const isBranchActive = (status?: BranchStatus | string): boolean => {
+  if (status === undefined || status === null || status === '') return false;
+  try {
+    return String(status).toLowerCase() === 'active';
+  } catch {
+    return false;
+  }
+};
+
+export const isBranchInactive = (status?: BranchStatus | string): boolean => {
+  if (status === undefined || status === null || status === '') return false;
+  try {
+    return String(status).toLowerCase() === 'inactive';
+  } catch {
+    return false;
+  }
+};
+
+export const isBranchUnderConstruction = (status?: BranchStatus | string): boolean => {
+  if (status === undefined || status === null || status === '') return false;
+  try {
+    const s = String(status).toLowerCase();
+    return s === 'underconstruction' || s.includes('construction');
+  } catch {
+    return false;
+  }
+};
+
 export interface BranchLimits {
   dailyWithdrawalLimit: number;
   dailyDepositLimit: number;
