@@ -15,14 +15,7 @@ import {
 } from 'lucide-react';
 import apiService from '../../services/apiService';
 import toast from 'react-hot-toast';
-
-interface Branch {
-  id: number;
-  name: string;
-  code: string;
-  region: string;
-  isActive: boolean;
-}
+import { Branch } from '../../types/branch';
 
 interface CashSession {
   id: number;
@@ -116,7 +109,7 @@ const SuperAdminCashManagement: React.FC = () => {
   const loadBranches = async () => {
     try {
       const data = await apiService.getAllBranches();
-      setBranches(data.filter((b: Branch) => b.isActive));
+      setBranches(data.filter((b) => b.status === 'Active'));
       if (data.length > 0 && !selectedBranchId) {
         setSelectedBranchId(data[0].id);
       }
@@ -264,7 +257,7 @@ const SuperAdminCashManagement: React.FC = () => {
           <option value="">-- Choisir une succursale --</option>
           {branches.map((branch) => (
             <option key={branch.id} value={branch.id}>
-              {branch.name} ({branch.code}) - {branch.region}
+              {branch.name} ({branch.code}) - {branch.department}
             </option>
           ))}
         </select>
