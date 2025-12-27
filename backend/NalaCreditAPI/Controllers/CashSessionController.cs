@@ -734,6 +734,97 @@ public class CashSessionController : ControllerBase
     }
 
     /// <summary>
+    /// Ajouter des fonds à une succursale (SuperAdmin uniquement)
+    /// POST /api/cashsession/branch/{branchId}/add-funds
+    /// </summary>
+    [HttpPost("branch/{branchId}/add-funds")]
+    [Authorize(Roles = "SuperAdmin")]
+    public async Task<ActionResult> AddFundsToBranch(int branchId, [FromBody] AddFundsToBranchDto model)
+    {
+        try
+        {
+            var superAdminId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            
+            // Verify branch exists
+            var branch = await _context.Branches.FindAsync(branchId);
+            if (branch == null)
+            {
+                return NotFound(new { message = "Succursale non trouvée" });
+            }
+
+            // Validate amounts
+            if (model.AmountHTG < 0 || model.AmountUSD < 0)
+            {
+                return BadRequest(new { message = "Les montants doivent être positifs" });
+            }
+
+            if (model.AmountHTG == 0 && model.AmountUSD == 0)
+            {
+                return BadRequest(new { message = "Au moins un montant doit être supérieur à zéro" });
+            }
+
+            // Create deposit transactions to represent fund addition
+            var transactions = new List<Transaction>();
+
+            if (model.AmountHTG > 0)
+            {
+                var transactionHTG = new Transaction
+                {
+                    BranchId = branchId,
+                    Type = TransactionType.Deposit,
+                    Currency = Currency.HTG,
+                    Amount = model.AmountHTG,
+                    Description = $"Ajout de fonds par SuperAdmin: {model.Notes ?? "Approvisionnement succursale"}",
+                    TransactionDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                    Status = TransactionStatus.Completed,
+                    CreatedBy = superAdminId,
+                    CreatedAt = DateTime.UtcNow
+                };
+                transactions.Add(transactionHTG);
+                _context.Transactions.Add(transactionHTG);
+            }
+
+            if (model.AmountUSD > 0)
+            {
+                var transactionUSD = new Transaction
+                {
+                    BranchId = branchId,
+                    Type = TransactionType.Deposit,
+                    Currency = Currency.USD,
+                    Amount = model.AmountUSD,
+                    Description = $"Ajout de fonds par SuperAdmin: {model.Notes ?? "Approvisionnement succursale"}",
+                    TransactionDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                    Status = TransactionStatus.Completed,
+                    CreatedBy = superAdminId,
+                    CreatedAt = DateTime.UtcNow
+                };
+                transactions.Add(transactionUSD);
+                _context.Transactions.Add(transactionUSD);
+            }
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Funds added to branch {BranchId} by SuperAdmin {SuperAdminId}: HTG={AmountHTG}, USD={AmountUSD}", 
+                branchId, superAdminId, model.AmountHTG, model.AmountUSD);
+
+            return Ok(new
+            {
+                message = "Fonds ajoutés avec succès",
+                branchId = branchId,
+                branchName = branch.Name,
+                amountHTG = model.AmountHTG,
+                amountUSD = model.AmountUSD,
+                transactionIds = transactions.Select(t => t.Id).ToList()
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding funds to branch {BranchId}", branchId);
+            return StatusCode(500, new { message = "Erreur lors de l'ajout de fonds", error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Calculate the available balance for a branch (total balance - balance already allocated to open cash sessions)
     /// </summary>
     private async Task<(decimal AvailableHTG, decimal AvailableUSD)> CalculateBranchAvailableBalanceAsync(int branchId)
@@ -836,5 +927,12 @@ public class CloseCashSessionByManagerDto
 {
     public decimal ClosingBalanceHTG { get; set; }
     public decimal ClosingBalanceUSD { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class AddFundsToBranchDto
+{
+    public decimal AmountHTG { get; set; }
+    public decimal AmountUSD { get; set; }
     public string? Notes { get; set; }
 }

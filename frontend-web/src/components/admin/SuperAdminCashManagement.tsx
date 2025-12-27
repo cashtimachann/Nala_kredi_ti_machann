@@ -83,6 +83,7 @@ const SuperAdminCashManagement: React.FC = () => {
   const [showOpenSessionModal, setShowOpenSessionModal] = useState(false);
   const [showCloseSessionModal, setShowCloseSessionModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showAddFundsModal, setShowAddFundsModal] = useState(false);
   
   // Form states
   const [selectedCashier, setSelectedCashier] = useState<string>('');
@@ -93,6 +94,11 @@ const SuperAdminCashManagement: React.FC = () => {
   const [closingNotes, setClosingNotes] = useState<string>('');
   const [sessionToClose, setSessionToClose] = useState<CashSession | null>(null);
   const [sessionDetails, setSessionDetails] = useState<CashSession | null>(null);
+  
+  // Add funds form states
+  const [addFundsHTG, setAddFundsHTG] = useState<string>('');
+  const [addFundsUSD, setAddFundsUSD] = useState<string>('');
+  const [addFundsNotes, setAddFundsNotes] = useState<string>('');
 
   // Load branches on mount
   useEffect(() => {
@@ -240,6 +246,40 @@ const SuperAdminCashManagement: React.FC = () => {
     setShowDetailsModal(true);
   };
 
+  const handleOpenAddFundsModal = () => {
+    setAddFundsHTG('');
+    setAddFundsUSD('');
+    setAddFundsNotes('');
+    setShowAddFundsModal(true);
+  };
+
+  const handleAddFunds = async () => {
+    if (!selectedBranchId) return;
+
+    const htg = parseFloat(addFundsHTG) || 0;
+    const usd = parseFloat(addFundsUSD) || 0;
+
+    if (htg < 0 || usd < 0) {
+      toast.error('Les montants doivent être positifs');
+      return;
+    }
+
+    if (htg === 0 && usd === 0) {
+      toast.error('Au moins un montant doit être supérieur à zéro');
+      return;
+    }
+
+    try {
+      await apiService.addFundsToBranch(selectedBranchId, htg, usd, addFundsNotes);
+      toast.success('Fonds ajoutés avec succès à la succursale');
+      setShowAddFundsModal(false);
+      await loadCashManagementData();
+    } catch (error: any) {
+      console.error('Error adding funds:', error);
+      toast.error(error.response?.data?.message || 'Erreur lors de l\'ajout de fonds');
+    }
+  };
+
   const selectedBranch = branches.find(b => b.id === selectedBranchId);
 
   return (
@@ -343,6 +383,13 @@ const SuperAdminCashManagement: React.FC = () => {
             >
               <Plus className="h-5 w-5" />
               Ouvrir une Caisse
+            </button>
+            <button
+              onClick={handleOpenAddFundsModal}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
+            >
+              <DollarSign className="h-5 w-5" />
+              Ajouter des Fonds
             </button>
           </div>
 
@@ -741,6 +788,89 @@ const SuperAdminCashManagement: React.FC = () => {
                   <p className="text-sm text-gray-700">{sessionDetails.notes}</p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Funds Modal */}
+      {showAddFundsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-t-xl">
+              <h3 className="text-xl font-bold">Ajouter des Fonds</h3>
+              <p className="text-sm text-blue-100 mt-1">{selectedBranch?.name}</p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-blue-900">
+                  <strong>Note:</strong> Les fonds ajoutés seront disponibles immédiatement pour cette succursale. 
+                  Cette action créera une transaction de dépôt dans le système.
+                </p>
+              </div>
+
+              {/* Amount HTG */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Montant HTG
+                </label>
+                <input
+                  type="number"
+                  value={addFundsHTG}
+                  onChange={(e) => setAddFundsHTG(e.target.value)}
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Amount USD */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Montant USD
+                </label>
+                <input
+                  type="number"
+                  value={addFundsUSD}
+                  onChange={(e) => setAddFundsUSD(e.target.value)}
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notes (optionnel)
+                </label>
+                <textarea
+                  value={addFundsNotes}
+                  onChange={(e) => setAddFundsNotes(e.target.value)}
+                  placeholder="Raison de l'ajout de fonds..."
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setShowAddFundsModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleAddFunds}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Ajouter Fonds
+                </button>
+              </div>
             </div>
           </div>
         </div>
