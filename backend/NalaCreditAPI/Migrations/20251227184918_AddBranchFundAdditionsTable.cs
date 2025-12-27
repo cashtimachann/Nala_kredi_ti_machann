@@ -12,11 +12,12 @@ namespace NalaCreditAPI.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<int>(
-                name: "BranchId",
-                table: "CurrencyExchangeRates",
-                type: "integer",
-                nullable: true);
+            // BranchId already exists in CurrencyExchangeRates, skip adding it
+            // migrationBuilder.AddColumn<int>(
+            //     name: "BranchId",
+            //     table: "CurrencyExchangeRates",
+            //     type: "integer",
+            //     nullable: true);
 
             migrationBuilder.CreateTable(
                 name: "BranchFundAdditions",
@@ -67,9 +68,10 @@ namespace NalaCreditAPI.Migrations
             migrationBuilder.DropTable(
                 name: "BranchFundAdditions");
 
-            migrationBuilder.DropColumn(
-                name: "BranchId",
-                table: "CurrencyExchangeRates");
+            // Don't drop BranchId from CurrencyExchangeRates as it existed before this migration
+            // migrationBuilder.DropColumn(
+            //     name: "BranchId",
+            //     table: "CurrencyExchangeRates");
         }
     }
 }
