@@ -630,13 +630,81 @@ public class CashSessionController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error closing cash session {SessionId}", sessionId);
+            _logger.LogError(ex, "Error closing cash session by manager");
             return StatusCode(500, new { message = "Erreur lors de la fermeture de la session", error = ex.Message });
         }
     }
 
     /// <summary>
-    /// Obtenir la liste des caissiers disponibles pour une succursale
+    /// Ajouter des fonds à une session de caisse ouverte (par un manager)
+    /// POST /api/cashsession/{sessionId}/add-funds
+    /// </summary>
+    [HttpPost("{sessionId}/add-funds")]
+    [Authorize(Roles = "Manager,Admin,SuperAdmin")]
+    public async Task<ActionResult> AddFundsToCashSession(int sessionId, [FromBody] AddFundsToCashSessionDto model)
+    {
+        try
+        {
+            var managerId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            var session = await _context.CashSessions
+                .Include(cs => cs.User)
+                .FirstOrDefaultAsync(cs => cs.Id == sessionId);
+
+            if (session == null)
+            {
+                return NotFound(new { message = "Session non trouvée" });
+            }
+
+            if (session.Status != CashSessionStatus.Open)
+            {
+                return BadRequest(new { message = "Cette session n'est pas ouverte" });
+            }
+
+            // Validate amounts
+            if (model.AmountHTG < 0 || model.AmountUSD < 0)
+            {
+                return BadRequest(new { message = "Les montants doivent être positifs" });
+            }
+
+            if (model.AmountHTG == 0 && model.AmountUSD == 0)
+            {
+                return BadRequest(new { message = "Au moins un montant doit être supérieur à zéro" });
+            }
+
+            // Update session opening balance to include the new funds
+            session.OpeningBalanceHTG += model.AmountHTG;
+            session.OpeningBalanceUSD += model.AmountUSD;
+            
+            // Add note about the fund addition
+            var addedFundsNote = $"\n[{DateTime.UtcNow:yyyy-MM-dd HH:mm}] Fonds ajoutés par manager {managerId}: {model.AmountHTG} HTG, {model.AmountUSD} USD. Raison: {model.Notes ?? "N/A"}";
+            session.Notes = (session.Notes ?? "") + addedFundsNote;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Funds added to cash session {SessionId} by manager {ManagerId}: HTG={AmountHTG}, USD={AmountUSD}", 
+                sessionId, managerId, model.AmountHTG, model.AmountUSD);
+
+            return Ok(new
+            {
+                message = "Fonds ajoutés avec succès à la caisse",
+                sessionId = session.Id,
+                cashierName = $"{session.User.FirstName} {session.User.LastName}",
+                newOpeningBalanceHTG = session.OpeningBalanceHTG,
+                newOpeningBalanceUSD = session.OpeningBalanceUSD,
+                amountAddedHTG = model.AmountHTG,
+                amountAddedUSD = model.AmountUSD
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding funds to cash session {SessionId}", sessionId);
+            return StatusCode(500, new { message = "Erreur lors de l'ajout de fonds", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Obtenir les caissiers disponibles pour une succursale
     /// GET /api/cashsession/available-cashiers/{branchId}
     /// </summary>
     [HttpGet("available-cashiers/{branchId}")]
@@ -919,6 +987,13 @@ public class CloseCashSessionByManagerDto
 {
     public decimal ClosingBalanceHTG { get; set; }
     public decimal ClosingBalanceUSD { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class AddFundsToCashSessionDto
+{
+    public decimal AmountHTG { get; set; }
+    public decimal AmountUSD { get; set; }
     public string? Notes { get; set; }
 }
 

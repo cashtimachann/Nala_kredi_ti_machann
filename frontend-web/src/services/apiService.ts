@@ -382,6 +382,15 @@ class ApiService {
     return response.data;
   }
 
+  async addFundsToCashSession(sessionId: number, amountHTG: number, amountUSD: number, notes?: string): Promise<any> {
+    const response = await this.api.post(`/cashsession/${sessionId}/add-funds`, {
+      amountHTG,
+      amountUSD,
+      notes
+    });
+    return response.data;
+  }
+
   async addFundsToBranch(branchId: number, amountHTG: number, amountUSD: number, notes?: string): Promise<any> {
     const response = await this.api.post(`/cashsession/branch/${branchId}/add-funds`, {
       amountHTG,
