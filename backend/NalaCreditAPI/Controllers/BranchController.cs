@@ -716,13 +716,23 @@ namespace NalaCreditAPI.Controllers
                     .Where(t => (t.FromBranchId == id || t.ToBranchId == id) && t.Status == TransferStatus.Completed)
                     .ToListAsync();
 
-                // HTG totals
+                // Get all-time branch fund additions by SuperAdmin
+                var fundAdditions = await _context.BranchFundAdditions
+                    .Where(f => f.BranchId == id)
+                    .ToListAsync();
+
+                // Calculate total SuperAdmin funds
+                var totalFundsHTG = fundAdditions.Sum(f => f.AmountHTG);
+                var totalFundsUSD = fundAdditions.Sum(f => f.AmountUSD);
+
+                // HTG totals (including SuperAdmin funds)
                 var htgDeposits = 0m
                     + baseTx.Where(t => t.Type == TransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
                     + savingsTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
                     + currentTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
                     + termTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
-                    + transfers.Where(t => t.ToBranchId == id && IsHTG(t.Currency)).Sum(t => t.Amount);
+                    + transfers.Where(t => t.ToBranchId == id && IsHTG(t.Currency)).Sum(t => t.Amount)
+                    + totalFundsHTG; // Add SuperAdmin funds
 
                 var htgWithdrawals = 0m
                     + baseTx.Where(t => t.Type == TransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
@@ -731,13 +741,14 @@ namespace NalaCreditAPI.Controllers
                     + termTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
                     + transfers.Where(t => t.FromBranchId == id && IsHTG(t.Currency)).Sum(t => t.Amount);
 
-                // USD totals
+                // USD totals (including SuperAdmin funds)
                 var usdDeposits = 0m
                     + baseTx.Where(t => t.Type == TransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
                     + savingsTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
                     + currentTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
                     + termTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
-                    + transfers.Where(t => t.ToBranchId == id && IsUSD(t.Currency)).Sum(t => t.Amount);
+                    + transfers.Where(t => t.ToBranchId == id && IsUSD(t.Currency)).Sum(t => t.Amount)
+                    + totalFundsUSD; // Add SuperAdmin funds
 
                 var usdWithdrawals = 0m
                     + baseTx.Where(t => t.Type == TransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)
