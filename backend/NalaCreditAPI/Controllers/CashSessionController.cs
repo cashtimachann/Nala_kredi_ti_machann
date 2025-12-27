@@ -432,6 +432,15 @@ public class CashSessionController : ControllerBase
                            t.CreatedAt < tomorrow)
                 .ToListAsync();
 
+            // Get all-time branch fund additions by SuperAdmin
+            var fundAdditions = await _context.BranchFundAdditions
+                .Where(f => f.BranchId == branchId)
+                .ToListAsync();
+
+            // Calculate total branch balance including SuperAdmin funds
+            var totalFundsHTG = fundAdditions.Sum(f => f.AmountHTG);
+            var totalFundsUSD = fundAdditions.Sum(f => f.AmountUSD);
+
             var summary = new
             {
                 Date = today.ToString("yyyy-MM-dd"),
@@ -447,12 +456,13 @@ public class CashSessionController : ControllerBase
                     .Where(s => s.ClosingBalanceUSD.HasValue)
                     .Sum(s => s.ClosingBalanceUSD ?? 0),
                 TotalTransactions = allTransactions.Count,
+                // Include SuperAdmin funds in total deposits
                 TotalDepositHTG = allTransactions
                     .Where(t => t.Type == TransactionType.Deposit && t.Currency == Currency.HTG)
-                    .Sum(t => t.Amount),
+                    .Sum(t => t.Amount) + totalFundsHTG,
                 TotalDepositUSD = allTransactions
                     .Where(t => t.Type == TransactionType.Deposit && t.Currency == Currency.USD)
-                    .Sum(t => t.Amount),
+                    .Sum(t => t.Amount) + totalFundsUSD,
                 TotalWithdrawalHTG = allTransactions
                     .Where(t => t.Type == TransactionType.Withdrawal && t.Currency == Currency.HTG)
                     .Sum(t => t.Amount),
