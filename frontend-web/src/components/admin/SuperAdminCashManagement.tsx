@@ -106,7 +106,6 @@ const SuperAdminCashManagement: React.FC = () => {
   const [addSessionFundsHTG, setAddSessionFundsHTG] = useState<string>('');
   const [addSessionFundsUSD, setAddSessionFundsUSD] = useState<string>('');
   const [addSessionFundsNotes, setAddSessionFundsNotes] = useState<string>('');
-  const [addFundsNotes, setAddFundsNotes] = useState<string>('');
 
   // Load branches on mount
   useEffect(() => {
