@@ -91,6 +91,7 @@ const CashManagement: React.FC<CashManagementProps> = ({ branchId, cashManagemen
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showOpenSessionModal, setShowOpenSessionModal] = useState(false);
   const [showCloseSessionModal, setShowCloseSessionModal] = useState(false);
+  const [showAddFundsModal, setShowAddFundsModal] = useState(false);
   const [availableCashiers, setAvailableCashiers] = useState<Cashier[]>([]);
   const [selectedCashier, setSelectedCashier] = useState<string>('');
   const [openingBalanceHTG, setOpeningBalanceHTG] = useState<string>('');
@@ -99,6 +100,10 @@ const CashManagement: React.FC<CashManagementProps> = ({ branchId, cashManagemen
   const [closingBalanceUSD, setClosingBalanceUSD] = useState<string>('');
   const [closingNotes, setClosingNotes] = useState<string>('');
   const [sessionToClose, setSessionToClose] = useState<CashSession | null>(null);
+  const [sessionToAddFunds, setSessionToAddFunds] = useState<CashSession | null>(null);
+  const [addFundsHTG, setAddFundsHTG] = useState<string>('');
+  const [addFundsUSD, setAddFundsUSD] = useState<string>('');
+  const [addFundsNotes, setAddFundsNotes] = useState<string>('');
 
   useEffect(() => {
     loadCashManagement();
@@ -236,6 +241,51 @@ const CashManagement: React.FC<CashManagementProps> = ({ branchId, cashManagemen
     } catch (error: any) {
       console.error('Error closing session:', error);
       toast.error(error.response?.data?.message || 'Erreur lors de la fermeture de la session');
+    }
+  };
+
+  const handleOpenAddFundsModal = (session: CashSession) => {
+    setSessionToAddFunds(session);
+    setAddFundsHTG('');
+    setAddFundsUSD('');
+    setAddFundsNotes('');
+    setShowAddFundsModal(true);
+  };
+
+  const handleAddFunds = async () => {
+    if (!sessionToAddFunds) return;
+
+    const htg = parseFloat(addFundsHTG) || 0;
+    const usd = parseFloat(addFundsUSD) || 0;
+
+    if (htg <= 0 && usd <= 0) {
+      toast.error('Veuillez entrer un montant positif');
+      return;
+    }
+
+    if (htg < 0 || usd < 0) {
+      toast.error('Les montants doivent être positifs');
+      return;
+    }
+
+    try {
+      await apiService.addFundsToCashSession(
+        sessionToAddFunds.id,
+        htg,
+        usd,
+        addFundsNotes
+      );
+
+      toast.success('Fonds ajoutés avec succès!');
+      setShowAddFundsModal(false);
+      setSessionToAddFunds(null);
+      setAddFundsHTG('');
+      setAddFundsUSD('');
+      setAddFundsNotes('');
+      await loadCashManagement();
+    } catch (error: any) {
+      console.error('Error adding funds:', error);
+      toast.error(error.response?.data?.message || 'Erreur lors de l\'ajout des fonds');
     }
   };
 
@@ -736,13 +786,20 @@ const CashManagement: React.FC<CashManagementProps> = ({ branchId, cashManagemen
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     onClick={() => viewSessionDetails(session.id)}
                     className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
                   >
                     <Eye className="h-4 w-4" />
                     Détails
+                  </button>
+                  <button
+                    onClick={() => handleOpenAddFundsModal(session)}
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors text-sm font-medium"
+                  >
+                    <DollarSign className="h-4 w-4" />
+                    Fonds
                   </button>
                   <button
                     onClick={() => handleCloseSessionModal(session)}
@@ -1113,6 +1170,141 @@ const CashManagement: React.FC<CashManagementProps> = ({ branchId, cashManagemen
                   </table>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Funds Modal */}
+      {showAddFundsModal && sessionToAddFunds && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col">
+            <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-4 rounded-t-xl flex-shrink-0">
+              <h3 className="text-xl font-bold">Ajouter des Fonds à la Session</h3>
+              <p className="text-sm text-green-100 mt-1">
+                Caissier: {sessionToAddFunds.cashierName}
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Current Balance Display */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-blue-900 mb-2">Solde Actuel</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-blue-700">HTG</p>
+                    <p className="text-lg font-bold text-blue-900">
+                      {new Intl.NumberFormat('fr-HT').format(sessionToAddFunds.currentBalanceHTG || 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-blue-700">USD</p>
+                    <p className="text-lg font-bold text-blue-900">
+                      ${new Intl.NumberFormat('en-US').format(sessionToAddFunds.currentBalanceUSD || 0)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Amount Inputs */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Montant HTG
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={addFundsHTG}
+                    onChange={(e) => setAddFundsHTG(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Montant USD
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={addFundsUSD}
+                    onChange={(e) => setAddFundsUSD(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notes (Optionnel)
+                </label>
+                <textarea
+                  value={addFundsNotes}
+                  onChange={(e) => setAddFundsNotes(e.target.value)}
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+                  placeholder="Raison de l'ajout de fonds..."
+                />
+              </div>
+
+              {/* Preview New Balance */}
+              {(parseFloat(addFundsHTG) > 0 || parseFloat(addFundsUSD) > 0) && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-green-900 mb-2">Nouveau Solde</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-green-700">HTG</p>
+                      <p className="text-lg font-bold text-green-900">
+                        {new Intl.NumberFormat('fr-HT').format(
+                          (sessionToAddFunds.currentBalanceHTG || 0) + (parseFloat(addFundsHTG) || 0)
+                        )}
+                      </p>
+                      <p className="text-xs text-green-600">
+                        +{new Intl.NumberFormat('fr-HT').format(parseFloat(addFundsHTG) || 0)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-green-700">USD</p>
+                      <p className="text-lg font-bold text-green-900">
+                        ${new Intl.NumberFormat('en-US').format(
+                          (sessionToAddFunds.currentBalanceUSD || 0) + (parseFloat(addFundsUSD) || 0)
+                        )}
+                      </p>
+                      <p className="text-xs text-green-600">
+                        +${new Intl.NumberFormat('en-US').format(parseFloat(addFundsUSD) || 0)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="px-6 py-4 bg-gray-50 rounded-b-xl flex gap-3 flex-shrink-0">
+              <button
+                onClick={() => {
+                  setShowAddFundsModal(false);
+                  setSessionToAddFunds(null);
+                  setAddFundsHTG('');
+                  setAddFundsUSD('');
+                  setAddFundsNotes('');
+                }}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleAddFunds}
+                disabled={parseFloat(addFundsHTG) <= 0 && parseFloat(addFundsUSD) <= 0}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                Ajouter Fonds
+              </button>
             </div>
           </div>
         </div>

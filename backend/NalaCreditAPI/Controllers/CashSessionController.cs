@@ -672,6 +672,27 @@ public class CashSessionController : ControllerBase
                 return BadRequest(new { message = "Au moins un montant doit être supérieur à zéro" });
             }
 
+            // Check if branch has sufficient available funds
+            var branchBalance = await CalculateBranchAvailableBalanceAsync(session.BranchId);
+            
+            if (model.AmountHTG > branchBalance.AvailableHTG)
+            {
+                return BadRequest(new { 
+                    message = $"Fonds insuffisants. La succursale a {branchBalance.AvailableHTG:N2} HTG disponible, mais vous essayez d'ajouter {model.AmountHTG:N2} HTG.",
+                    availableHTG = branchBalance.AvailableHTG,
+                    requestedHTG = model.AmountHTG
+                });
+            }
+
+            if (model.AmountUSD > branchBalance.AvailableUSD)
+            {
+                return BadRequest(new { 
+                    message = $"Fonds insuffisants. La succursale a {branchBalance.AvailableUSD:N2} USD disponible, mais vous essayez d'ajouter {model.AmountUSD:N2} USD.",
+                    availableUSD = branchBalance.AvailableUSD,
+                    requestedUSD = model.AmountUSD
+                });
+            }
+
             // Update session opening balance to include the new funds
             session.OpeningBalanceHTG += model.AmountHTG;
             session.OpeningBalanceUSD += model.AmountUSD;

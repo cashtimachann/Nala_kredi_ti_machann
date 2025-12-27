@@ -846,15 +846,15 @@ const SuperAdminCashManagement: React.FC = () => {
       {/* Add Funds to Session Modal */}
       {showAddFundsToSessionModal && sessionToAddFunds && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
-            <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-4 rounded-t-xl">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col">
+            <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-4 rounded-t-xl flex-shrink-0">
               <h3 className="text-xl font-bold">Ajouter des Fonds à la Caisse</h3>
               <p className="text-sm text-green-100 mt-1">
                 Caissier: {sessionToAddFunds.cashierName}
               </p>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
               <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                 <p className="text-sm text-green-900">
                   <strong>Note:</strong> Les fonds seront ajoutés au solde d'ouverture de cette caisse. 
@@ -948,24 +948,25 @@ const SuperAdminCashManagement: React.FC = () => {
                 </div>
               )}
 
-              {/* Actions */}
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => {
-                    setShowAddFundsToSessionModal(false);
-                    setSessionToAddFunds(null);
-                  }}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Annuler
-                </button>
-                <button
-                  onClick={handleAddFundsToSession}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  Ajouter Fonds
-                </button>
-              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 px-6 py-4 bg-gray-50 rounded-b-xl flex-shrink-0">
+              <button
+                onClick={() => {
+                  setShowAddFundsToSessionModal(false);
+                  setSessionToAddFunds(null);
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleAddFundsToSession}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Ajouter Fonds
+              </button>
             </div>
           </div>
         </div>
