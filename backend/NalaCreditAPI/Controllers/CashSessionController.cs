@@ -763,21 +763,33 @@ public class CashSessionController : ControllerBase
                 return BadRequest(new { message = "Au moins un montant doit être supérieur à zéro" });
             }
 
-            // Note: Branch funds are tracked through CashSessions when managers open registers.
-            // This endpoint documents the SuperAdmin's intent to add liquidity to the branch.
-            // The actual funds become available when the manager opens a new cash session.
+            // Create BranchFundAddition record to track the funds added by SuperAdmin
+            var fundAddition = new BranchFundAddition
+            {
+                BranchId = branchId,
+                AddedBy = superAdminId!,
+                AmountHTG = model.AmountHTG,
+                AmountUSD = model.AmountUSD,
+                Notes = model.Notes,
+                IsAllocated = false,
+                CreatedAt = DateTime.UtcNow
+            };
 
-            _logger.LogInformation("Fund addition authorized for branch {BranchId} by SuperAdmin {SuperAdminId}: HTG={AmountHTG}, USD={AmountUSD}, Notes={Notes}", 
+            _context.BranchFundAdditions.Add(fundAddition);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Funds added to branch {BranchId} by SuperAdmin {SuperAdminId}: HTG={AmountHTG}, USD={AmountUSD}, Notes={Notes}", 
                 branchId, superAdminId, model.AmountHTG, model.AmountUSD, model.Notes);
 
             return Ok(new
             {
-                message = "Fonds ajoutés avec succès - Les fonds seront disponibles lors de la prochaine ouverture de caisse",
+                message = "Fonds ajoutés avec succès",
                 branchId = branchId,
                 branchName = branch.Name,
                 amountHTG = model.AmountHTG,
                 amountUSD = model.AmountUSD,
-                notes = model.Notes
+                notes = model.Notes,
+                addedAt = fundAddition.CreatedAt
             });
         }
         catch (Exception ex)
@@ -830,13 +842,19 @@ public class CashSessionController : ControllerBase
             .Where(t => (t.FromBranchId == branchId || t.ToBranchId == branchId) && t.Status == TransferStatus.Completed)
             .ToListAsync();
 
+        // Get funds added by SuperAdmin
+        var fundAdditions = await _context.BranchFundAdditions
+            .Where(f => f.BranchId == branchId)
+            .ToListAsync();
+
         // Calculate HTG balance
         var htgDeposits = 0m
             + baseTx.Where(t => t.Type == TransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
             + savingsTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
             + currentTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
             + termTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
-            + transfers.Where(t => t.ToBranchId == branchId && IsHTG(t.Currency)).Sum(t => t.Amount);
+            + transfers.Where(t => t.ToBranchId == branchId && IsHTG(t.Currency)).Sum(t => t.Amount)
+            + fundAdditions.Sum(f => f.AmountHTG); // Add SuperAdmin funds
 
         var htgWithdrawals = 0m
             + baseTx.Where(t => t.Type == TransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
@@ -851,7 +869,8 @@ public class CashSessionController : ControllerBase
             + savingsTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
             + currentTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
             + termTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
-            + transfers.Where(t => t.ToBranchId == branchId && IsUSD(t.Currency)).Sum(t => t.Amount);
+            + transfers.Where(t => t.ToBranchId == branchId && IsUSD(t.Currency)).Sum(t => t.Amount)
+            + fundAdditions.Sum(f => f.AmountUSD); // Add SuperAdmin funds
 
         var usdWithdrawals = 0m
             + baseTx.Where(t => t.Type == TransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)

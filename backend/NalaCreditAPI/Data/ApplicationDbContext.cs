@@ -67,6 +67,9 @@ public class ApplicationDbContext : IdentityDbContext<User>
     public DbSet<InterBranchTransfer> InterBranchTransfers { get; set; }
     public DbSet<InterBranchTransferLog> InterBranchTransferLogs { get; set; }
 
+    // Branch Fund Management
+    public DbSet<BranchFundAddition> BranchFundAdditions { get; set; }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
