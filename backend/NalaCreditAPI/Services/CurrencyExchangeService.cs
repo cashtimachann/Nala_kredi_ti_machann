@@ -797,6 +797,17 @@ Thank you for your business!
                 .Select(t => new { t.FromBranchId, t.ToBranchId, t.Currency, t.Amount, t.CreatedAt })
                 .ToListAsync();
 
+            // Get all-time branch fund additions by SuperAdmin
+            var fundAdditions = await _context.BranchFundAdditions
+                .AsNoTracking()
+                .Where(f => f.BranchId == legacyBranchId)
+                .Select(f => new { f.AmountHTG, f.AmountUSD })
+                .ToListAsync();
+
+            // Calculate total SuperAdmin funds
+            var totalFundsHTG = fundAdditions.Sum(f => f.AmountHTG);
+            var totalFundsUSD = fundAdditions.Sum(f => f.AmountUSD);
+
             bool IsHTG(object currency) => currency switch
             {
                 Currency c => c == Currency.HTG,
@@ -818,13 +829,13 @@ Thank you for your business!
                 + savingsTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
                 + currentTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
                 + termTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsHTG(t.Currency)).Sum(t => t.Amount)
-                + transfers.Where(t => t.ToBranchId == legacyBranchId && IsHTG(t.Currency)).Sum(t => t.Amount);
+                + transfers.Where(t => t.ToBranchId == legacyBranchId && IsHTG(t.Currency)).Sum(t => t.Amount)
+                + totalFundsHTG; // Add SuperAdmin funds
 
             var htgWithdrawals = 0m
                 + baseTx.Where(t => t.Type == TransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
                 + savingsTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
                 + currentTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
-                + termTx.Where(t => t.Type == SavingsTransactionType.Withdrawal && IsHTG(t.Currency)).Sum(t => t.Amount)
                 + transfers.Where(t => t.FromBranchId == legacyBranchId && IsHTG(t.Currency)).Sum(t => t.Amount);
 
             var usdDeposits = 0m
@@ -832,7 +843,8 @@ Thank you for your business!
                 + savingsTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
                 + currentTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
                 + termTx.Where(t => t.Type == SavingsTransactionType.Deposit && IsUSD(t.Currency)).Sum(t => t.Amount)
-                + transfers.Where(t => t.ToBranchId == legacyBranchId && IsUSD(t.Currency)).Sum(t => t.Amount);
+                + transfers.Where(t => t.ToBranchId == legacyBranchId && IsUSD(t.Currency)).Sum(t => t.Amount)
+                + totalFundsUSD; // Add SuperAdmin funds
 
             var usdWithdrawals = 0m
                 + baseTx.Where(t => t.Type == TransactionType.Withdrawal && IsUSD(t.Currency)).Sum(t => t.Amount)
