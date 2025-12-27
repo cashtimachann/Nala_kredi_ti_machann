@@ -763,58 +763,21 @@ public class CashSessionController : ControllerBase
                 return BadRequest(new { message = "Au moins un montant doit être supérieur à zéro" });
             }
 
-            // Create deposit transactions to represent fund addition
-            var transactions = new List<Transaction>();
+            // Note: Branch funds are tracked through CashSessions when managers open registers.
+            // This endpoint documents the SuperAdmin's intent to add liquidity to the branch.
+            // The actual funds become available when the manager opens a new cash session.
 
-            if (model.AmountHTG > 0)
-            {
-                var transactionHTG = new Transaction
-                {
-                    BranchId = branchId,
-                    Type = TransactionType.Deposit,
-                    Currency = Currency.HTG,
-                    Amount = model.AmountHTG,
-                    Description = $"Ajout de fonds par SuperAdmin: {model.Notes ?? "Approvisionnement succursale"}",
-                    TransactionDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                    Status = TransactionStatus.Completed,
-                    CreatedBy = superAdminId,
-                    CreatedAt = DateTime.UtcNow
-                };
-                transactions.Add(transactionHTG);
-                _context.Transactions.Add(transactionHTG);
-            }
-
-            if (model.AmountUSD > 0)
-            {
-                var transactionUSD = new Transaction
-                {
-                    BranchId = branchId,
-                    Type = TransactionType.Deposit,
-                    Currency = Currency.USD,
-                    Amount = model.AmountUSD,
-                    Description = $"Ajout de fonds par SuperAdmin: {model.Notes ?? "Approvisionnement succursale"}",
-                    TransactionDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                    Status = TransactionStatus.Completed,
-                    CreatedBy = superAdminId,
-                    CreatedAt = DateTime.UtcNow
-                };
-                transactions.Add(transactionUSD);
-                _context.Transactions.Add(transactionUSD);
-            }
-
-            await _context.SaveChangesAsync();
-
-            _logger.LogInformation("Funds added to branch {BranchId} by SuperAdmin {SuperAdminId}: HTG={AmountHTG}, USD={AmountUSD}", 
-                branchId, superAdminId, model.AmountHTG, model.AmountUSD);
+            _logger.LogInformation("Fund addition authorized for branch {BranchId} by SuperAdmin {SuperAdminId}: HTG={AmountHTG}, USD={AmountUSD}, Notes={Notes}", 
+                branchId, superAdminId, model.AmountHTG, model.AmountUSD, model.Notes);
 
             return Ok(new
             {
-                message = "Fonds ajoutés avec succès",
+                message = "Fonds ajoutés avec succès - Les fonds seront disponibles lors de la prochaine ouverture de caisse",
                 branchId = branchId,
                 branchName = branch.Name,
                 amountHTG = model.AmountHTG,
                 amountUSD = model.AmountUSD,
-                transactionIds = transactions.Select(t => t.Id).ToList()
+                notes = model.Notes
             });
         }
         catch (Exception ex)
