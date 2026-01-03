@@ -110,7 +110,7 @@ namespace NalaCreditAPI.Services.ClientAccounts
             {
                 AccountId = account.Id,
                 AccountNumber = account.AccountNumber,
-                Type = SavingsTransactionType.Deposit,
+                Type = SavingsTransactionType.OpeningDeposit,
                 Amount = dto.InitialDeposit,
                 Currency = dto.Currency,
                 BalanceBefore = 0,

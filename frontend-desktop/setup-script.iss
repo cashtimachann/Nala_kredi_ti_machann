@@ -1,11 +1,11 @@
 ; =============================================================================
-; NALA KREDI DESKTOP - INNO SETUP SCRIPT
+; NALA KREDI TI MACHANN DESKTOP - INNO SETUP SCRIPT
 ; =============================================================================
 ; Script pou kreye installer Windows ki pwofesyonèl
 ; Creates professional Windows installer
 ; =============================================================================
 
-#define MyAppName "Nala Kredi Desktop"
+#define MyAppName "Nala Kredi Ti Machann Desktop"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Nala Kredi Ti Machann"
 #define MyAppURL "https://nalacredit.com"

@@ -147,6 +147,22 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         {
             try
             {
+                // Restreindre la portée aux comptes de la succursale pour les rôles non managers/admins
+                var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+                if (!string.IsNullOrWhiteSpace(role))
+                {
+                    var lowerRole = role.ToLowerInvariant();
+                    var isBranchBoundRole = lowerRole is "secretary" or "secretaire" or "secretaireadministratif" or "support" or "supporttechnique" or "employee" or "cashier";
+                    if (isBranchBoundRole)
+                    {
+                        var branchClaim = User.FindFirst("BranchId")?.Value;
+                        if (int.TryParse(branchClaim, out var branchId))
+                        {
+                            filter.BranchId = branchId;
+                        }
+                    }
+                }
+
                 var result = await _accountService.GetAccountsAsync(filter);
                 return Ok(result);
             }

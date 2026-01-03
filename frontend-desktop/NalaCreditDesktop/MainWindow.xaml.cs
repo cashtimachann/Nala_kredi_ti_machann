@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         InitializeDashboard();
+        InitializeChart();
         SetupEventHandlers();
         StartTimer();
     }
@@ -43,6 +44,30 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             MessageBox.Show($"Erreur lors de l'initialisation: {ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void InitializeChart()
+    {
+        try
+        {
+            var host = FindName("BalanceChart") as Views.OptionalPlotHost;
+            if (host == null)
+                return;
+
+            // If ScottPlot is not available or the host couldn't initialize it,
+            // the OptionalPlotHost will display a user-friendly placeholder.
+            if (!App.ScottPlotAvailable || !host.IsAvailable)
+            {
+                Console.Error.WriteLine("[WARN] ScottPlot not available - using placeholder in OptionalPlotHost.");
+                return;
+            }
+
+            // If the plot control is available we could interact with it via reflection here.
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[ERROR] InitializeChart failed: {ex}");
         }
     }
 

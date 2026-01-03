@@ -45,11 +45,7 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#991b1b"/>
-                                <Setter TargetName="border" Property="Effect">
-                                    <Setter.Value>
-                                        <DropShadowEffect Color="#dc2626" Opacity="0.7" ShadowDepth="4" BlurRadius="12"/>
-                                    </Setter.Value>
-                                </Setter>
+                                <!-- Effect removed -->
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#7f1d1d"/>
@@ -84,9 +80,7 @@
                 CornerRadius="16"
                 Background="#ffffff"
                 Margin="20">
-            <Border.Effect>
-                <DropShadowEffect Color="#000000" Opacity="0.2" ShadowDepth="10" BlurRadius="20"/>
-            </Border.Effect>
+            <!-- Effect removed -->
             
             <Grid>
                 <Grid.RowDefinitions>
@@ -157,10 +151,9 @@
                                     <DropShadowEffect Color="#64748b" Opacity="0.08" ShadowDepth="1" BlurRadius="3"/>
                                 </Border.Effect>
                                 <TextBox x:Name="EmailTextBox" 
-                                        Text="cashier@nalacredit.com"
-                                        Style="{StaticResource ModernTextBox}"
-                                        GotFocus="EmailTextBox_GotFocus"
-                                        LostFocus="EmailTextBox_LostFocus"/>
+                                    Style="{StaticResource ModernTextBox}"
+                                    GotFocus="EmailTextBox_GotFocus"
+                                    LostFocus="EmailTextBox_LostFocus"/>
                             </Border>
                         </StackPanel>
                         
@@ -192,7 +185,6 @@
                                     <DropShadowEffect Color="#64748b" Opacity="0.08" ShadowDepth="1" BlurRadius="3"/>
                                 </Border.Effect>
                                 <PasswordBox x:Name="PasswordBox" 
-                                            Password="Cashier123!"
                                             Style="{StaticResource ModernPasswordBox}"
                                             GotFocus="PasswordBox_GotFocus"
                                             LostFocus="PasswordBox_LostFocus"/>

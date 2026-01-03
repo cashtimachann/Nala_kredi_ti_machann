@@ -3,7 +3,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:converters="clr-namespace:NalaCreditDesktop.Converters"
     xmlns:views="clr-namespace:NalaCreditDesktop.Views"
-        Title="Dashboard Caissier - Nala Kredi" Height="720" Width="1280"
+        Title="Dashboard Caissier - Nala Kredi Ti Machann" Height="720" Width="1280"
         WindowStartupLocation="CenterScreen">
     
     <Window.Resources>
@@ -25,11 +25,6 @@
             <Setter Property="Margin" Value="15"/>
             <Setter Property="BorderBrush" Value="#E1E8ED"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Effect">
-                <Setter.Value>
-                    <DropShadowEffect Color="#D1D5DB" Direction="270" ShadowDepth="5" BlurRadius="10" Opacity="0.3"/>
-                </Setter.Value>
-            </Setter>
         </Style>
         
         <Style x:Key="ActionButtonStyle" TargetType="Button">
@@ -194,7 +189,8 @@
                 <!-- Actions rapides -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                         <Button Style="{StaticResource ActionButtonStyle}" 
-                            Click="OpenQuickDeposit_Click">
+                            Click="OpenQuickDeposit_Click"
+                            IsEnabled="{Binding IsCashSessionOpen}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="➕" FontSize="16" Margin="0,0,5,0"/>
                             <TextBlock Text="Dépôt"/>
@@ -203,7 +199,8 @@
                     
                     <Button Style="{StaticResource ActionButtonStyle}"
                             Background="#16A085"
-                            Click="OpenRecouvrement_Click">
+                            Click="OpenRecouvrement_Click"
+                            IsEnabled="{Binding IsCashSessionOpen}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="📥" FontSize="16" Margin="0,0,5,0"/>
                             <TextBlock Text="Recouvrement"/>
@@ -211,7 +208,8 @@
                     </Button>
                     
                         <Button Style="{StaticResource ActionButtonStyle}" 
-                            Click="OpenQuickWithdrawal_Click">
+                            Click="OpenQuickWithdrawal_Click"
+                            IsEnabled="{Binding IsCashSessionOpen}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="➖" FontSize="16" Margin="0,0,5,0"/>
                             <TextBlock Text="Retrait"/>
@@ -219,7 +217,8 @@
                     </Button>
                     
                     <Button Style="{StaticResource ActionButtonStyle}" 
-                            Command="{Binding ExchangeOperationCommand}">
+                            Command="{Binding ExchangeOperationCommand}"
+                            IsEnabled="{Binding IsCashSessionOpen}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🔄" FontSize="16" Margin="0,0,5,0"/>
                             <TextBlock Text="Change"/>
@@ -237,10 +236,20 @@
                     
                     <Button Style="{StaticResource ActionButtonStyle}" 
                             Background="#E74C3C"
-                            Command="{Binding CloseCashierCommand}">
+                            Command="{Binding CloseCashierCommand}"
+                            IsEnabled="{Binding IsCashSessionOpen}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🔒" FontSize="16" Margin="0,0,5,0"/>
                             <TextBlock Text="Clôture"/>
+                        </StackPanel>
+                    </Button>
+                    
+                    <Button Style="{StaticResource ActionButtonStyle}" 
+                            Background="#95A5A6"
+                            Click="Logout_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🚪" FontSize="16" Margin="0,0,5,0"/>
+                            <TextBlock Text="Dekonekte"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>
@@ -578,7 +587,11 @@
                                         Style="{StaticResource ActionButtonStyle}"
                                         Background="#17A2B8"
                                         Command="{Binding GenerateDailyReportCommand}"/>
-                                <Button Content="📈 Export Excel" 
+                                <Button Content="� Imprimer Mes Transactions" 
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Background="#6F42C1"
+                                        Click="PrintTransactionReport_Click"/>
+                                <Button Content="�📈 Export Excel" 
                                         Style="{StaticResource ActionButtonStyle}"
                                         Background="#28A745"
                                         Command="{Binding ExportToExcelCommand}"/>

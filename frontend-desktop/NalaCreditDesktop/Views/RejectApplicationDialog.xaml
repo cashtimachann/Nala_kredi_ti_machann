@@ -1,0 +1,193 @@
+<Window x:Class="NalaCreditDesktop.Views.RejectApplicationDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Rejeter Demande Crédit" 
+        Height="400" Width="550"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="#F5F5F5">
+    
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+        
+        <Style x:Key="HeaderText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#2c3e50"/>
+            <Setter Property="Margin" Value="0,0,0,15"/>
+        </Style>
+        
+        <Style x:Key="LabelText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#34495e"/>
+            <Setter Property="Margin" Value="0,0,0,5"/>
+        </Style>
+        
+        <Style x:Key="RejectButton" TargetType="Button">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Background" Value="#e74c3c"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="20,12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="4" 
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" 
+                                            VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#c0392b"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#95a5a6"/>
+                    <Setter Property="Cursor" Value="Arrow"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        
+        <Style x:Key="CancelButton" TargetType="Button">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Background" Value="#ecf0f1"/>
+            <Setter Property="Foreground" Value="#34495e"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="20,12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="4" 
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" 
+                                            VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#bdc3c7"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+    
+    <Border Padding="30" Background="White" Margin="10" CornerRadius="8">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000" Opacity="0.1" BlurRadius="10" ShadowDepth="2"/>
+        </Border.Effect>
+        
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            
+            <!-- Header -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,20">
+                <TextBlock Style="{StaticResource HeaderText}">
+                    <Run Text="✗ Rejeter Demande Crédit" Foreground="#e74c3c"/>
+                </TextBlock>
+                <TextBlock x:Name="ApplicationNumberText" 
+                          FontSize="14" 
+                          Foreground="#7f8c8d"
+                          Text="Demande #APP-20260102-0001"/>
+                <TextBlock FontSize="12" 
+                          Foreground="#95a5a6"
+                          Margin="0,10,0,0"
+                          TextWrapping="Wrap"
+                          Text="Cette action est irréversible. Veuillez fournir une raison détaillée pour le rejet."/>
+            </StackPanel>
+            
+            <!-- Form -->
+            <StackPanel Grid.Row="1">
+                
+                <!-- Raison du Rejet -->
+                <TextBlock Style="{StaticResource LabelText}">
+                    <Run Text="Raison du Rejet"/>
+                    <Run Text="*" Foreground="Red"/>
+                </TextBlock>
+                
+                <ComboBox x:Name="ReasonComboBox"
+                         FontFamily="Segoe UI"
+                         FontSize="13"
+                         Height="38"
+                         Margin="0,0,0,15"
+                         SelectionChanged="ReasonComboBox_SelectionChanged">
+                    <ComboBoxItem Content="Revenu insuffisant"/>
+                    <ComboBoxItem Content="Historique crédit négatif"/>
+                    <ComboBoxItem Content="Documents incomplets"/>
+                    <ComboBoxItem Content="Garantie insuffisante"/>
+                    <ComboBoxItem Content="Capacité de remboursement faible"/>
+                    <ComboBoxItem Content="Informations inexactes"/>
+                    <ComboBoxItem Content="Ne répond pas aux critères"/>
+                    <ComboBoxItem Content="Autre raison (spécifier ci-dessous)"/>
+                </ComboBox>
+                
+                <!-- Commentaires Détaillés -->
+                <TextBlock Style="{StaticResource LabelText}">
+                    <Run Text="Commentaires Détaillés"/>
+                    <Run Text="*" Foreground="Red"/>
+                </TextBlock>
+                <TextBox x:Name="CommentsTextBox"
+                        FontFamily="Segoe UI"
+                        FontSize="13"
+                        Padding="10"
+                        Height="120"
+                        BorderBrush="#bdc3c7"
+                        BorderThickness="1"
+                        Background="White"
+                        TextWrapping="Wrap"
+                        AcceptsReturn="True"
+                        VerticalScrollBarVisibility="Auto"
+                        Margin="0,0,0,15"
+                        TextChanged="CommentsTextBox_TextChanged"/>
+                
+                <!-- Validation Message -->
+                <TextBlock x:Name="ValidationMessageText"
+                          FontSize="12"
+                          Foreground="Red"
+                          TextWrapping="Wrap"
+                          Margin="0,0,0,10"
+                          Visibility="Collapsed"/>
+                
+            </StackPanel>
+            
+            <!-- Buttons -->
+            <StackPanel Grid.Row="2" 
+                       Orientation="Horizontal" 
+                       HorizontalAlignment="Right"
+                       Margin="0,20,0,0">
+                <Button x:Name="CancelButton"
+                       Content="Annuler"
+                       Style="{StaticResource CancelButton}"
+                       Width="120"
+                       Margin="0,0,10,0"
+                       Click="CancelButton_Click"/>
+                <Button x:Name="RejectButton"
+                       Content="✗ Rejeter"
+                       Style="{StaticResource RejectButton}"
+                       Width="150"
+                       Click="RejectButton_Click"/>
+            </StackPanel>
+            
+        </Grid>
+    </Border>
+</Window>

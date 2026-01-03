@@ -1,0 +1,582 @@
+<UserControl x:Class="NalaCreditDesktop.Views.BorrowersView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="800" d:DesignWidth="1200">
+
+    <UserControl.Resources>
+        <!-- Button Styles -->
+        <Style x:Key="ActionButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#3b82f6"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#2563eb"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SuccessButtonStyle" TargetType="Button" BasedOn="{StaticResource ActionButtonStyle}">
+            <Setter Property="Background" Value="#10b981"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#059669"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="WarningButtonStyle" TargetType="Button" BasedOn="{StaticResource ActionButtonStyle}">
+            <Setter Property="Background" Value="#f59e0b"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#d97706"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Status Badge Style -->
+        <Style x:Key="StatusBadgeStyle" TargetType="Border">
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="#F8F9FA">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="White" Padding="20" Margin="0,0,0,10" CornerRadius="10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="👥 Mes Emprunteurs" 
+                              FontSize="24" 
+                              FontWeight="Bold" 
+                              Foreground="#1e293b"/>
+                    <TextBlock Text="Gestion de votre portefeuille de clients" 
+                              FontSize="14" 
+                              Foreground="#64748b" 
+                              Margin="0,5,0,0"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="RefreshButton" 
+                           Style="{StaticResource ActionButtonStyle}"
+                           Content="🔄 Actualiser" 
+                           Padding="15,8"
+                           Margin="0,0,10,0"/>
+                    <Button x:Name="ExportButton" 
+                           Style="{StaticResource SuccessButtonStyle}"
+                           Content="📊 Exporter" 
+                           Padding="15,8"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Statistics Cards -->
+        <Border Grid.Row="1" Background="White" Padding="20" Margin="0,0,0,10" CornerRadius="10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Total Clients -->
+                <Border Grid.Column="0" 
+                       Background="#eff6ff" 
+                       CornerRadius="10" 
+                       Padding="15" 
+                       Margin="0,0,10,0">
+                    <StackPanel>
+                        <TextBlock Text="👥 Total Clients" 
+                                  FontSize="12" 
+                                  Foreground="#3b82f6" 
+                                  FontWeight="SemiBold"/>
+                        <TextBlock x:Name="TotalClientsText" 
+                                  Text="0" 
+                                  FontSize="32" 
+                                  FontWeight="Bold" 
+                                  Foreground="#1e40af" 
+                                  Margin="0,5,0,0"/>
+                        <TextBlock Text="emprunteurs" 
+                                  FontSize="11" 
+                                  Foreground="#64748b"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Active Clients -->
+                <Border Grid.Column="1" 
+                       Background="#f0fdf4" 
+                       CornerRadius="10" 
+                       Padding="15" 
+                       Margin="0,0,10,0">
+                    <StackPanel>
+                        <TextBlock Text="✅ Actifs" 
+                                  FontSize="12" 
+                                  Foreground="#10b981" 
+                                  FontWeight="SemiBold"/>
+                        <TextBlock x:Name="ActiveClientsText" 
+                                  Text="0" 
+                                  FontSize="32" 
+                                  FontWeight="Bold" 
+                                  Foreground="#047857" 
+                                  Margin="0,5,0,0"/>
+                        <TextBlock x:Name="ActiveClientsSubText" 
+                                  Text="avec prêts actifs" 
+                                  FontSize="11" 
+                                  Foreground="#64748b"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- With Issues -->
+                <Border Grid.Column="2" 
+                       Background="#fef2f2" 
+                       CornerRadius="10" 
+                       Padding="15" 
+                       Margin="0,0,10,0">
+                    <StackPanel>
+                        <TextBlock Text="⚠️ Avec Retards" 
+                                  FontSize="12" 
+                                  Foreground="#ef4444" 
+                                  FontWeight="SemiBold"/>
+                        <TextBlock x:Name="WithIssuesText" 
+                                  Text="0" 
+                                  FontSize="32" 
+                                  FontWeight="Bold" 
+                                  Foreground="#dc2626" 
+                                  Margin="0,5,0,0"/>
+                        <TextBlock x:Name="WithIssuesSubText" 
+                                  Text="nécessitent attention" 
+                                  FontSize="11" 
+                                  Foreground="#64748b"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Good Standing -->
+                <Border Grid.Column="3" 
+                       Background="#ecfdf5" 
+                       CornerRadius="10" 
+                       Padding="15">
+                    <StackPanel>
+                        <TextBlock Text="⭐ Excellents" 
+                                  FontSize="12" 
+                                  Foreground="#059669" 
+                                  FontWeight="SemiBold"/>
+                        <TextBlock x:Name="GoodStandingText" 
+                                  Text="0" 
+                                  FontSize="32" 
+                                  FontWeight="Bold" 
+                                  Foreground="#047857" 
+                                  Margin="0,5,0,0"/>
+                        <TextBlock Text="100% à jour" 
+                                  FontSize="11" 
+                                  Foreground="#64748b"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Filters and Search -->
+        <Border Grid.Row="2" Background="White" Padding="15" Margin="0,0,0,10" CornerRadius="10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Search Box -->
+                <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                    <TextBlock Text="Rechercher" FontSize="11" Foreground="#64748b" Margin="0,0,0,5"/>
+                    <TextBox x:Name="SearchTextBox" 
+                            Height="36" 
+                            Padding="10,8"
+                            FontSize="14"
+                            BorderBrush="#cbd5e1" 
+                            BorderThickness="1">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="TextBox">
+                                            <Border Background="White" 
+                                                   BorderBrush="{TemplateBinding BorderBrush}" 
+                                                   BorderThickness="{TemplateBinding BorderThickness}" 
+                                                   CornerRadius="6">
+                                                <ScrollViewer x:Name="PART_ContentHost" Margin="10,8"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
+                </StackPanel>
+
+                <!-- Status Filter -->
+                <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                    <TextBlock Text="Statut" FontSize="11" Foreground="#64748b" Margin="0,0,0,5"/>
+                    <ComboBox x:Name="StatusFilterComboBox" 
+                             Height="36" 
+                             FontSize="14"
+                             BorderBrush="#cbd5e1"
+                             BorderThickness="1">
+                        <ComboBoxItem Content="Tous" IsSelected="True"/>
+                        <ComboBoxItem Content="Avec prêts actifs"/>
+                        <ComboBoxItem Content="Avec retards"/>
+                        <ComboBoxItem Content="À jour"/>
+                        <ComboBoxItem Content="Sans prêt actif"/>
+                    </ComboBox>
+                </StackPanel>
+
+                <!-- Sort By -->
+                <StackPanel Grid.Column="2" Margin="0,0,10,0">
+                    <TextBlock Text="Trier Par" FontSize="11" Foreground="#64748b" Margin="0,0,0,5"/>
+                    <ComboBox x:Name="SortByComboBox" 
+                             Height="36" 
+                             FontSize="14"
+                             BorderBrush="#cbd5e1"
+                             BorderThickness="1">
+                        <ComboBoxItem Content="Nom A-Z" IsSelected="True"/>
+                        <ComboBoxItem Content="Nom Z-A"/>
+                        <ComboBoxItem Content="Plus de prêts"/>
+                        <ComboBoxItem Content="Dernier prêt"/>
+                    </ComboBox>
+                </StackPanel>
+
+                <!-- Apply Filters Button -->
+                <Button Grid.Column="3" 
+                       x:Name="ApplyFiltersButton"
+                       Style="{StaticResource ActionButtonStyle}"
+                       Content="🔍 Filtrer" 
+                       VerticalAlignment="Bottom"
+                       Padding="20,8"/>
+            </Grid>
+        </Border>
+
+        <!-- Borrowers DataGrid -->
+        <Border Grid.Row="3" Background="White" CornerRadius="10" Padding="0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Loading Indicator -->
+                <Grid x:Name="LoadingPanel" 
+                     Grid.Row="0" 
+                     Background="#F8F9FA" 
+                     Visibility="Collapsed">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="⏳" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                        <TextBlock Text="Chargement des emprunteurs..." 
+                                  FontSize="16" 
+                                  Foreground="#64748b" 
+                                  HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Empty State -->
+                <Grid x:Name="EmptyStatePanel" 
+                     Grid.Row="0" 
+                     Background="White" 
+                     Visibility="Collapsed">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="👥" FontSize="64" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                        <TextBlock Text="Aucun emprunteur" 
+                                  FontSize="20" 
+                                  FontWeight="Bold" 
+                                  Foreground="#1e293b" 
+                                  HorizontalAlignment="Center"/>
+                        <TextBlock Text="Vous n'avez pas encore de clients dans votre portefeuille." 
+                                  FontSize="14" 
+                                  Foreground="#64748b" 
+                                  HorizontalAlignment="Center" 
+                                  Margin="0,10,0,0" 
+                                  TextWrapping="Wrap" 
+                                  MaxWidth="400" 
+                                  TextAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- DataGrid -->
+                <DataGrid x:Name="BorrowersDataGrid" 
+                         Grid.Row="0"
+                         AutoGenerateColumns="False" 
+                         CanUserAddRows="False" 
+                         IsReadOnly="True"
+                         SelectionMode="Single"
+                         GridLinesVisibility="None"
+                         HeadersVisibility="Column"
+                         Background="White"
+                         BorderThickness="0"
+                         RowHeight="70"
+                         AlternationCount="2"
+                         AlternatingRowBackground="#F8FAFC">
+                    
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="#F1F5F9"/>
+                            <Setter Property="Foreground" Value="#475569"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="FontSize" Value="13"/>
+                            <Setter Property="Padding" Value="15,12"/>
+                            <Setter Property="BorderThickness" Value="0,0,0,2"/>
+                            <Setter Property="BorderBrush" Value="#E2E8F0"/>
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
+
+                    <DataGrid.CellStyle>
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Padding" Value="15,0"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="#EFF6FF"/>
+                                    <Setter Property="Foreground" Value="#1e293b"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.CellStyle>
+
+                    <DataGrid.Columns>
+                        <!-- Client Info -->
+                        <DataGridTemplateColumn Header="Client" Width="250">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding CustomerName}" 
+                                                  FontWeight="Bold" 
+                                                  FontSize="15" 
+                                                  Foreground="#1e293b"/>
+                                        <TextBlock Text="{Binding CustomerPhone}" 
+                                                  FontSize="12" 
+                                                  Foreground="#64748b" 
+                                                  Margin="0,3,0,0"/>
+                                        <TextBlock Text="{Binding CustomerEmail}" 
+                                                  FontSize="11" 
+                                                  Foreground="#94a3b8" 
+                                                  Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Account Number -->
+                        <DataGridTextColumn Header="N° Compte" 
+                                          Binding="{Binding SavingsAccountNumber}" 
+                                          Width="130">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="FontFamily" Value="Consolas"/>
+                                    <Setter Property="FontSize" Value="13"/>
+                                    <Setter Property="Foreground" Value="#3b82f6"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+
+                        <!-- Loan Stats -->
+                        <DataGridTemplateColumn Header="Prêts" Width="130">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding TotalLoansDisplay}" 
+                                                  FontWeight="Bold" 
+                                                  FontSize="14" 
+                                                  Foreground="#1e293b"/>
+                                        <TextBlock Text="{Binding ActiveLoansDisplay}" 
+                                                  FontSize="12" 
+                                                  Foreground="#10b981" 
+                                                  Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Outstanding Amount -->
+                        <DataGridTemplateColumn Header="Encours" Width="140">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding OutstandingAmountDisplay}" 
+                                                  FontWeight="Bold" 
+                                                  FontSize="14" 
+                                                  Foreground="#3b82f6"/>
+                                        <TextBlock Text="{Binding LastPaymentDisplay}" 
+                                                  FontSize="11" 
+                                                  Foreground="#64748b" 
+                                                  Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Repayment Rate -->
+                        <DataGridTemplateColumn Header="Taux Remb." Width="100">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border x:Name="RateBorder" 
+                                           Style="{StaticResource StatusBadgeStyle}" 
+                                           Background="#dcfce7">
+                                        <TextBlock x:Name="RateText" 
+                                                  Text="{Binding RepaymentRateDisplay}" 
+                                                  FontSize="13" 
+                                                  FontWeight="Bold" 
+                                                  Foreground="#166534"/>
+                                    </Border>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding HasIssues}" Value="True">
+                                            <Setter TargetName="RateBorder" Property="Background" Value="#fee2e2"/>
+                                            <Setter TargetName="RateText" Property="Foreground" Value="#991b1b"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Status -->
+                        <DataGridTemplateColumn Header="Statut" Width="110">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border x:Name="StatusBorder" 
+                                           Style="{StaticResource StatusBadgeStyle}" 
+                                           Background="#dcfce7">
+                                        <TextBlock x:Name="StatusText" 
+                                                  Text="{Binding StatusDisplay}" 
+                                                  FontSize="11" 
+                                                  FontWeight="SemiBold" 
+                                                  Foreground="#166534"/>
+                                    </Border>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding StatusDisplay}" Value="En Retard">
+                                            <Setter TargetName="StatusBorder" Property="Background" Value="#fee2e2"/>
+                                            <Setter TargetName="StatusText" Property="Foreground" Value="#991b1b"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding StatusDisplay}" Value="Inactif">
+                                            <Setter TargetName="StatusBorder" Property="Background" Value="#f3f4f6"/>
+                                            <Setter TargetName="StatusText" Property="Foreground" Value="#6b7280"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Actions -->
+                        <DataGridTemplateColumn Header="Actions" Width="*" MinWidth="240">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Button Content="👁️" 
+                                               ToolTip="Voir Profil"
+                                               Style="{StaticResource ActionButtonStyle}"
+                                               Padding="8,4"
+                                               FontSize="14"
+                                               Tag="{Binding CustomerId}"
+                                               Click="ViewProfile_Click"/>
+                                        <Button Content="📜" 
+                                               ToolTip="Historique Prêts"
+                                               Style="{StaticResource ActionButtonStyle}"
+                                               Padding="8,4"
+                                               FontSize="14"
+                                               Tag="{Binding CustomerId}"
+                                               Click="ViewLoanHistory_Click"/>
+                                        <Button Content="📞" 
+                                               ToolTip="Contacter"
+                                               Style="{StaticResource WarningButtonStyle}"
+                                               Padding="8,4"
+                                               FontSize="14"
+                                               Tag="{Binding CustomerPhone}"
+                                               Click="ContactClient_Click"/>
+                                        <Button Content="💰" 
+                                               ToolTip="Nouveau Prêt"
+                                               Style="{StaticResource SuccessButtonStyle}"
+                                               Padding="8,4"
+                                               FontSize="14"
+                                               Tag="{Binding SavingsAccountNumber}"
+                                               Click="NewLoan_Click"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- Pagination -->
+                <Border Grid.Row="1" 
+                       BorderBrush="#E2E8F0" 
+                       BorderThickness="0,1,0,0" 
+                       Background="#F8FAFC" 
+                       Padding="15">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" 
+                                  VerticalAlignment="Center">
+                            <Run Text="Affichage de " Foreground="#64748b"/>
+                            <Run x:Name="PageInfoText" Text="0-0 sur 0" FontWeight="SemiBold" Foreground="#1e293b"/>
+                            <Run Text=" emprunteurs" Foreground="#64748b"/>
+                        </TextBlock>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button x:Name="PrevPageButton" 
+                                   Content="◀ Précédent" 
+                                   Style="{StaticResource ActionButtonStyle}"
+                                   Padding="12,6"
+                                   Margin="0,0,5,0"/>
+                            <TextBlock x:Name="CurrentPageText" 
+                                      Text="Page 1 / 1" 
+                                      FontSize="14" 
+                                      FontWeight="SemiBold" 
+                                      Foreground="#1e293b" 
+                                      VerticalAlignment="Center" 
+                                      Margin="10,0"/>
+                            <Button x:Name="NextPageButton" 
+                                   Content="Suivant ▶" 
+                                   Style="{StaticResource ActionButtonStyle}"
+                                   Padding="12,6"
+                                   Margin="5,0,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

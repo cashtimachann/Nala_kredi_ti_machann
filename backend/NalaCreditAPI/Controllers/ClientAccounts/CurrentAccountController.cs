@@ -20,11 +20,20 @@ namespace NalaCreditAPI.Controllers.ClientAccounts
         /// <summary>
         /// Ouvrir un nouveau compte courant
         /// </summary>
-    [HttpPost("open")]
-    public async Task<ActionResult<CurrentAccountResponseDto>> OpenAccount([FromBody] CurrentAccountOpeningDto dto)
+        [HttpPost("open")]
+        // Allow Secretary/Employee to open current accounts alongside Cashier and Manager
+        [Authorize(Roles = "Cashier,Manager,Employee,Secretary,SecretaireAdministratif")]
+        public async Task<ActionResult<CurrentAccountResponseDto>> OpenAccount([FromBody] CurrentAccountOpeningDto dto)
         {
             try
             {
+                // DEBUG: Log all claims in the token
+                Console.WriteLine("[DEBUG] CurrentAccount.OpenAccount - User Claims:");
+                foreach (var claim in User.Claims)
+                {
+                    Console.WriteLine($"  {claim.Type}: {claim.Value}");
+                }
+                
                 var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
                     ?? throw new UnauthorizedAccessException("Utilisateur non identifié");
 

@@ -26,12 +26,64 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <PackageReference Include="QuestPDF" Version="2024.12.3" />
   </ItemGroup>
 
   <ItemGroup>
     <None Update="appsettings.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="appsettings.Development.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="appsettings.Production.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
+
+  <!-- Post-build check for optional ScottPlot.WPF assembly -->
+  <PropertyGroup>
+    <!-- Set this to true in CI if you want the build to fail when ScottPlot is missing -->
+    <EnforceScottPlotPresence>false</EnforceScottPlotPresence>
+  </PropertyGroup>
+
+  <Target Name="CheckScottPlotPresence" AfterTargets="Build">
+    <PropertyGroup>
+      <_scottDll>$(OutputPath)ScottPlot.WPF.dll</_scottDll>
+    </PropertyGroup>
+
+    <!-- Emit a clear warning during build if the optional assembly isn't present -->
+    <Warning Text="Optional assembly ScottPlot.WPF not found in output. Plots will be disabled at runtime. To include it, ensure 'dotnet restore' succeeds and ScottPlot.WPF is included in the publish output." Condition="!Exists('$(_scottDll)')" />
+
+    <!-- Optionally fail the build in CI by setting EnforceScottPlotPresence=true -->
+    <Error Text="Missing required assembly: ScottPlot.WPF. Set EnforceScottPlotPresence=false to allow builds without the plotting module." Condition="'$(EnforceScottPlotPresence)'=='true' and !Exists('$(_scottDll)')" />
+  </Target>
+
+  <!-- Copy ScottPlot DLLs from the NuGet package cache into the build and publish outputs when available -->
+  <Target Name="CopyScottPlotFromPackages" AfterTargets="Build;Publish">
+    <PropertyGroup>
+      <!-- Use NuGet's package root (set by restore). Fall back to USERPROFILE if unset. -->
+      <_nugetRoot Condition=" '$(NuGetPackageRoot)' == '' ">$(USERPROFILE)\.nuget\packages\</_nugetRoot>
+      <_nugetRoot Condition=" '$(NuGetPackageRoot)' != '' ">$(NuGetPackageRoot)</_nugetRoot>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <!-- Try to find ScottPlot.WPF DLL and ScottPlot core DLL in any compatible lib folder -->
+      <_ScottPlotWpfFiles Include="$(_nugetRoot)scottplot.wpf\**\lib\**\ScottPlot.WPF.dll" />
+      <_ScottPlotCoreFiles Include="$(_nugetRoot)scottplot\**\lib\**\ScottPlot.dll" />
+    </ItemGroup>
+
+    <Message Importance="High" Text="Searching for ScottPlot DLLs under $(_nugetRoot)" />
+
+    <!-- If found, copy them to the output folder -->
+    <Copy SourceFiles="@(_ScottPlotWpfFiles)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="@(_ScottPlotWpfFiles) != ''" />
+    <Copy SourceFiles="@(_ScottPlotCoreFiles)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="@(_ScottPlotCoreFiles) != ''" />
+
+    <!-- Also ensure they are present for publish output by copying to PublishDir when available -->
+    <Copy SourceFiles="@(_ScottPlotWpfFiles)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" Condition="'$(PublishDir)' != '' and @(_ScottPlotWpfFiles) != ''" />
+    <Copy SourceFiles="@(_ScottPlotCoreFiles)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" Condition="'$(PublishDir)' != '' and @(_ScottPlotCoreFiles) != ''" />
+
+    <Message Importance="High" Text="ScottPlot DLL copy complete (if any were found)." />
+  </Target>
 
 </Project>

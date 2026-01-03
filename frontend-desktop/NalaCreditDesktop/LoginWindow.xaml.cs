@@ -38,7 +38,16 @@ namespace NalaCreditDesktop
                 if (loginResponse == null || string.IsNullOrEmpty(loginResponse.Token))
                 {
                     StatusText.Text = "Email ou mot de passe incorrect";
-                    MessageBox.Show("Email ou mot de passe incorrect", "Erreur de connexion", 
+                    
+                    var errorMsg = "Impossible de se connecter au serveur.\n\n";
+                    errorMsg += $"URL API: {_apiService.BaseUrl}\n";
+                    errorMsg += $"Email: {EmailTextBox.Text}\n\n";
+                    errorMsg += "Vérifiez que:\n";
+                    errorMsg += "1. Le backend est en cours d'exécution\n";
+                    errorMsg += "2. L'URL de l'API est correcte\n";
+                    errorMsg += "3. Vos identifiants sont valides";
+                    
+                    MessageBox.Show(errorMsg, "Erreur de connexion", 
                                   MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
@@ -48,27 +57,27 @@ namespace NalaCreditDesktop
                 StatusText.Text = $"Connexion réussie en tant que {userRole}...";
                 
                 // Backend uses: Cashier=0, Employee=1, Manager=2, Admin=3, SupportTechnique=4, SuperAdmin=5
-                // Map these to our dashboards
+                // Map these to our dashboards (Employee = Agent de Crédit)
                 Window? dashboardWindow = userRole switch
                 {
                     // Backend Role: Cashier (0)
                     "Cashier" or "Caissier" => new Views.CashierDashboard(_apiService),
-                    
-                    // Backend Role: Employee (1) → Secrétaire or Agent de Crédit
-                    "Employee" or "Secretary" or "Secrétaire" or "SecretaireAdministratif" => new Views.SecretaryDashboard(),
-                    
-                    // Backend Role: Manager (2) → Chef de Succursale ⭐ FIXED!
+
+                    // Backend Role: Employee (1) → Agent de Crédit / Loan Officer
+                    "Employee" or "LoanOfficer" or "AgentDeCredit" or "Agent de Credit" or "CreditAgent" => new Views.LoanOfficerDashboard(_apiService),
+
+                    // Backend Role: Manager (2) → Chef de Succursale
                     "Manager" or "BranchManager" or "Chef de Succursale" or "ChefDeSuccursale" => new Views.BranchManagerDashboard(_apiService),
-                    
+
                     // Backend Role: Admin (3) → Administrateur Système
                     "Admin" or "Administrator" or "Administrateur" or "AdministrateurSysteme" => ShowUnderDevelopmentAndReturnDefault("Administrateur Système"),
-                    
-                    // Backend Role: SupportTechnique (4) → Support Technique
-                    "SupportTechnique" or "Support" or "Secretaire" => new Views.SecretaryDashboard(),
-                    
+
+                    // Backend Role: SupportTechnique (4) → Secrétaire Administratif
+                    "SupportTechnique" or "Support" or "Secretaire" or "Secretary" or "Secrétaire" or "SecretaireAdministratif" => new Views.SecretaryDashboard(_apiService),
+
                     // Backend Role: SuperAdmin (5) → Super Administrateur
                     "SuperAdmin" or "Direction" or "DirectionGenerale" => ShowUnderDevelopmentAndReturnDefault("Direction Générale"),
-                    
+
                     // Rôle inconnu
                     _ => throw new Exception($"Rôle non reconnu: {userRole}")
                 };
@@ -87,7 +96,19 @@ namespace NalaCreditDesktop
             catch (Exception ex)
             {
                 StatusText.Text = "Erreur de connexion";
-                MessageBox.Show($"Erreur lors de la connexion: {ex.Message}", "Erreur", 
+                
+                // Show detailed error for troubleshooting
+                var errorMessage = $"Erreur lors de la connexion:\n\n{ex.Message}";
+                
+                if (ex.InnerException != null)
+                {
+                    errorMessage += $"\n\nDétail: {ex.InnerException.Message}";
+                }
+                
+                // Add connection info
+                errorMessage += $"\n\nURL API: {_apiService.BaseUrl}";
+                
+                MessageBox.Show(errorMessage, "Erreur de connexion", 
                               MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally

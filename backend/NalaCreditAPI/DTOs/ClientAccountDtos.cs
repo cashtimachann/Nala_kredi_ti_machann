@@ -13,7 +13,7 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         public ClientCurrency Currency { get; set; }
 
         [Required]
-        [Range(0.01, double.MaxValue, ErrorMessage = "Le dépôt initial doit être positif")]
+        [Range(0.0, double.MaxValue, ErrorMessage = "Le dépôt initial doit être positif ou nul")]
         public decimal InitialDeposit { get; set; }
 
         [Required]
@@ -177,7 +177,7 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         public ClientCurrency Currency { get; set; }
 
         [Required]
-        [Range(0.01, double.MaxValue, ErrorMessage = "Le dépôt initial doit être positif")]
+        [Range(0.0, double.MaxValue, ErrorMessage = "Le dépôt initial doit être positif ou nul")]
         public decimal InitialDeposit { get; set; }
 
         [Required]
@@ -509,7 +509,7 @@ namespace NalaCreditAPI.DTOs.ClientAccounts
         public ClientCurrency Currency { get; set; }
 
         [Required]
-        [Range(0.01, double.MaxValue, ErrorMessage = "Le dépôt initial doit être positif")]
+        [Range(0.0, double.MaxValue, ErrorMessage = "Le dépôt initial doit être positif ou nul")]
         public decimal InitialDeposit { get; set; }
 
         [Required]

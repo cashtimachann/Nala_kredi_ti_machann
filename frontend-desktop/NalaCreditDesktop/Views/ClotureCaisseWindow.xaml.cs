@@ -300,7 +300,7 @@ namespace NalaCreditDesktop.Views
         {
             return $@"
 ═══════════════════════════════════════
-            NALA KREDI
+            NALA KREDI TI MACHANN
        BORDEREAU DE CLÔTURE
 ═══════════════════════════════════════
 

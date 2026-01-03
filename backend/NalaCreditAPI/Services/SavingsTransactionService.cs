@@ -478,15 +478,7 @@ namespace NalaCreditAPI.Services.Savings
             if (dto.Amount > account.MaxWithdrawalAmount)
                 throw new InvalidOperationException($"Montant maximum de retrait: {account.MaxWithdrawalAmount:C}");
 
-            // Vérifier la limite quotidienne de retrait
-            var dailyWithdrawals = await GetDailyTransactionTotalAsync(account.Id, SavingsTransactionType.Withdrawal, today);
-            if (dailyWithdrawals + dto.Amount > account.DailyWithdrawalLimit)
-                throw new InvalidOperationException($"Limite quotidienne de retrait dépassée. Limite: {account.DailyWithdrawalLimit:C}");
-
-            // Vérifier la limite mensuelle de retrait
-            var monthlyWithdrawals = await GetMonthlyTransactionTotalAsync(account.Id, SavingsTransactionType.Withdrawal, today);
-            if (monthlyWithdrawals + dto.Amount > account.MonthlyWithdrawalLimit)
-                throw new InvalidOperationException($"Limite mensuelle de retrait dépassée. Limite: {account.MonthlyWithdrawalLimit:C}");
+            // Limites de retrait désactivées - pas de restriction quotidienne ou mensuelle
         }
 
         private static decimal CalculateFees(SavingsTransactionType type, decimal amount, SavingsCurrency currency)

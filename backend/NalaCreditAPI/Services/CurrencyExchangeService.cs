@@ -247,14 +247,14 @@ namespace NalaCreditAPI.Services
                 var (legacyBranchId, branchName) = await ResolveBranchContextAsync(branchId);
 
                 // Determine currencies based on exchange type
-                if (dto.ExchangeType == ExchangeType.Purchase) // HTG → USD
+                if (dto.ExchangeType == ExchangeType.Purchase) // HTG → USD (bank sells USD)
                 {
                     result.FromCurrency = CurrencyType.HTG;
                     result.FromCurrencyName = "HTG";
                     result.ToCurrency = CurrencyType.USD;
                     result.ToCurrencyName = "USD";
                 }
-                else // USD → HTG
+                else // USD → HTG (bank buys USD)
                 {
                     result.FromCurrency = CurrencyType.USD;
                     result.FromCurrencyName = "USD";
@@ -267,15 +267,15 @@ namespace NalaCreditAPI.Services
 
                 if (dto.ExchangeType == ExchangeType.Purchase)
                 {
-                    // Client wants to buy USD with HTG
-                    result.ExchangeRate = exchangeRate.BuyingRate;
-                    result.ToAmount = dto.Amount / exchangeRate.BuyingRate;
+                    // Client buys USD → use selling rate (bank selling USD)
+                    result.ExchangeRate = exchangeRate.SellingRate;
+                    result.ToAmount = dto.Amount / exchangeRate.SellingRate;
                 }
                 else
                 {
-                    // Client wants to sell USD for HTG
-                    result.ExchangeRate = exchangeRate.SellingRate;
-                    result.ToAmount = dto.Amount * exchangeRate.SellingRate;
+                    // Client sells USD → use buying rate (bank buying USD)
+                    result.ExchangeRate = exchangeRate.BuyingRate;
+                    result.ToAmount = dto.Amount * exchangeRate.BuyingRate;
                 }
 
                 // Commission disabled: net equals gross

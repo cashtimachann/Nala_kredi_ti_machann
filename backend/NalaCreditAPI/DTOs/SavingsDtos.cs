@@ -286,7 +286,7 @@ namespace NalaCreditAPI.DTOs.Savings
         public SavingsCurrency Currency { get; set; }
 
     [Required]
-    [Range(0.01, double.MaxValue, ErrorMessage = "Le dépôt initial doit être positif")]
+    [Range(0.0, double.MaxValue, ErrorMessage = "Le dépôt initial doit être positif ou nul")]
         public decimal InitialDeposit { get; set; }
 
         [Required]

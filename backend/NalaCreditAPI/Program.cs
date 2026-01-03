@@ -69,7 +69,9 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey!)),
-        ClockSkew = TimeSpan.Zero
+        ClockSkew = TimeSpan.Zero,
+        // Map the role claim type to support [Authorize(Roles = "...")] attributes
+        RoleClaimType = System.Security.Claims.ClaimTypes.Role
     };
 });
 
@@ -232,7 +234,8 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(origins.ToArray())
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials(); // Required for SignalR
+              .AllowCredentials() // Required for SignalR
+              .SetIsOriginAllowed(origin => true); // Allow desktop app and other local clients
     });
 });
 

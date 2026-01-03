@@ -27,10 +27,19 @@ namespace NalaCreditAPI.Controllers.Savings
         /// Ouvrir un nouveau compte d'épargne
         /// </summary>
         [HttpPost("open")]
+        // Allow Secretary/Employee to open savings accounts alongside Cashier and Manager
+        [Authorize(Roles = "Cashier,Manager,Employee,Secretary,SecretaireAdministratif")]
         public async Task<ActionResult<SavingsAccountResponseDto>> OpenAccount([FromBody] SavingsAccountOpeningDto dto)
         {
             try
             {
+                // DEBUG: Log all claims in the token
+                Console.WriteLine("[DEBUG] SavingsAccount.OpenAccount - User Claims:");
+                foreach (var claim in User.Claims)
+                {
+                    Console.WriteLine($"  {claim.Type}: {claim.Value}");
+                }
+                
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                     ?? throw new UnauthorizedAccessException("Utilisateur non identifié");
 

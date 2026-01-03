@@ -50,6 +50,16 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Ensure hooks are called in the same order on every render.
+  // Move path-check into an effect before any early returns.
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path.startsWith('/downloads')) {
+      // Allow nginx to serve these paths directly
+      return;
+    }
+  }, []);
+
   const handleLogin = (userData: UserInfo, token: string) => {
     setAuth(userData, token);
   };

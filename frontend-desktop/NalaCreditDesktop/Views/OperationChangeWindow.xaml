@@ -1,7 +1,7 @@
 <Window x:Class="NalaCreditDesktop.Views.OperationChangeWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Opération de Change - Nala Kredi" 
+        Title="Opération de Change - Nala Kredi Ti Machann" 
         Height="750" 
         Width="900"
         WindowStartupLocation="CenterOwner"

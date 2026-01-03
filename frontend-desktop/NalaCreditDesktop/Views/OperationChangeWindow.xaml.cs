@@ -521,7 +521,7 @@ namespace NalaCreditDesktop.Views
         {
             return $@"
 ═══════════════════════════════════════
-            NALA KREDI
+            NALA KREDI TI MACHANN
       JUSTIFICATIF DE CHANGE
 ═══════════════════════════════════════
 

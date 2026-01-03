@@ -1,0 +1,57 @@
+﻿curl -I https://admin.nalakreditimachann.com/downloads/===================================
+  Instructions Deplwaman
+===================================
+
+METOD 1: Via SSH (si w gen aksÃ¨)
+---------------------------------
+1. Upload fichye yo:
+   scp deployment-package/download-page.html root@164.90.207.45:/tmp/
+   scp deployment-package/nginx.conf root@164.90.207.45:/tmp/
+   scp auto-setup-downloads.sh root@164.90.207.45:/tmp/
+
+2. Egzekite setup:
+   ssh root@164.90.207.45 'bash /tmp/auto-setup-downloads.sh'
+
+3. Verifye:
+   https://admin.nalakreditimachann.com/downloads/
+
+
+METOD 2: Via DigitalOcean Console
+---------------------------------
+1. Konekte sou DigitalOcean Dashboard
+2. Ouvri Droplet Console
+3. Upload files yo atravÃ¨ drag-and-drop oswa copy/paste
+
+4. Egzekite komand sa yo:
+   cd /tmp
+   bash auto-setup-downloads.sh
+
+
+METOD 3: Via Git (si repo a sou server la)
+---------------------------------
+1. Commit chanjman yo:
+   git add nginx.conf frontend-desktop/download-page.html
+   git commit -m "Add downloads page configuration"
+   git push
+
+2. Sou server la:
+   cd /var/www/nala-credit
+   git pull
+   bash auto-setup-downloads.sh
+
+
+METOD 4: Via Docker Compose Rebuild
+---------------------------------
+Si app la roule nan Docker:
+   docker-compose down
+   docker-compose up -d --build
+   docker exec -it nala-nginx bash -c 'mkdir -p /var/www/downloads'
+   docker cp deployment-package/download-page.html nala-nginx:/var/www/downloads/
+
+===================================
+  Fichye ki prepare:
+===================================
+- deployment-package/nginx.conf
+- deployment-package/download-page.html  
+- auto-setup-downloads.sh
+

@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -14,6 +15,11 @@ public class ApiService
     private readonly HttpClient _httpClient;
     private readonly string _baseUrl;
     private string? _authToken;
+
+    public ApiService() : this(new HttpClient())
+    {
+        // Default constructor for views that directly instantiate the service
+    }
 
     public ApiService(HttpClient httpClient)
     {
@@ -43,31 +49,44 @@ public class ApiService
                 : EnsureApiBase(trimmed);
         }
 
-        // Try to read from appsettings.json
-        try
+        // Determine environment name for config selection
+        var environmentName = (Environment.GetEnvironmentVariable("NALACREDIT_ENV")
+            ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
+            ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+            ?? "Production").Trim();
+
+        // Try environment-specific appsettings first, then default
+        var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        var configCandidates = new[]
         {
-            var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            var appsettingsPath = System.IO.Path.Combine(appDirectory, "appsettings.json");
-            
-            if (System.IO.File.Exists(appsettingsPath))
+            System.IO.Path.Combine(appDirectory, $"appsettings.{environmentName}.json"),
+            System.IO.Path.Combine(appDirectory, "appsettings.json")
+        };
+
+        foreach (var appsettingsPath in configCandidates)
+        {
+            try
             {
-                var jsonContent = System.IO.File.ReadAllText(appsettingsPath);
-                var jsonDoc = System.Text.Json.JsonDocument.Parse(jsonContent);
-                
-                if (jsonDoc.RootElement.TryGetProperty("ApiSettings", out var apiSettings) &&
-                    apiSettings.TryGetProperty("BaseUrl", out var baseUrl))
+                if (System.IO.File.Exists(appsettingsPath))
                 {
-                    var url = baseUrl.GetString();
-                    if (!string.IsNullOrWhiteSpace(url))
+                    var jsonContent = System.IO.File.ReadAllText(appsettingsPath);
+                    var jsonDoc = System.Text.Json.JsonDocument.Parse(jsonContent);
+
+                    if (jsonDoc.RootElement.TryGetProperty("ApiSettings", out var apiSettings) &&
+                        apiSettings.TryGetProperty("BaseUrl", out var baseUrl))
                     {
-                        return EnsureTrailingSlash(url);
+                        var url = baseUrl.GetString();
+                        if (!string.IsNullOrWhiteSpace(url))
+                        {
+                            return EnsureTrailingSlash(url);
+                        }
                     }
                 }
             }
-        }
-        catch
-        {
-            // If reading config fails, fall through to defaults
+            catch
+            {
+                // If reading config fails, fall through to next candidate
+            }
         }
 
         var aspnetUrls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
@@ -102,6 +121,20 @@ public class ApiService
         return EnsureTrailingSlash(normalized);
     }
 
+    private static string? GetMimeTypeFromExtension(string? extension)
+    {
+        if (string.IsNullOrWhiteSpace(extension)) return null;
+
+        return extension.ToLowerInvariant() switch
+        {
+            ".jpg" => "image/jpeg",
+            ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".pdf" => "application/pdf",
+            _ => null
+        };
+    }
+
     public void SetAuthToken(string token)
     {
         _authToken = token;
@@ -125,13 +158,22 @@ public class ApiService
     {
         try
         {
+            System.Diagnostics.Debug.WriteLine($"=== LOGIN ATTEMPT ===");
+            System.Diagnostics.Debug.WriteLine($"BaseUrl: {_baseUrl}");
+            System.Diagnostics.Debug.WriteLine($"HttpClient.BaseAddress: {_httpClient.BaseAddress}");
+            System.Diagnostics.Debug.WriteLine($"Email: {email}");
+            
             var request = new LoginRequest { Email = email, Password = password };
             
             var json = JsonConvert.SerializeObject(request);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             
+            System.Diagnostics.Debug.WriteLine($"Sending POST to: auth/login");
             var response = await _httpClient.PostAsync("auth/login", content);
             var responseBody = await response.Content.ReadAsStringAsync();
+
+            System.Diagnostics.Debug.WriteLine($"Response Status: {response.StatusCode}");
+            System.Diagnostics.Debug.WriteLine($"Response Body: {responseBody}");
 
             if (!response.IsSuccessStatusCode)
             {
@@ -161,7 +203,14 @@ public class ApiService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Login exception: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"=== LOGIN EXCEPTION ===");
+            System.Diagnostics.Debug.WriteLine($"Message: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Type: {ex.GetType().Name}");
+            System.Diagnostics.Debug.WriteLine($"StackTrace: {ex.StackTrace}");
+            if (ex.InnerException != null)
+            {
+                System.Diagnostics.Debug.WriteLine($"Inner Exception: {ex.InnerException.Message}");
+            }
             return null;
         }
     }
@@ -183,6 +232,18 @@ public class ApiService
 
     public async Task<ApiResult<CashierDashboard?>> GetCashierDashboardAsync() =>
         await GetAsyncResult<CashierDashboard>("dashboard/cashier");
+
+    // Get a daily report for the current cashier (optional date in yyyy-MM-dd)
+    public async Task<ApiResult<DailyReportDto?>> GetDailyReportAsync(DateTime? date = null)
+    {
+        var endpoint = new StringBuilder("reports/daily");
+        if (date.HasValue)
+        {
+            endpoint.Append("?date=").Append(Uri.EscapeDataString(date.Value.ToString("yyyy-MM-dd")));
+        }
+
+        return await GetAsyncResult<DailyReportDto>(endpoint.ToString());
+    }
 
     public async Task<CreditAgentDashboard?> GetCreditAgentDashboardAsync() =>
         await GetAsync<CreditAgentDashboard>("dashboard/credit-agent");
@@ -682,6 +743,44 @@ public class ApiService
         [JsonProperty("notes")] public string? Notes { get; set; }
     }
 
+    // DTOs for Daily Report
+    public class DailyTransactionDto
+    {
+        [JsonProperty("date")] public DateTime Date { get; set; }
+        [JsonProperty("type")] public string? Type { get; set; }
+        [JsonProperty("reference")] public string? Reference { get; set; }
+        [JsonProperty("amount")] public decimal Amount { get; set; }
+        [JsonProperty("currency")] public string? Currency { get; set; }
+        [JsonProperty("description")] public string? Description { get; set; }
+        [JsonProperty("cashier")] public string? Cashier { get; set; }
+    }
+
+    public class DailyReportDto
+    {
+        [JsonProperty("date")] public DateTime Date { get; set; }
+        [JsonProperty("cashierName")] public string? CashierName { get; set; }
+        [JsonProperty("cashierId")] public string? CashierId { get; set; }
+
+        [JsonProperty("depositsCount")] public int DepositsCount { get; set; }
+        [JsonProperty("withdrawalsCount")] public int WithdrawalsCount { get; set; }
+        [JsonProperty("changesCount")] public int ChangesCount { get; set; }
+        [JsonProperty("consultationsCount")] public int ConsultationsCount { get; set; }
+
+        [JsonProperty("totalDepotsHTG")] public decimal TotalDepotsHTG { get; set; }
+        [JsonProperty("totalRetraitsHTG")] public decimal TotalRetraitsHTG { get; set; }
+        [JsonProperty("totalChangeHTG")] public decimal TotalChangeHTG { get; set; }
+
+        [JsonProperty("totalDepotsUSD")] public decimal TotalDepotsUSD { get; set; }
+        [JsonProperty("totalRetraitsUSD")] public decimal TotalRetraitsUSD { get; set; }
+        [JsonProperty("totalChangeUSD")] public decimal TotalChangeUSD { get; set; }
+
+        [JsonProperty("commissionDepots")] public decimal CommissionDepots { get; set; }
+        [JsonProperty("commissionRetraits")] public decimal CommissionRetraits { get; set; }
+        [JsonProperty("commissionChanges")] public decimal CommissionChanges { get; set; }
+
+        [JsonProperty("transactions")] public List<DailyTransactionDto>? Transactions { get; set; }
+    }
+
     public async Task<CurrencyExchangeRateInfo?> GetCurrentExchangeRateAsync()
     {
         try
@@ -1029,7 +1128,43 @@ public class ApiService
 
             if (response.IsSuccessStatusCode)
             {
-                var dto = string.IsNullOrWhiteSpace(raw) ? null : JsonConvert.DeserializeObject<ClientAccountTransactionHistory>(raw);
+                ClientAccountTransactionHistory? dto = null;
+
+                if (!string.IsNullOrWhiteSpace(raw))
+                {
+                    // Preferred: structured history object
+                    try
+                    {
+                        dto = JsonConvert.DeserializeObject<ClientAccountTransactionHistory>(raw);
+                    }
+                    catch
+                    {
+                        // Ignore and try fallback
+                    }
+
+                    // Fallback: some endpoints return a bare array of transactions
+                    if (dto == null && raw.TrimStart().StartsWith("["))
+                    {
+                        try
+                        {
+                            var items = JsonConvert.DeserializeObject<List<ClientAccountTransactionItem>>(raw) ?? new List<ClientAccountTransactionItem>();
+                            dto = new ClientAccountTransactionHistory
+                            {
+                                Transactions = items,
+                                TotalCount = items.Count,
+                                TransactionCount = items.Count,
+                                Page = page,
+                                PageSize = pageSize,
+                                TotalPages = (int)Math.Ceiling(items.Count / (double)pageSize)
+                            };
+                        }
+                        catch
+                        {
+                            // leave dto null
+                        }
+                    }
+                }
+
                 return ApiResult<ClientAccountTransactionHistory?>.Success(dto);
             }
 
@@ -1065,6 +1200,26 @@ public class ApiService
         {
             return ApiResult<ClientAccountSearchResponse?>.Failure(ex.Message);
         }
+    }
+
+    public async Task<ApiResult<List<ClientAccountResponse>>> GetClientAccountsByCustomerIdAsync(string customerId, int maxResults = 50)
+    {
+        if (string.IsNullOrWhiteSpace(customerId))
+        {
+            return ApiResult<List<ClientAccountResponse>>.Failure("Identifiant client requis");
+        }
+
+        var searchResult = await SearchClientAccountsAsync(customerId, maxResults);
+        if (!searchResult.IsSuccess)
+        {
+            return ApiResult<List<ClientAccountResponse>>.Failure(searchResult.ErrorMessage ?? "Impossible de vérifier les comptes client");
+        }
+
+        var accounts = searchResult.Data?.Results
+            .Where(acc => string.Equals(acc.CustomerId, customerId, StringComparison.OrdinalIgnoreCase))
+            .ToList() ?? new List<ClientAccountResponse>();
+
+        return ApiResult<List<ClientAccountResponse>>.Success(accounts);
     }
 
     private async Task<ApiResult<T?>> GetAsyncResult<T>(string endpoint) where T : class
@@ -1206,6 +1361,636 @@ public class ApiService
             return raw.Trim();
         }
     }
+
+    // Secretary Dashboard API methods
+    public async Task<ApiResult<SavingsCustomerResponseDto?>> CreateSavingsCustomerAsync(SavingsCustomerCreateDto dto)
+    {
+        if (dto == null)
+        {
+            return ApiResult<SavingsCustomerResponseDto?>.Failure("Données client invalides");
+        }
+
+        try
+        {
+            var json = JsonConvert.SerializeObject(dto);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("SavingsCustomer", content);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var customer = string.IsNullOrWhiteSpace(raw)
+                    ? null
+                    : JsonConvert.DeserializeObject<SavingsCustomerResponseDto>(raw);
+
+                return ApiResult<SavingsCustomerResponseDto?>.Success(customer);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<SavingsCustomerResponseDto?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<SavingsCustomerResponseDto?>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ApiResult<SavingsCustomerDocumentResponseDto?>> UploadSavingsCustomerDocumentAsync(
+        string customerId,
+        SavingsCustomerDocumentType documentType,
+        string name,
+        string? description,
+        string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(customerId))
+            return ApiResult<SavingsCustomerDocumentResponseDto?>.Failure("Identifiant client requis");
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            return ApiResult<SavingsCustomerDocumentResponseDto?>.Failure("Fichier introuvable");
+
+        try
+        {
+            using var fileStream = File.OpenRead(filePath);
+            using var content = new MultipartFormDataContent();
+
+            content.Add(new StringContent(((int)documentType).ToString()), "DocumentType");
+            content.Add(new StringContent(string.IsNullOrWhiteSpace(name) ? "Document" : name), "Name");
+            if (!string.IsNullOrWhiteSpace(description))
+            {
+                content.Add(new StringContent(description), "Description");
+            }
+
+            var fileContent = new StreamContent(fileStream);
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(GetMimeTypeFromExtension(Path.GetExtension(filePath)) ?? "application/octet-stream");
+            content.Add(fileContent, "File", Path.GetFileName(filePath));
+
+            var endpoint = $"SavingsCustomer/{Uri.EscapeDataString(customerId)}/documents";
+            var response = await _httpClient.PostAsync(endpoint, content);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var document = string.IsNullOrWhiteSpace(raw)
+                    ? null
+                    : JsonConvert.DeserializeObject<SavingsCustomerDocumentResponseDto>(raw);
+
+                return ApiResult<SavingsCustomerDocumentResponseDto?>.Success(document);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<SavingsCustomerDocumentResponseDto?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<SavingsCustomerDocumentResponseDto?>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ApiResult> UploadSavingsCustomerSignatureAsync(string customerId, string signatureData)
+    {
+        if (string.IsNullOrWhiteSpace(customerId))
+            return ApiResult.Failure("Identifiant client requis");
+        if (string.IsNullOrWhiteSpace(signatureData))
+            return ApiResult.Failure("Signature manquante");
+
+        try
+        {
+            var payload = new SavingsCustomerSignatureDto { SignatureData = signatureData };
+            var json = JsonConvert.SerializeObject(payload);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var endpoint = $"SavingsCustomer/{Uri.EscapeDataString(customerId)}/signature";
+            var response = await _httpClient.PostAsync(endpoint, content);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                return ApiResult.Success();
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ApiResult<SavingsCustomerResponseDto?>> GetSavingsCustomerByIdAsync(string customerId)
+    {
+        if (string.IsNullOrWhiteSpace(customerId))
+            return ApiResult<SavingsCustomerResponseDto?>.Failure("Identifiant client requis");
+
+        try
+        {
+            var response = await _httpClient.GetAsync($"SavingsCustomer/{Uri.EscapeDataString(customerId)}");
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var customer = string.IsNullOrWhiteSpace(raw)
+                    ? null
+                    : JsonConvert.DeserializeObject<SavingsCustomerResponseDto>(raw);
+
+                return ApiResult<SavingsCustomerResponseDto?>.Success(customer);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<SavingsCustomerResponseDto?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<SavingsCustomerResponseDto?>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ApiResult<SavingsCustomerResponseDto?>> UpdateSavingsCustomerAsync(string customerId, SavingsCustomerUpdateDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(customerId))
+            return ApiResult<SavingsCustomerResponseDto?>.Failure("Identifiant client requis");
+
+        try
+        {
+            var json = JsonConvert.SerializeObject(dto);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PutAsync($"SavingsCustomer/{Uri.EscapeDataString(customerId)}", content);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var customer = string.IsNullOrWhiteSpace(raw)
+                    ? null
+                    : JsonConvert.DeserializeObject<SavingsCustomerResponseDto>(raw);
+
+                return ApiResult<SavingsCustomerResponseDto?>.Success(customer);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<SavingsCustomerResponseDto?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<SavingsCustomerResponseDto?>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ApiResult<List<SavingsCustomerResponseDto>?>> SearchSavingsCustomersAsync(string searchTerm)
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Length < 2)
+            return ApiResult<List<SavingsCustomerResponseDto>?>.Failure("Terme de recherche trop court");
+
+        try
+        {
+            var response = await _httpClient.GetAsync($"SavingsCustomer/search?searchTerm={Uri.EscapeDataString(searchTerm)}");
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var customers = string.IsNullOrWhiteSpace(raw)
+                    ? new List<SavingsCustomerResponseDto>()
+                    : JsonConvert.DeserializeObject<List<SavingsCustomerResponseDto>>(raw) ?? new List<SavingsCustomerResponseDto>();
+
+                return ApiResult<List<SavingsCustomerResponseDto>?>.Success(customers);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<List<SavingsCustomerResponseDto>?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<List<SavingsCustomerResponseDto>?>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ApiResult<List<SavingsCustomerResponseDto>?>> GetSavingsCustomersAsync(int page = 1, int pageSize = 200)
+    {
+        if (page < 1) page = 1;
+        if (pageSize <= 0 || pageSize > 500) pageSize = 200;
+
+        try
+        {
+            var response = await _httpClient.GetAsync($"SavingsCustomer?page={page}&pageSize={pageSize}");
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var customers = string.IsNullOrWhiteSpace(raw)
+                    ? new List<SavingsCustomerResponseDto>()
+                    : JsonConvert.DeserializeObject<List<SavingsCustomerResponseDto>>(raw) ?? new List<SavingsCustomerResponseDto>();
+
+                return ApiResult<List<SavingsCustomerResponseDto>?>.Success(customers);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<List<SavingsCustomerResponseDto>?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<List<SavingsCustomerResponseDto>?>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ApiResult<SavingsAccountResponseDto?>> OpenSavingsAccountAsync(SavingsAccountOpeningDto dto)
+    {
+        if (dto == null)
+        {
+            return ApiResult<SavingsAccountResponseDto?>.Failure("Données compte invalides");
+        }
+
+        try
+        {
+            var json = JsonConvert.SerializeObject(dto);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("SavingsAccount/open", content);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var account = string.IsNullOrWhiteSpace(raw)
+                    ? null
+                    : JsonConvert.DeserializeObject<SavingsAccountResponseDto>(raw);
+
+                return ApiResult<SavingsAccountResponseDto?>.Success(account);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<SavingsAccountResponseDto?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<SavingsAccountResponseDto?>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ApiResult<SavingsTransactionListResponseDto?>> GetSavingsTransactionsAsync(
+        string? accountId = null,
+        DateTime? dateFrom = null,
+        DateTime? dateTo = null,
+        int page = 1,
+        int pageSize = 100)
+    {
+        try
+        {
+            var queryParams = new List<string>
+            {
+                $"page={page}",
+                $"pageSize={pageSize}",
+                "sortBy=ProcessedAt",
+                "sortDirection=desc"
+            };
+
+            if (!string.IsNullOrWhiteSpace(accountId))
+                queryParams.Add($"accountId={Uri.EscapeDataString(accountId)}");
+
+            if (dateFrom.HasValue)
+                queryParams.Add($"dateFrom={Uri.EscapeDataString(dateFrom.Value.ToString("yyyy-MM-dd"))}");
+
+            if (dateTo.HasValue)
+                queryParams.Add($"dateTo={Uri.EscapeDataString(dateTo.Value.AddDays(1).ToString("yyyy-MM-dd"))}");
+
+            var query = string.Join("&", queryParams);
+            var response = await _httpClient.GetAsync($"SavingsTransaction?{query}");
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = string.IsNullOrWhiteSpace(raw)
+                    ? null
+                    : JsonConvert.DeserializeObject<SavingsTransactionListResponseDto>(raw);
+                return ApiResult<SavingsTransactionListResponseDto?>.Success(result);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<SavingsTransactionListResponseDto?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<SavingsTransactionListResponseDto?>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ApiResult<string>> CreateMicrocreditLoanApplicationAsync(CreateMicrocreditLoanApplicationDto dto)
+    {
+        if (dto == null)
+        {
+            return ApiResult<string>.Failure("Données demande crédit invalides");
+        }
+
+        try
+        {
+            var json = JsonConvert.SerializeObject(dto);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("MicrocreditLoanApplication", content);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                // Parse response to get application ID
+                var result = JsonConvert.DeserializeObject<dynamic>(raw);
+                var applicationId = result?.id?.ToString();
+                return ApiResult<string>.Success(applicationId ?? "");
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<string>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<string>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ApiResult<string>> UploadMicrocreditDocumentAsync(string applicationId, string filePath, string documentType, string? description = null)
+    {
+        if (string.IsNullOrWhiteSpace(applicationId) || string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        {
+            return ApiResult<string>.Failure("Paramètres invalides ou fichier inexistant");
+        }
+
+        try
+        {
+            using var form = new MultipartFormDataContent();
+            
+            // Read file and add to form
+            var fileBytes = await File.ReadAllBytesAsync(filePath);
+            var fileName = Path.GetFileName(filePath);
+            var fileContent = new ByteArrayContent(fileBytes);
+            
+            // Set content type based on file extension
+            var extension = Path.GetExtension(filePath).ToLower();
+            var contentType = extension switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".pdf" => "application/pdf",
+                _ => "application/octet-stream"
+            };
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+            form.Add(fileContent, "file", fileName);
+            
+            // Add document type
+            form.Add(new StringContent(documentType), "documentType");
+            
+            // Add optional description
+            if (!string.IsNullOrWhiteSpace(description))
+            {
+                form.Add(new StringContent(description), "description");
+            }
+
+            var response = await _httpClient.PostAsync($"MicrocreditLoanApplication/{applicationId}/documents", form);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                return ApiResult<string>.Success("Document uploadé avec succès");
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur upload document";
+            return ApiResult<string>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<string>.Failure($"Erreur upload: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResult<MicrocreditApplicationListResponseDto?>> GetMicrocreditApplicationsAsync(
+        int page = 1, 
+        int pageSize = 20, 
+        string? status = null, 
+        string? loanType = null, 
+        int? branchId = null)
+    {
+        try
+        {
+            var queryParams = new List<string>
+            {
+                $"page={page}",
+                $"pageSize={pageSize}"
+            };
+
+            if (!string.IsNullOrEmpty(status))
+                queryParams.Add($"status={status}");
+
+            if (!string.IsNullOrEmpty(loanType))
+                queryParams.Add($"loanType={loanType}");
+
+            if (branchId.HasValue)
+                queryParams.Add($"branchId={branchId.Value}");
+
+            var queryString = string.Join("&", queryParams);
+            var url = $"MicrocreditLoanApplication?{queryString}";
+
+            var response = await _httpClient.GetAsync(url);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = JsonConvert.DeserializeObject<MicrocreditApplicationListResponseDto>(raw);
+                return ApiResult<MicrocreditApplicationListResponseDto?>.Success(result);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur récupération demandes crédit";
+            return ApiResult<MicrocreditApplicationListResponseDto?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<MicrocreditApplicationListResponseDto?>.Failure($"Erreur: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResult<MicrocreditLoanApplicationDto?>> GetMicrocreditApplicationAsync(Guid applicationId)
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync($"MicrocreditLoanApplication/{applicationId}");
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = JsonConvert.DeserializeObject<MicrocreditLoanApplicationDto>(raw);
+                return ApiResult<MicrocreditLoanApplicationDto?>.Success(result);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur récupération demande crédit";
+            return ApiResult<MicrocreditLoanApplicationDto?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<MicrocreditLoanApplicationDto?>.Failure($"Erreur: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResult<MicrocreditLoanApplicationDto?>> ApproveMicrocreditApplicationAsync(Guid applicationId, ApproveMicrocreditApplicationDto approvalData)
+    {
+        try
+        {
+            var json = JsonConvert.SerializeObject(approvalData);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            
+            var response = await _httpClient.PostAsync(
+                $"microcredit/applications/{applicationId}/approve",
+                content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var application = JsonConvert.DeserializeObject<MicrocreditLoanApplicationDto>(responseContent);
+                return ApiResult<MicrocreditLoanApplicationDto?>.Success(application);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return ApiResult<MicrocreditLoanApplicationDto?>.Failure($"Erreur HTTP {response.StatusCode}: {error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<MicrocreditLoanApplicationDto?>.Failure($"Erreur lors de l'approbation: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResult<MicrocreditLoanApplicationDto?>> RejectMicrocreditApplicationAsync(Guid applicationId, RejectMicrocreditApplicationDto rejectionData)
+    {
+        try
+        {
+            var json = JsonConvert.SerializeObject(rejectionData);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            
+            var response = await _httpClient.PostAsync(
+                $"microcredit/applications/{applicationId}/reject",
+                content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var application = JsonConvert.DeserializeObject<MicrocreditLoanApplicationDto>(responseContent);
+                return ApiResult<MicrocreditLoanApplicationDto?>.Success(application);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                return ApiResult<MicrocreditLoanApplicationDto?>.Failure($"Erreur HTTP {response.StatusCode}: {error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<MicrocreditLoanApplicationDto?>.Failure($"Erreur lors du rejet: {ex.Message}");
+        }
+    }
+
+    // --- Secretary dashboard helpers --------------------------------------
+    public async Task<ApiResult<SavingsAccountStatisticsDto?>> GetSavingsAccountStatisticsAsync() =>
+        await GetAsyncResult<SavingsAccountStatisticsDto>("SavingsAccount/statistics");
+
+    public async Task<ApiResult<MicrocreditDashboardStatsDto?>> GetMicrocreditDashboardStatsAsync() =>
+        await GetAsyncResult<MicrocreditDashboardStatsDto>("microcreditdashboard/stats");
+
+    public async Task<ApiResult<DailyBranchReportDto?>> GetMyBranchDailyReportAsync() =>
+        await GetAsyncResult<DailyBranchReportDto>("reports/my-branch/daily");
+
+    public async Task<ApiResult<ClientAccountListResponse?>> GetClientAccountsAsync(ClientAccountFilter? filter = null)
+    {
+        var queryString = "clientaccount";
+        if (filter != null)
+        {
+            var parameters = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(filter.Search))
+            {
+                parameters.Add($"accountNumber={Uri.EscapeDataString(filter.Search)}");
+                parameters.Add($"customerName={Uri.EscapeDataString(filter.Search)}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(filter.Status))
+                parameters.Add($"status={Uri.EscapeDataString(filter.Status)}");
+
+            if (filter.BranchId.HasValue)
+                parameters.Add($"branchId={filter.BranchId.Value}");
+
+            if (filter.AccountType.HasValue)
+                parameters.Add($"accountType={(int)filter.AccountType.Value}");
+
+            if (filter.Currency.HasValue)
+                parameters.Add($"currency={(int)filter.Currency.Value}");
+
+            if (filter.Page > 0) parameters.Add($"page={filter.Page}");
+            if (filter.PageSize > 0) parameters.Add($"pageSize={filter.PageSize}");
+
+            if (!string.IsNullOrWhiteSpace(filter.SortBy))
+                parameters.Add($"sortBy={Uri.EscapeDataString(filter.SortBy)}");
+
+            if (!string.IsNullOrWhiteSpace(filter.SortDirection))
+                parameters.Add($"sortDirection={Uri.EscapeDataString(filter.SortDirection)}");
+
+            if (parameters.Any())
+            {
+                queryString += "?" + string.Join("&", parameters);
+            }
+        }
+
+        return await GetAsyncResult<ClientAccountListResponse>(queryString);
+    }
+
+    public async Task<ApiResult<SavingsAccountListResponseDto?>> GetSavingsAccountsAsync(SavingsAccountFilterDto? filter = null)
+    {
+        var queryString = "SavingsAccount";
+        if (filter != null)
+        {
+            var parameters = new List<string>();
+            if (!string.IsNullOrWhiteSpace(filter.Search)) parameters.Add($"search={Uri.EscapeDataString(filter.Search)}");
+            if (filter.Currency.HasValue) parameters.Add($"currency={(int)filter.Currency.Value}");
+            if (filter.Status.HasValue) parameters.Add($"status={(int)filter.Status.Value}");
+            if (filter.BranchId.HasValue) parameters.Add($"branchId={filter.BranchId.Value}");
+            if (filter.DateFrom.HasValue) parameters.Add($"dateFrom={filter.DateFrom.Value:yyyy-MM-dd}");
+            if (filter.DateTo.HasValue) parameters.Add($"dateTo={filter.DateTo.Value:yyyy-MM-dd}");
+            if (filter.MinBalance.HasValue) parameters.Add($"minBalance={filter.MinBalance.Value}");
+            if (filter.MaxBalance.HasValue) parameters.Add($"maxBalance={filter.MaxBalance.Value}");
+            parameters.Add($"page={filter.Page}");
+            parameters.Add($"pageSize={filter.PageSize}");
+            if (!string.IsNullOrWhiteSpace(filter.SortBy)) parameters.Add($"sortBy={Uri.EscapeDataString(filter.SortBy)}");
+            if (!string.IsNullOrWhiteSpace(filter.SortDirection)) parameters.Add($"sortDirection={Uri.EscapeDataString(filter.SortDirection)}");
+
+            if (parameters.Any())
+            {
+                queryString += "?" + string.Join("&", parameters);
+            }
+        }
+
+        return await GetAsyncResult<SavingsAccountListResponseDto>(queryString);
+    }
+
+    public async Task<ApiResult<TermSavingsAccountResponseDto?>> OpenTermSavingsAccountAsync(TermSavingsAccountOpeningDto dto)
+    {
+        if (dto == null)
+        {
+            return ApiResult<TermSavingsAccountResponseDto?>.Failure("Données compte épargne à terme invalides");
+        }
+
+        try
+        {
+            var json = JsonConvert.SerializeObject(dto);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("TermSavingsAccount/open", content);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var account = string.IsNullOrWhiteSpace(raw)
+                    ? null
+                    : JsonConvert.DeserializeObject<TermSavingsAccountResponseDto>(raw);
+
+                return ApiResult<TermSavingsAccountResponseDto?>.Success(account);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<TermSavingsAccountResponseDto?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<TermSavingsAccountResponseDto?>.Failure(ex.Message);
+        }
+    }
 }
 
 public class ClientAccountSearchResponse
@@ -1248,6 +2033,83 @@ public class ClientAccountResponse
     public string? TermType { get; set; }
 }
 
+public class ClientAccountFilter
+{
+    public string? Search { get; set; }
+    public string? Status { get; set; }
+    public int? BranchId { get; set; }
+    public ClientAccountType? AccountType { get; set; }
+    public ClientCurrency? Currency { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 200;
+    public string? SortBy { get; set; } = "AccountNumber";
+    public string? SortDirection { get; set; } = "asc";
+}
+
+public class ClientAccountSummary
+{
+    public string Id { get; set; } = string.Empty;
+    public string AccountNumber { get; set; } = string.Empty;
+    public string AccountType { get; set; } = string.Empty;
+    public string CustomerId { get; set; } = string.Empty;
+    public string CustomerName { get; set; } = string.Empty;
+    public string CustomerPhone { get; set; } = string.Empty;
+    public string Currency { get; set; } = string.Empty;
+    public decimal Balance { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime OpeningDate { get; set; }
+    public DateTime? LastTransactionDate { get; set; }
+    public int BranchId { get; set; }
+    public string BranchName { get; set; } = string.Empty;
+}
+
+public class ClientAccountListResponse
+{
+    public List<ClientAccountSummary> Accounts { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages { get; set; }
+    public ClientAccountStatistics? Statistics { get; set; }
+}
+
+public class ClientAccountStatistics
+{
+    public int TotalAccounts { get; set; }
+    public int ActiveAccounts { get; set; }
+    public decimal TotalBalanceHTG { get; set; }
+    public decimal TotalBalanceUSD { get; set; }
+    public decimal AverageBalance { get; set; }
+    public Dictionary<string, int> AccountsByType { get; set; } = new();
+    public Dictionary<string, int> AccountsByStatus { get; set; } = new();
+    public Dictionary<string, int> AccountsByCurrency { get; set; } = new();
+    public int NewAccountsThisMonth { get; set; }
+    public int DormantAccounts { get; set; }
+}
+
+public enum ClientAccountType
+{
+    Savings = 0,
+    Current = 1,
+    TermSavings = 2
+}
+
+public enum ClientAccountStatus
+{
+    Active = 0,
+    Inactive = 1,
+    Closed = 2,
+    Suspended = 3,
+    Locked = 4,
+    PendingApproval = 5
+}
+
+public enum ClientCurrency
+{
+    HTG = 0,
+    USD = 1
+}
+
 public class ClientAccountTransactionHistory
 {
     public List<ClientAccountTransactionItem> Transactions { get; set; } = new();
@@ -1274,8 +2136,78 @@ public class ClientAccountTransactionItem
     public string? Description { get; set; }
     public string? Reference { get; set; }
     public string? ProcessedBy { get; set; }
+    public string? ProcessedByName { get; set; }
     public DateTime ProcessedAt { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+public class SavingsAccountStatisticsDto
+{
+    public int TotalAccounts { get; set; }
+    public int ActiveAccounts { get; set; }
+    public decimal TotalBalanceHTG { get; set; }
+    public decimal TotalBalanceUSD { get; set; }
+    public decimal AverageBalance { get; set; }
+    public Dictionary<string, int> AccountsByStatus { get; set; } = new();
+    public Dictionary<string, int> AccountsByCurrency { get; set; } = new();
+    public int NewAccountsThisMonth { get; set; }
+    public int DormantAccounts { get; set; }
+}
+
+public class DailyBranchReportDto
+{
+    public int BranchId { get; set; }
+    public string BranchName { get; set; } = string.Empty;
+    public DateTime ReportDate { get; set; }
+    public decimal TotalDepositsHTG { get; set; }
+    public decimal TotalWithdrawalsHTG { get; set; }
+    public CashBalanceDto CashBalance { get; set; } = new();
+    public int TotalTransactions { get; set; }
+}
+
+public class CashBalanceDto
+{
+    public decimal OpeningBalanceHTG { get; set; }
+    public decimal ClosingBalanceHTG { get; set; }
+    public decimal NetChangeHTG { get; set; }
+}
+
+public class MicrocreditDashboardStatsDto
+{
+    public int TotalClients { get; set; }
+    public int ActiveLoans { get; set; }
+    public CurrencyAmountDto TotalOutstanding { get; set; } = new();
+    public CurrencyAmountDto TotalDisbursed { get; set; } = new();
+    public decimal RepaymentRate { get; set; }
+    public OverdueStatsDto OverdueLoans { get; set; } = new();
+    public CurrencyAmountDto InterestRevenue { get; set; } = new();
+    public int LoansCompletedThisMonth { get; set; }
+    public int NewLoansThisMonth { get; set; }
+    public List<BranchPerformanceSummaryDto> BranchPerformance { get; set; } = new();
+    public DateTime GeneratedAt { get; set; }
+}
+
+public class CurrencyAmountDto
+{
+    public decimal HTG { get; set; }
+    public decimal USD { get; set; }
+}
+
+public class OverdueStatsDto
+{
+    public int Count { get; set; }
+    public CurrencyAmountDto Amount { get; set; } = new();
+}
+
+public class BranchPerformanceSummaryDto
+{
+    public int BranchId { get; set; }
+    public string BranchName { get; set; } = string.Empty;
+    public int TotalLoans { get; set; }
+    public CurrencyAmountDto TotalDisbursed { get; set; } = new();
+    public CurrencyAmountDto TotalOutstanding { get; set; } = new();
+    public decimal RepaymentRate { get; set; }
+    public decimal Par30 { get; set; }
 }
 
 public sealed class ApiResult
@@ -1333,6 +2265,7 @@ public class UserInfo
     public string LastName { get; set; } = string.Empty;
     public string Role { get; set; } = string.Empty;
     public int? BranchId { get; set; }
+    public string? BranchName { get; set; }
 }
 
 public class CashierDashboard
@@ -1581,3 +2514,99 @@ public class CurrentAccountTransactionRequest
         public bool HasActiveSession { get; set; }
         public string DisplayName => $"{FirstName} {LastName}{(HasActiveSession ? " (Session active)" : "")}";
     }
+
+    // Secretary Dashboard API methods
+    /*
+    public async Task<ApiResult<SavingsCustomerResponseDto?>> CreateSavingsCustomerAsync(SavingsCustomerCreateDto dto)
+    {
+        if (dto == null)
+        {
+            return ApiResult<SavingsCustomerResponseDto?>.Failure("Données client invalides");
+        }
+
+        try
+        {
+            var json = JsonConvert.SerializeObject(dto);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("SavingsCustomer", content);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var customer = string.IsNullOrWhiteSpace(raw)
+                    ? null
+                    : JsonConvert.DeserializeObject<SavingsCustomerResponseDto>(raw);
+
+                return ApiResult<SavingsCustomerResponseDto?>.Success(customer);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<SavingsCustomerResponseDto?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<SavingsCustomerResponseDto?>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ApiResult<SavingsAccountResponseDto?>> OpenSavingsAccountAsync(SavingsAccountOpeningDto dto)
+    {
+        if (dto == null)
+        {
+            return ApiResult<SavingsAccountResponseDto?>.Failure("Données compte invalides");
+        }
+
+        try
+        {
+            var json = JsonConvert.SerializeObject(dto);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("SavingsAccount/open", content);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var account = string.IsNullOrWhiteSpace(raw)
+                    ? null
+                    : JsonConvert.DeserializeObject<SavingsAccountResponseDto>(raw);
+
+                return ApiResult<SavingsAccountResponseDto?>.Success(account);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<SavingsAccountResponseDto?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<SavingsAccountResponseDto?>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ApiResult<string>> CreateMicrocreditLoanApplicationAsync(CreateMicrocreditLoanApplicationDto dto)
+    {
+        if (dto == null)
+        {
+            return ApiResult<string>.Failure("Données demande crédit invalides");
+        }
+
+        try
+        {
+            var json = JsonConvert.SerializeObject(dto);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("MicrocreditLoanApplication", content);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                // The response might be a MicrocreditLoanApplicationDto, but for now return success
+                return ApiResult<string>.Success("Demande crédit créée avec succès");
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur inconnue";
+            return ApiResult<string>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<string>.Failure(ex.Message);
+        }
+    }
+    */

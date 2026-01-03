@@ -580,11 +580,7 @@ namespace NalaCreditDesktop.Views
                 return;
             }
 
-            if (!_retrait.RespecteLimite)
-            {
-                MessageBox.Show("Montant dépasse la limite de retrait journalière.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
+            // Limite de retrait désactivée - pas de restriction
 
             if (_retrait.SignatureRequise && !_retrait.AutorisationSuperviseur)
             {
@@ -901,7 +897,7 @@ namespace NalaCreditDesktop.Views
 
             return $@"
 ═══════════════════════════════════════
-            NALA KREDI
+            NALA KREDI TI MACHANN
         REÇU DE RETRAIT
 ═══════════════════════════════════════
 
@@ -988,6 +984,11 @@ Merci de votre confiance!
 
         private decimal GetDailyWithdrawalLimit()
         {
+            // Limite de retrait désactivée - retourner une limite très élevée
+            return 999999999m;
+
+            // Code original désactivé:
+            /*
             if (_accountInfo != null)
             {
                 if (_accountInfo.AccountLimits?.DailyWithdrawalLimit > 0)
@@ -1001,20 +1002,7 @@ Merci de votre confiance!
                 }
             }
 
-            if (_currentAccountInfo != null)
-            {
-                if (_currentAccountInfo.DailyWithdrawalLimit > 0)
-                {
-                    return _currentAccountInfo.DailyWithdrawalLimit;
-                }
-
-                if (ParseCurrency(_currentAccountInfo.Currency) == 1) // USD
-                {
-                    return Math.Round(LimiteRetraitDefautHTG / TauxUsdVersHtg, 2);
-                }
-            }
-
-            return LimiteRetraitDefautHTG;
+            */
         }
 
         private int ParseCurrency(string currency)

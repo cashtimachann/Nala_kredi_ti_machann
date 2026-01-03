@@ -38,6 +38,8 @@ public class AuthService : IAuthService
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.UTF8.GetBytes(secretKey!);
 
+        var roleName = GetRoleName(user.Role);
+
         var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id),
@@ -46,9 +48,18 @@ public class AuthService : IAuthService
             new Claim("FirstName", user.FirstName ?? "Unknown"),
             new Claim("LastName", user.LastName ?? "Unknown"),
             new Claim("Role", user.Role.ToString()),
-            new Claim(ClaimTypes.Role, GetRoleName(user.Role)),
+            new Claim(ClaimTypes.Role, roleName),
             new Claim("AllowedDomain", GetAllowedDomain(user.Role))
         };
+
+        // Provide aliases for SupportTechnique so secretary/admin users receive the expected role claims
+        if (user.Role == UserRole.SupportTechnique)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, "Support"));
+            claims.Add(new Claim(ClaimTypes.Role, "SecretaireAdministratif"));
+            claims.Add(new Claim(ClaimTypes.Role, "Secretary"));
+            claims.Add(new Claim(ClaimTypes.Role, "Secretaire"));
+        }
 
         if (user.BranchId.HasValue)
         {

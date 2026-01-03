@@ -246,6 +246,9 @@ namespace NalaCreditDesktop.ViewModels
         [ObservableProperty]
         private bool isTransactionModuleVisible = true;
 
+        [ObservableProperty]
+        private bool isCashSessionOpen;
+
         #endregion
 
         public string TransactionModuleToggleLabel => IsTransactionModuleVisible
@@ -432,6 +435,7 @@ namespace NalaCreditDesktop.ViewModels
             DashboardData = dashboard;
             SessionStatusText = FormatSessionStatus(dashboard.CashSessionStatus);
             SessionStatusColor = GetSessionBrush(dashboard.CashSessionStatus);
+            IsCashSessionOpen = IsSessionOpen(dashboard.CashSessionStatus);
             SessionId = dashboard.CashSessionId?.ToString() ?? "--";
             SessionStartTime = dashboard.SessionStartTime ?? SessionStartTime;
 
@@ -661,6 +665,15 @@ namespace NalaCreditDesktop.ViewModels
             };
         }
 
+        private static bool IsSessionOpen(string? status)
+        {
+            return status?.ToLowerInvariant() switch
+            {
+                "open" or "ouverte" => true,
+                _ => false
+            };
+        }
+
         private static string GetTransactionLabel(string type)
         {
             return type?.ToLowerInvariant() switch
@@ -712,6 +725,16 @@ namespace NalaCreditDesktop.ViewModels
         {
             try
             {
+                if (!IsCashSessionOpen)
+                {
+                    MessageBox.Show(
+                        "La caisse est fermée. Ouvrez une session de caisse pour traiter un change.",
+                        "Caisse fermée",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
                 var owner = Application.Current?
                     .Windows
                     .OfType<Window>()
@@ -796,6 +819,16 @@ namespace NalaCreditDesktop.ViewModels
         {
             try
             {
+                if (!IsCashSessionOpen)
+                {
+                    MessageBox.Show(
+                        "La caisse est déjà fermée.",
+                        "Caisse fermée",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    return;
+                }
+
                 var result = MessageBox.Show(
                     "Êtes-vous sûr de vouloir fermer la caisse?\nCette action nécessitera une vérification complète des fonds.",
                     "Confirmation de clôture",
@@ -894,13 +927,42 @@ namespace NalaCreditDesktop.ViewModels
         {
             try
             {
-                MessageBox.Show("Génération du rapport journalier en cours...", "Info", 
-                               MessageBoxButton.OK, MessageBoxImage.Information);
+                // Verify ApiService is available
+                if (_apiService == null)
+                {
+                    MessageBox.Show("Service API non disponible. Veuillez vous reconnecter.", 
+                                  "Erreur", 
+                                  MessageBoxButton.OK, 
+                                  MessageBoxImage.Warning);
+                    return;
+                }
+
+                var owner = Application.Current?
+                    .Windows
+                    .OfType<Window>()
+                    .FirstOrDefault(w => w.IsActive && w.IsVisible)
+                    ?? Application.Current?.MainWindow;
+
+                // Pass ApiService directly to report window
+                var reportWindow = new RapportJournalierWindow(_apiService);
+
+                if (owner != null && owner.IsVisible)
+                {
+                    reportWindow.Owner = owner;
+                }
+                else
+                {
+                    reportWindow.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                }
+
+                reportWindow.ShowDialog();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur: {ex.Message}", "Erreur", 
-                               MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Erreur lors de l'ouverture du rapport:\n{ex.Message}\n\nDétails: {ex.InnerException?.Message}", 
+                               "Erreur", 
+                               MessageBoxButton.OK, 
+                               MessageBoxImage.Error);
             }
         }
 

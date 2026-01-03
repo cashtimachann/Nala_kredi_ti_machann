@@ -70,10 +70,30 @@ namespace NalaCreditDesktop.Views
             base.OnClosed(e);
         }
 
+        private bool EnsureCashSessionOpen()
+        {
+            if (_viewModel.IsCashSessionOpen)
+            {
+                return true;
+            }
+
+            MessageBox.Show(
+                "La caisse est fermée. Ouvrez la session caisse avant de traiter des transactions.",
+                "Caisse fermée",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return false;
+        }
+
         private void OpenQuickDeposit_Click(object sender, RoutedEventArgs e)
         {
             try
             {
+                if (!EnsureCashSessionOpen())
+                {
+                    return;
+                }
+
                 var depotWindow = new NouveauDepotWindow(_apiService)
                 {
                     Owner = this
@@ -99,6 +119,11 @@ namespace NalaCreditDesktop.Views
         {
             try
             {
+                if (!EnsureCashSessionOpen())
+                {
+                    return;
+                }
+
                 var retraitWindow = new NouveauRetraitWindow(_apiService)
                 {
                     Owner = this
@@ -121,6 +146,11 @@ namespace NalaCreditDesktop.Views
         {
             try
             {
+                if (!EnsureCashSessionOpen())
+                {
+                    return;
+                }
+
                 var win = new RecouvrementWindow(_apiService)
                 {
                     Owner = this
@@ -132,6 +162,91 @@ namespace NalaCreditDesktop.Views
             catch (Exception ex)
             {
                 MessageBox.Show($"Erè lè w ap louvri fenèt Recouvrement:\n\n{ex}", "Erè", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void PrintTransactionReport_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Make the lookup null-safe so we don't throw if the service isn't initialized yet
+                var currentUser = _apiService?.CurrentUser;
+                if (currentUser == null)
+                {
+                    MessageBox.Show("Erreur: Utilisateur non connecté", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                // Build cashier name with fallbacks
+                var cashierName = string.IsNullOrWhiteSpace(currentUser.FirstName) 
+                    ? currentUser.Email 
+                    : string.IsNullOrWhiteSpace(currentUser.LastName) 
+                        ? currentUser.FirstName 
+                        : $"{currentUser.FirstName} {currentUser.LastName}";
+
+                var reportWindow = new CashierTransactionReportWindow(
+                    _apiService,
+                    currentUser.Id,
+                    cashierName);
+                reportWindow.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                // Log full exception for diagnostics
+                Console.Error.WriteLine($"[ERROR] Opening transaction report: {ex}");
+                try
+                {
+                    var folder = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                    var appFolder = System.IO.Path.Combine(folder, "NalaCreditDesktop");
+                    if (!System.IO.Directory.Exists(appFolder))
+                        System.IO.Directory.CreateDirectory(appFolder);
+
+                    var logFile = System.IO.Path.Combine(appFolder, "error.log");
+                    var sb = new System.Text.StringBuilder();
+                    sb.AppendLine("--- Exception in CashierDashboard.PrintTransactionReport_Click ---");
+                    sb.AppendLine($"Time: {DateTime.Now:O}");
+                    sb.AppendLine(ex.ToString());
+                    sb.AppendLine();
+                    System.IO.File.AppendAllText(logFile, sb.ToString());
+                }
+                catch
+                {
+                    // ignore logging failures
+                }
+
+                MessageBox.Show($"Erreur lors de l'ouverture du rapport:\n\n{ex.Message}\n\nConsultez le fichier de journalisation pour plus de détails.", 
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void Logout_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var result = MessageBox.Show(
+                    "Êtes-vous sûr de vouloir vous déconnecter?\n\nSi vous vous déconnectez, votre session sera fermée.",
+                    "Déconnexion",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    // Stop timer and cleanup
+                    _viewModel?.StopTimer();
+
+                    // Clear session data
+                    _apiService.ClearAuth();
+
+                    // Return to login window
+                    var loginWindow = new LoginWindow();
+                    loginWindow.Show();
+                    this.Close();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Erreur lors de la déconnexion:\n\n{ex.Message}", 
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

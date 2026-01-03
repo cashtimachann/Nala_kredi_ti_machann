@@ -157,7 +157,7 @@ public class BranchReportController : ControllerBase
     /// Obtenir le rapport journalier pour la succursale de l'utilisateur connecté
     /// </summary>
     [HttpGet("my-branch/daily")]
-    [Authorize(Roles = "Manager,Cashier")]
+    [Authorize(Roles = "Manager,Cashier,Secretary,Secretaire,SecretaireAdministratif")]
     public async Task<ActionResult<DailyBranchReportDto>> GetMyBranchDailyReport([FromQuery] DateTime? date)
     {
         try
@@ -193,7 +193,7 @@ public class BranchReportController : ControllerBase
     /// Obtenir le rapport mensuel pour la succursale de l'utilisateur connecté
     /// </summary>
     [HttpGet("my-branch/monthly")]
-    [Authorize(Roles = "Manager,Cashier")]
+    [Authorize(Roles = "Manager,Cashier,Secretary,Secretaire,SecretaireAdministratif")]
     public async Task<ActionResult<MonthlyBranchReportDto>> GetMyBranchMonthlyReport(
         [FromQuery] int? month, 
         [FromQuery] int? year)

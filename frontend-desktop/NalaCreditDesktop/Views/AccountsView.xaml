@@ -49,9 +49,7 @@
 
             <!-- Section de recherche -->
             <Border Grid.Row="0" Background="White" CornerRadius="8" Padding="20" Margin="0,0,0,20">
-                <Border.Effect>
-                    <DropShadowEffect BlurRadius="8" ShadowDepth="2" Color="#20000000" Opacity="0.5"/>
-                </Border.Effect>
+                <!-- Effect removed -->
                 
                 <StackPanel>
                     <TextBlock Text="🔍 RECHERCHE RAPIDE" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/>
@@ -97,9 +95,7 @@
 
             <!-- Liste des comptes -->
             <Border Grid.Row="1" Background="White" CornerRadius="8" Padding="20">
-                <Border.Effect>
-                    <DropShadowEffect BlurRadius="8" ShadowDepth="2" Color="#20000000" Opacity="0.5"/>
-                </Border.Effect>
+                <!-- Effect removed -->
                 
                 <Grid>
                     <Grid.RowDefinitions>

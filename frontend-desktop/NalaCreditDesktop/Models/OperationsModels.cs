@@ -226,6 +226,7 @@ namespace NalaCreditDesktop.Models
         public int NombreRetraits { get; set; }
         public int NombreChanges { get; set; }
         public int NombreConsultations { get; set; }
+        public int NombreRecouvrements { get; set; }
         
         // Montants par devise
         public decimal TotalDepotsHTG { get; set; }
@@ -234,6 +235,8 @@ namespace NalaCreditDesktop.Models
         public decimal TotalRetraitsUSD { get; set; }
         public decimal TotalChangeHTG { get; set; }
         public decimal TotalChangeUSD { get; set; }
+        public decimal TotalRecouvrementsHTG { get; set; }
+        public decimal TotalRecouvrementsUSD { get; set; }
         
         // Commissions et frais
         public decimal CommissionDepots { get; set; }

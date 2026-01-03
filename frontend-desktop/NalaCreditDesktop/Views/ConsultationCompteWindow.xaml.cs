@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -88,9 +89,7 @@ namespace NalaCreditDesktop.Views
         private void InitialiserConsultation()
         {
             _consultation = new ConsultationModel();
-            
-            // Simuler une base de données de clients
-            InitialiserBaseDonneesClients();
+            _baseDonneesClients = new ObservableCollection<ClientModel>();
             
             // Focus sur le champ de recherche if available; otherwise defer until Loaded
             try
@@ -119,58 +118,7 @@ namespace NalaCreditDesktop.Views
 
         private void InitialiserBaseDonneesClients()
         {
-            _baseDonneesClients = new ObservableCollection<ClientModel>
-            {
-                new ClientModel
-                {
-                    NumeroCompte = "ACC001234",
-                    Nom = "PIERRE",
-                    Prenom = "Jean",
-                    Telephone = "+509 3456-7890",
-                    Email = "jean.pierre@email.com",
-                    SoldeHTG = 75000.00m,
-                    SoldeUSD = 580.50m,
-                    DerniereActivite = DateTime.Now.AddHours(-2),
-                    Historique = new ObservableCollection<TransactionHistorique>
-                    {
-                        new TransactionHistorique { Date = DateTime.Now.AddHours(-1), Type = TransactionType.Depot, Devise = DeviseType.HTG, Montant = 25000, SoldeApres = 75000, Description = "Dépôt espèces", Caissier = "Marie Dupont" },
-                        new TransactionHistorique { Date = DateTime.Now.AddHours(-3), Type = TransactionType.Retrait, Devise = DeviseType.USD, Montant = 200, SoldeApres = 580.50m, Description = "Retrait GAB", Caissier = "Paul Martin" },
-                        new TransactionHistorique { Date = DateTime.Now.AddDays(-1), Type = TransactionType.Depot, Devise = DeviseType.USD, Montant = 500, SoldeApres = 780.50m, Description = "Virement reçu", Caissier = "Marie Dupont" }
-                    }
-                },
-                new ClientModel
-                {
-                    NumeroCompte = "ACC002468",
-                    Nom = "JOSEPH",
-                    Prenom = "Marie",
-                    Telephone = "+509 2987-6543",
-                    Email = "marie.joseph@email.com",
-                    SoldeHTG = 125000.00m,
-                    SoldeUSD = 950.75m,
-                    DerniereActivite = DateTime.Now.AddDays(-1),
-                    Historique = new ObservableCollection<TransactionHistorique>
-                    {
-                        new TransactionHistorique { Date = DateTime.Now.AddDays(-1), Type = TransactionType.Change, Devise = DeviseType.USD, Montant = 150, SoldeApres = 950.75m, Description = "Change HTG->USD", Caissier = "Marie Dupont" },
-                        new TransactionHistorique { Date = DateTime.Now.AddDays(-2), Type = TransactionType.Depot, Devise = DeviseType.HTG, Montant = 50000, SoldeApres = 125000, Description = "Dépôt chèque", Caissier = "Paul Martin" }
-                    }
-                },
-                new ClientModel
-                {
-                    NumeroCompte = "ACC003691",
-                    Nom = "LOUIS",
-                    Prenom = "Pierre",
-                    Telephone = "+509 4567-8901",
-                    Email = "pierre.louis@email.com",
-                    SoldeHTG = 89500.00m,
-                    SoldeUSD = 675.25m,
-                    DerniereActivite = DateTime.Now.AddMinutes(-30),
-                    Historique = new ObservableCollection<TransactionHistorique>
-                    {
-                        new TransactionHistorique { Date = DateTime.Now.AddMinutes(-30), Type = TransactionType.Retrait, Devise = DeviseType.HTG, Montant = 10000, SoldeApres = 89500, Description = "Retrait espèces", Caissier = "Marie Dupont" },
-                        new TransactionHistorique { Date = DateTime.Now.AddHours(-4), Type = TransactionType.Depot, Devise = DeviseType.USD, Montant = 300, SoldeApres = 675.25m, Description = "Dépôt devises", Caissier = "Marie Dupont" }
-                    }
-                }
-            };
+            _baseDonneesClients = new ObservableCollection<ClientModel>();
         }
 
         private void TypeRecherche_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -317,7 +265,7 @@ namespace NalaCreditDesktop.Views
                 return;
             }
 
-            // Otherwise, try a backend search by name/telephone or fall back to local sample DB
+            // Otherwise, try a backend search by name/telephone
             if (_consultation.TypeRecherche == TypeRecherche.Nom || _consultation.TypeRecherche == TypeRecherche.Telephone)
             {
                 try
@@ -352,41 +300,11 @@ namespace NalaCreditDesktop.Views
                     MessageBox.Show($"Erreur recherche API comptes:\n{ex.Message}", "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
             }
-
-            // Fallback: local sample DB (useful for development/offline)
-            var resultats = _consultation.TypeRecherche switch
-            {
-                TypeRecherche.NumeroCompte => _baseDonneesClients.Where(c =>
-                    c.NumeroCompte.Contains(terme, StringComparison.OrdinalIgnoreCase)).ToList(),
-                TypeRecherche.Nom => _baseDonneesClients.Where(c =>
-                    c.Nom.Contains(terme, StringComparison.OrdinalIgnoreCase) ||
-                    c.Prenom.Contains(terme, StringComparison.OrdinalIgnoreCase) ||
-                    c.NomComplet.Contains(terme, StringComparison.OrdinalIgnoreCase)).ToList(),
-                TypeRecherche.Telephone => _baseDonneesClients.Where(c =>
-                    c.Telephone.Contains(terme)).ToList(),
-                _ => new List<ClientModel>()
-            };
-
-            if (resultats.Any())
-            {
-                if (SearchResultsListBox != null)
-                    SearchResultsListBox.ItemsSource = resultats;
-                if (SearchResultsPanel != null)
-                    SearchResultsPanel.Visibility = Visibility.Visible;
-
-                // Si un seul résultat, l'afficher automatiquement
-                if (resultats.Count == 1)
-                {
-                    AfficherClient(resultats.First());
-                }
-            }
-            else
-            {
-                if (SearchResultsPanel != null)
-                    SearchResultsPanel.Visibility = Visibility.Collapsed;
-                MessageBox.Show($"Aucun client trouvé pour '{terme}'.", "Recherche",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-            }
+            // No results found
+            if (SearchResultsPanel != null)
+                SearchResultsPanel.Visibility = Visibility.Collapsed;
+            MessageBox.Show($"Aucun client trouvé pour '{terme}'.", "Recherche",
+                MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private ClientModel MapClientAccountToClientModel(ClientAccountResponse dto)
@@ -414,12 +332,20 @@ namespace NalaCreditDesktop.Views
             return new TransactionHistorique
             {
                 Date = item.ProcessedAt == default ? item.CreatedAt : item.ProcessedAt,
-                Type = item.Type == null ? TransactionType.Other : (item.Type.Equals("deposit", StringComparison.OrdinalIgnoreCase) ? TransactionType.Depot : (item.Type.Equals("withdrawal", StringComparison.OrdinalIgnoreCase) ? TransactionType.Retrait : TransactionType.Other)),
+                Type = item.Type == null
+                    ? TransactionType.Other
+                    : (item.Type.Equals("deposit", StringComparison.OrdinalIgnoreCase)
+                        ? TransactionType.Depot
+                        : (item.Type.Equals("withdrawal", StringComparison.OrdinalIgnoreCase)
+                            ? TransactionType.Retrait
+                            : (item.Type.Equals("change", StringComparison.OrdinalIgnoreCase) || item.Type.Equals("exchange", StringComparison.OrdinalIgnoreCase)
+                                ? TransactionType.Change
+                                : TransactionType.Other))),
                 Devise = string.Equals(item.Currency, "USD", StringComparison.OrdinalIgnoreCase) ? DeviseType.USD : DeviseType.HTG,
                 Montant = item.Amount,
                 SoldeApres = item.BalanceAfter,
                 Description = item.Description ?? item.Reference ?? string.Empty,
-                Caissier = item.ProcessedBy ?? string.Empty
+                Caissier = string.IsNullOrWhiteSpace(item.ProcessedByName) ? (item.ProcessedBy ?? string.Empty) : item.ProcessedByName
             };
         }
 
@@ -475,35 +401,36 @@ namespace NalaCreditDesktop.Views
                 if (DerniereActiviteHTGText != null) DerniereActiviteHTGText.Text = $"Dernière activité: {client.DerniereActivite:dd/MM/yyyy HH:mm}";
                 if (DerniereActiviteUSDText != null) DerniereActiviteUSDText.Text = $"Dernière activité: {client.DerniereActivite:dd/MM/yyyy HH:mm}";
 
-                // Remplir l'historique des transactions
+                // Remplir l'historique des transactions (réel)
                 if (TransactionsDataGrid != null && client.Historique != null)
                 {
                     var dernieresTransactions = client.Historique
                         .OrderByDescending(t => t.Date)
-                        .Take(5)
+                        .Take(10)
                         .ToList();
                     
                     TransactionsDataGrid.ItemsSource = dernieresTransactions;
                 }
 
-                // Simuler l'historique des changes (filtrer les transactions de type Change)
+                // Historique de change basé sur les transactions marquées comme change
                 if (HistoriqueChangeDataGrid != null)
                 {
-                    var historiqueChange = new ObservableCollection<ChangeModel>
-                    {
-                        new ChangeModel 
-                        { 
-                            DateOperation = DateTime.Now.AddDays(-1),
-                            DeviseSource = DeviseType.HTG,
-                            DeviseDestination = DeviseType.USD,
-                            MontantSource = 19500,
-                            MontantDestination = 150,
-                            TauxApplique = 130,
-                            Caissier = "Marie Dupont"
-                        }
-                    };
-                    
-                    HistoriqueChangeDataGrid.ItemsSource = historiqueChange;
+                    var changeItems = client.Historique?
+                        .Where(t => t.Type == TransactionType.Change)
+                        .OrderByDescending(t => t.Date)
+                        .Select(t => new ChangeModel
+                        {
+                            DateOperation = t.Date,
+                            DeviseSource = t.Devise,
+                            DeviseDestination = t.Devise,
+                            MontantSource = t.Montant,
+                            MontantDestination = t.Montant,
+                            TauxApplique = 0,
+                            Caissier = t.Caissier
+                        })
+                        .ToList() ?? new List<ChangeModel>();
+
+                    HistoriqueChangeDataGrid.ItemsSource = changeItems;
                 }
 
                 // Activer les boutons d'action
@@ -563,7 +490,7 @@ namespace NalaCreditDesktop.Views
                     depotWindow.ShowDialog();
 
                     // Actualiser les informations après fermeture
-                    ActualiserInformationsClient();
+                    _ = ActualiserInformationsClientAsync();
                 }
                 catch (Exception ex)
                 {
@@ -585,7 +512,7 @@ namespace NalaCreditDesktop.Views
                     retraitWindow.ShowDialog();
 
                     // Actualiser les informations après fermeture
-                    ActualiserInformationsClient();
+                    _ = ActualiserInformationsClientAsync();
                 }
                 catch (Exception ex)
                 {
@@ -625,10 +552,15 @@ namespace NalaCreditDesktop.Views
                 .OrderByDescending(t => t.Date)
                 .Take(10);
 
-            string releve = $@"
+                var user = _apiService.CurrentUser;
+                var editorName = string.Join(" ", new[] { user?.FirstName, user?.LastName }.Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
+                if (string.IsNullOrWhiteSpace(editorName)) editorName = "Utilisateur";
+                var caisseCode = user?.BranchName ?? "";
+
+                string releve = $@"
 ═══════════════════════════════════════
-            NALA KREDI
-         RELEVÉ DE COMPTE
+                NALA KREDI TI MACHANN
+            RELEVÉ DE COMPTE
 ═══════════════════════════════════════
 
 Client: {_clientSelectionne.NomComplet}
@@ -660,19 +592,17 @@ DERNIÈRES TRANSACTIONS
             releve += $@"
 
 Édité le: {DateTime.Now:dd/MM/yyyy HH:mm}
-Par: Marie Dupont - Caisse CS-001
+Par: {editorName} {(string.IsNullOrWhiteSpace(caisseCode) ? string.Empty : "- " + caisseCode)}
 ═══════════════════════════════════════";
 
             return releve;
         }
 
-        private void ActualiserInformationsClient()
+        private async Task ActualiserInformationsClientAsync()
         {
             if (_clientSelectionne != null)
             {
-                // Dans un vrai système, on rechargerait les données depuis la base
-                // Pour la démo, on simule une actualisation
-                AfficherClient(_clientSelectionne);
+                await EffectuerRechercheAsync(_clientSelectionne.NumeroCompte);
             }
         }
 

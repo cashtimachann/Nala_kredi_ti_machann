@@ -1,7 +1,7 @@
 <Window x:Class="NalaCreditDesktop.Views.ClotureCaisseWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Clôture de Caisse - Nala Kredi" 
+        Title="Clôture de Caisse - Nala Kredi Ti Machann" 
         Height="900" 
         Width="1200"
         WindowStartupLocation="CenterOwner"
@@ -39,9 +39,7 @@
                         CornerRadius="12" 
                         Padding="20" 
                         Margin="0,0,0,20">
-                    <Border.Effect>
-                        <DropShadowEffect BlurRadius="10" ShadowDepth="3" Color="#40000000"/>
-                    </Border.Effect>
+                    <!-- Effect removed -->
                     
                     <StackPanel>
                         <TextBlock Text="📋 INFORMATIONS DE SESSION" 

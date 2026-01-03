@@ -139,7 +139,7 @@ namespace NalaCreditAPI.Services.Savings
                     Id = Guid.NewGuid().ToString(),
                     AccountId = account.Id,
                     AccountNumber = account.AccountNumber,
-                    Type = SavingsTransactionType.Deposit,
+                    Type = SavingsTransactionType.OpeningDeposit,
                     Amount = dto.InitialDeposit,
                     Currency = account.Currency,
                     BalanceBefore = 0,

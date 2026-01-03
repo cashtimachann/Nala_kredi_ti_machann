@@ -1,0 +1,342 @@
+<UserControl x:Class="NalaCreditDesktop.Views.MyReportsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d" 
+             d:DesignHeight="800" d:DesignWidth="1200">
+    
+    <UserControl.Resources>
+        <!-- Primary Button Style -->
+        <Style x:Key="PrimaryButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#3b82f6"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="20,12"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#2563eb"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#cbd5e1"/>
+                    <Setter Property="Foreground" Value="#64748b"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Success Button Style -->
+        <Style x:Key="SuccessButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+            <Setter Property="Background" Value="#10b981"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#059669"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Report Card Style -->
+        <Style x:Key="ReportCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#e2e8f0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="Margin" Value="0,0,0,15"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="#3b82f6"/>
+                    <Setter Property="Background" Value="#f8fafc"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="#f8fafc">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="White" Padding="20" Margin="0,0,0,20"
+                BorderBrush="#e2e8f0" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock Text="📈" FontSize="28" Margin="0,0,10,0"/>
+                    <TextBlock Text="Mes Rapports" FontSize="24" FontWeight="Bold" 
+                               Foreground="#1e293b" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="RefreshButton" Content="🔄 Actualiser" 
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            ToolTip="Actualiser les données"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Main Content -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <Grid Margin="20">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Report Types Section -->
+                <Border Grid.Row="0" Background="White" Padding="20" CornerRadius="8"
+                        BorderBrush="#e2e8f0" BorderThickness="1" Margin="0,0,0,20">
+                    <StackPanel>
+                        <TextBlock Text="Types de Rapports Disponibles" FontSize="18" FontWeight="SemiBold" 
+                                   Foreground="#1e293b" Margin="0,0,0,20"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Portfolio Report Card -->
+                            <Border Grid.Column="0" Style="{StaticResource ReportCardStyle}" 
+                                    x:Name="PortfolioReportCard" MouseLeftButtonDown="PortfolioReport_Click"
+                                    Margin="0,0,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="💼" FontSize="36" TextAlignment="Center" Margin="0,0,0,10"/>
+                                    <TextBlock Text="Rapport de Portefeuille" FontSize="16" FontWeight="SemiBold"
+                                               TextAlignment="Center" Foreground="#1e293b" Margin="0,0,0,5"/>
+                                    <TextBlock Text="Vue d'ensemble de tous vos prêts actifs avec statistiques détaillées"
+                                               FontSize="13" Foreground="#64748b" TextWrapping="Wrap"
+                                               TextAlignment="Center" Margin="0,0,0,10"/>
+                                    <TextBlock Text="• Prêts actifs" FontSize="12" Foreground="#475569" Margin="0,2"/>
+                                    <TextBlock Text="• Montants en cours" FontSize="12" Foreground="#475569" Margin="0,2"/>
+                                    <TextBlock Text="• Taux de remboursement" FontSize="12" Foreground="#475569" Margin="0,2"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Recovery Report Card -->
+                            <Border Grid.Column="1" Style="{StaticResource ReportCardStyle}"
+                                    x:Name="RecoveryReportCard" MouseLeftButtonDown="RecoveryReport_Click"
+                                    Margin="5,0">
+                                <StackPanel>
+                                    <TextBlock Text="⚠️" FontSize="36" TextAlignment="Center" Margin="0,0,0,10"/>
+                                    <TextBlock Text="Rapport de Recouvrement" FontSize="16" FontWeight="SemiBold"
+                                               TextAlignment="Center" Foreground="#1e293b" Margin="0,0,0,5"/>
+                                    <TextBlock Text="Analyse des prêts en retard avec actions de recouvrement recommandées"
+                                               FontSize="13" Foreground="#64748b" TextWrapping="Wrap"
+                                               TextAlignment="Center" Margin="0,0,0,10"/>
+                                    <TextBlock Text="• Retards par sévérité" FontSize="12" Foreground="#475569" Margin="0,2"/>
+                                    <TextBlock Text="• Pénalités calculées" FontSize="12" Foreground="#475569" Margin="0,2"/>
+                                    <TextBlock Text="• Historique contacts" FontSize="12" Foreground="#475569" Margin="0,2"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Performance Report Card -->
+                            <Border Grid.Column="2" Style="{StaticResource ReportCardStyle}"
+                                    x:Name="PerformanceReportCard" MouseLeftButtonDown="PerformanceReport_Click"
+                                    Margin="10,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="📊" FontSize="36" TextAlignment="Center" Margin="0,0,0,10"/>
+                                    <TextBlock Text="Rapport de Performance" FontSize="16" FontWeight="SemiBold"
+                                               TextAlignment="Center" Foreground="#1e293b" Margin="0,0,0,5"/>
+                                    <TextBlock Text="Vos indicateurs clés de performance sur la période sélectionnée"
+                                               FontSize="13" Foreground="#64748b" TextWrapping="Wrap"
+                                               TextAlignment="Center" Margin="0,0,0,10"/>
+                                    <TextBlock Text="• Prêts décaissés" FontSize="12" Foreground="#475569" Margin="0,2"/>
+                                    <TextBlock Text="• Volume de portefeuille" FontSize="12" Foreground="#475569" Margin="0,2"/>
+                                    <TextBlock Text="• Taux de défaut" FontSize="12" Foreground="#475569" Margin="0,2"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Report Configuration Section -->
+                <Border Grid.Row="1" Background="White" Padding="20" CornerRadius="8"
+                        BorderBrush="#e2e8f0" BorderThickness="1" Margin="0,0,0,20">
+                    <StackPanel>
+                        <TextBlock Text="Configuration du Rapport" FontSize="18" FontWeight="SemiBold" 
+                                   Foreground="#1e293b" Margin="0,0,0,20"/>
+
+                        <!-- Selected Report Type -->
+                        <Grid Margin="0,0,0,20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="200"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Type de rapport:" FontWeight="SemiBold" 
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" x:Name="SelectedReportTypeText" 
+                                       Text="Aucun rapport sélectionné" 
+                                       Foreground="#3b82f6" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <!-- Period Selection -->
+                        <TextBlock Text="Période" FontSize="16" FontWeight="SemiBold" 
+                                   Foreground="#334155" Margin="0,0,0,10"/>
+                        
+                        <Grid Margin="0,0,0,20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Date de début" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                <DatePicker x:Name="StartDatePicker" FontSize="14" Padding="10"
+                                            BorderBrush="#cbd5e1" BorderThickness="1"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Date de fin" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                <DatePicker x:Name="EndDatePicker" FontSize="14" Padding="10"
+                                            BorderBrush="#cbd5e1" BorderThickness="1"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="4" VerticalAlignment="Bottom">
+                                <ComboBox x:Name="PeriodPresetComboBox" Width="180" Padding="10"
+                                          BorderBrush="#cbd5e1" SelectionChanged="PeriodPreset_Changed">
+                                    <ComboBoxItem Content="Période personnalisée" IsSelected="True"/>
+                                    <ComboBoxItem Content="Aujourd'hui"/>
+                                    <ComboBoxItem Content="Cette semaine"/>
+                                    <ComboBoxItem Content="Ce mois"/>
+                                    <ComboBoxItem Content="Mois dernier"/>
+                                    <ComboBoxItem Content="Ce trimestre"/>
+                                    <ComboBoxItem Content="Cette année"/>
+                                </ComboBox>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Filters -->
+                        <TextBlock Text="Filtres" FontSize="16" FontWeight="SemiBold" 
+                                   Foreground="#334155" Margin="0,0,0,10"/>
+                        
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Statut des prêts" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                <ComboBox x:Name="StatusFilterComboBox" Padding="10" BorderBrush="#cbd5e1">
+                                    <ComboBoxItem Content="Tous" IsSelected="True"/>
+                                    <ComboBoxItem Content="Actifs uniquement"/>
+                                    <ComboBoxItem Content="En retard uniquement"/>
+                                    <ComboBoxItem Content="À jour uniquement"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Type de prêt" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                <ComboBox x:Name="LoanTypeFilterComboBox" Padding="10" BorderBrush="#cbd5e1">
+                                    <ComboBoxItem Content="Tous" IsSelected="True"/>
+                                    <ComboBoxItem Content="Personnel"/>
+                                    <ComboBoxItem Content="Commerce"/>
+                                    <ComboBoxItem Content="Agricole"/>
+                                    <ComboBoxItem Content="Éducation"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="4">
+                                <TextBlock Text="Format d'export" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                <ComboBox x:Name="ExportFormatComboBox" Padding="10" BorderBrush="#cbd5e1">
+                                    <ComboBoxItem Content="📄 PDF" IsSelected="True"/>
+                                    <ComboBoxItem Content="📊 Excel (XLSX)"/>
+                                    <ComboBoxItem Content="📋 Texte (CSV)"/>
+                                </ComboBox>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Actions Section -->
+                <Border Grid.Row="2" Background="White" Padding="20" CornerRadius="8"
+                        BorderBrush="#e2e8f0" BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="Actions" FontSize="18" FontWeight="SemiBold" 
+                                   Foreground="#1e293b" Margin="0,0,0,20"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Button x:Name="PreviewButton" Grid.Column="0" 
+                                    Content="👁️ Prévisualiser" 
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    Width="160" IsEnabled="False"
+                                    ToolTip="Voir un aperçu du rapport avant génération"/>
+
+                            <Button x:Name="GenerateButton" Grid.Column="2" 
+                                    Content="📄 Générer Rapport" 
+                                    Style="{StaticResource SuccessButtonStyle}"
+                                    Width="180" IsEnabled="False"
+                                    ToolTip="Générer et télécharger le rapport"/>
+
+                            <Button x:Name="PrintButton" Grid.Column="4" 
+                                    Content="🖨️ Imprimer" 
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    Width="140" IsEnabled="False"
+                                    ToolTip="Imprimer directement le rapport"/>
+
+                            <StackPanel Grid.Column="5" Orientation="Horizontal" 
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <TextBlock x:Name="StatusMessageText" Text="" 
+                                           Foreground="#64748b" FontStyle="Italic" Margin="0,0,10,0"/>
+                                <ProgressBar x:Name="GenerationProgressBar" 
+                                             Width="200" Height="6" 
+                                             Visibility="Collapsed"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Report Summary -->
+                        <Border x:Name="ReportSummaryPanel" Margin="0,20,0,0" 
+                                Background="#f8fafc" Padding="15" CornerRadius="6"
+                                BorderBrush="#e2e8f0" BorderThickness="1"
+                                Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock Text="📋 Résumé du rapport" FontWeight="SemiBold" 
+                                           FontSize="14" Foreground="#334155" Margin="0,0,0,10"/>
+                                <TextBlock x:Name="SummaryText" TextWrapping="Wrap" 
+                                           FontSize="13" Foreground="#475569" LineHeight="20"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
