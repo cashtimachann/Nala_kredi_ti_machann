@@ -10,6 +10,7 @@ obj/
 *.dll
 *.exe
 *.pdb
+frontend-desktop/NalaCreditDesktop/publish/
 
 # Cache directories
 **/.cache/
