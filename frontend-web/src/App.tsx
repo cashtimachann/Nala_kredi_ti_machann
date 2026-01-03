@@ -1,10 +1,8 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import Login from './components/auth/Login';
-import CashierDashboard from './components/dashboards/CashierDashboard';
-import SecretaryDashboard from './components/dashboards/SecretaryDashboard';
-import CreditAgentDashboard from './components/dashboards/CreditAgentDashboard';
 import BranchSupervisorDashboard from './components/dashboards/BranchSupervisorDashboard';
 import RegionalManagerDashboard from './components/dashboards/RegionalManagerDashboard';
 import SystemAdminDashboard from './components/dashboards/SystemAdminDashboard';
@@ -50,6 +48,18 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Check if user has unauthorized role after hydration
+  useEffect(() => {
+    if (user) {
+      const desktopOnlyRoles = ['Cashier', 'Secretary', 'AdministrativeSecretary', 'CreditAgent'];
+      if (desktopOnlyRoles.includes(user.role)) {
+        // Immediately logout users with desktop-only roles
+        clearAuth();
+        toast.error('Votre rôle nécessite l\'application desktop. Veuillez utiliser l\'application desktop pour vous connecter.');
+      }
+    }
+  }, [user, clearAuth]);
+
   // Ensure hooks are called in the same order on every render.
   // Move path-check into an effect before any early returns.
   useEffect(() => {
@@ -74,18 +84,16 @@ function App() {
     }
   };
 
+  const isWebRole = (role: string) => {
+    const webRoles = ['Manager', 'BranchSupervisor', 'RegionalManager', 'SystemAdmin', 'Accounting', 'Management', 'SuperAdmin'];
+    return webRoles.includes(role);
+  };
+
   const getDashboardComponent = (role: string) => {
     // Debug: log the role to see what we're getting
     console.log('User role:', role, 'Type:', typeof role);
     
     switch (role) {
-      case 'Cashier':
-        return <CashierDashboard />;
-      case 'Secretary':
-      case 'AdministrativeSecretary':
-        return <SecretaryDashboard />;
-      case 'CreditAgent':
-        return <CreditAgentDashboard />;
       case 'Manager':
         // Managers use the same dashboard view as Branch Supervisors
         return <BranchSupervisorDashboard />;
@@ -103,9 +111,9 @@ function App() {
       default:
         return (
           <div className="text-center p-8">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Rôle non reconnu</h1>
-            <p className="text-gray-600">Rôle reçu: "{role}"</p>
-            <p className="text-sm text-gray-500 mt-2">Veuillez contacter l'administrateur système.</p>
+            <h1 className="text-2xl font-bold text-red-600 mb-4">Accès non autorisé</h1>
+            <p className="text-gray-600">Votre rôle nécessite l'application desktop.</p>
+            <p className="text-sm text-gray-500 mt-2">Veuillez utiliser l'application desktop pour accéder à votre dashboard.</p>
           </div>
         );
     }
@@ -149,7 +157,7 @@ function App() {
           <Route 
             path="/login" 
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Navigate to="/dashboard" replace />
               ) : (
                 <Login onLogin={handleLogin} />
@@ -160,7 +168,7 @@ function App() {
           <Route
             path="/dashboard"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   {getDashboardComponent(user.role)}
                 </Layout>
@@ -174,7 +182,7 @@ function App() {
           <Route
             path="/payroll"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <PayrollManagement />
                 </Layout>
@@ -186,7 +194,7 @@ function App() {
           <Route
             path="/payroll/employees"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <EmployeeManagement branchId={user.branchId?.toString()} />
                 </Layout>
@@ -200,7 +208,7 @@ function App() {
           <Route
             path="/currency-exchange/rates"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <ExchangeRateManagement branchId={user.branchId?.toString()} userRole={user.role} />
                 </Layout>
@@ -214,7 +222,7 @@ function App() {
           <Route
             path="/branches"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <BranchManagement />
                 </Layout>
@@ -228,7 +236,7 @@ function App() {
           <Route
             path="/cash-management"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <SuperAdminCashManagement />
                 </Layout>
@@ -242,7 +250,7 @@ function App() {
           <Route
             path="/transfers"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <ErrorBoundary>
                     <InterBranchTransferList />
@@ -257,7 +265,7 @@ function App() {
           <Route
             path="/transfers/reports"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <ErrorBoundary>
                     <ConsolidatedTransferReport />
@@ -273,7 +281,7 @@ function App() {
           <Route
             path="/savings"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <SavingsManagement />
                 </Layout>
@@ -287,7 +295,7 @@ function App() {
           <Route
             path="/client-accounts"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <ClientAccountManagement />
                 </Layout>
@@ -301,7 +309,7 @@ function App() {
           <Route
             path="/current-accounts"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <CurrentAccountManagement />
                 </Layout>
@@ -315,7 +323,7 @@ function App() {
           <Route
             path="/term-savings"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <TermSavingsManagement />
                 </Layout>
@@ -329,7 +337,7 @@ function App() {
           <Route
             path="/current-accounts/transactions"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <CurrentAccountTransactions />
                 </Layout>
@@ -343,7 +351,7 @@ function App() {
           <Route
             path="/current-accounts/reports"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <CurrentAccountReports />
                 </Layout>
@@ -357,7 +365,7 @@ function App() {
           <Route
             path="/transactions"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <CurrentAccountTransactions />
                 </Layout>
@@ -371,7 +379,7 @@ function App() {
           <Route
             path="/reports"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <CurrentAccountReports />
                 </Layout>
@@ -385,12 +393,10 @@ function App() {
           <Route
             path="/reports/branch"
             element={
-              user && ['Manager', 'BranchSupervisor', 'SuperAdmin', 'Director', 'Cashier'].includes(user.role) ? (
+              user && isWebRole(user.role) && ['Manager', 'BranchSupervisor', 'SuperAdmin', 'Director'].includes(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <BranchReportDashboard userRole={user.role} branchId={user.branchId} />
                 </Layout>
-              ) : user ? (
-                <Navigate to="/dashboard" replace />
               ) : (
                 <Navigate to="/login" replace />
               )
@@ -401,12 +407,10 @@ function App() {
           <Route
             path="/admin/reports/dashboard"
             element={
-              user && ['SuperAdmin', 'Director'].includes(user.role) ? (
+              user && isWebRole(user.role) && ['SuperAdmin', 'Director'].includes(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <SuperAdminReportDashboard />
                 </Layout>
-              ) : user ? (
-                <Navigate to="/dashboard" replace />
               ) : (
                 <Navigate to="/login" replace />
               )
@@ -416,12 +420,10 @@ function App() {
           <Route
             path="/admin/reports/audit"
             element={
-              user && ['SuperAdmin', 'Director'].includes(user.role) ? (
+              user && isWebRole(user.role) && ['SuperAdmin', 'Director'].includes(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <TransactionAudit />
                 </Layout>
-              ) : user ? (
-                <Navigate to="/dashboard" replace />
               ) : (
                 <Navigate to="/login" replace />
               )
@@ -431,12 +433,10 @@ function App() {
           <Route
             path="/admin/reports/performance"
             element={
-              user && ['SuperAdmin', 'Director'].includes(user.role) ? (
+              user && isWebRole(user.role) && ['SuperAdmin', 'Director'].includes(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <BranchPerformanceComparison />
                 </Layout>
-              ) : user ? (
-                <Navigate to="/dashboard" replace />
               ) : (
                 <Navigate to="/login" replace />
               )
@@ -447,7 +447,7 @@ function App() {
           <Route
             path="/loans"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <LoanManagement />
                 </Layout>
@@ -460,7 +460,7 @@ function App() {
           <Route
             path="/microfinance"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <LoanManagement />
                 </Layout>
@@ -474,7 +474,7 @@ function App() {
           <Route
             path="/admin/accounts"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <AdminAccountList />
                 </Layout>
@@ -488,7 +488,7 @@ function App() {
           <Route
             path="/clients/new"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <ClientCreatePage />
                 </Layout>
@@ -502,7 +502,7 @@ function App() {
           <Route
             path="/settings"
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <div className="text-center p-8">
                     <h1 className="text-2xl font-bold text-gray-900 mb-4">Paramètres du Système</h1>
@@ -518,7 +518,7 @@ function App() {
           <Route 
             path="/" 
             element={
-              <Navigate to={user ? "/dashboard" : "/login"} replace />
+              <Navigate to={user && isWebRole(user.role) ? "/dashboard" : "/login"} replace />
             } 
           />
 
@@ -526,7 +526,7 @@ function App() {
           <Route 
             path="*" 
             element={
-              user ? (
+              user && isWebRole(user.role) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <div className="text-center p-8">
                     <h1 className="text-2xl font-bold text-gray-900 mb-4">Page non trouvée</h1>

@@ -81,6 +81,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       console.log('User role:', response.user?.role);
 
       if (response && response.token && response.user) {
+        // Check if user has a web dashboard role
+        const webOnlyRoles = ['Cashier', 'Secretary', 'AdministrativeSecretary', 'CreditAgent'];
+        if (webOnlyRoles.includes(response.user.role)) {
+          toast.error('Votre rôle nécessite l\'application desktop. Veuillez utiliser l\'application desktop pour vous connecter.');
+          return;
+        }
+        
         toast.success('Connexion réussie !');
         // Use the user data from login response
         onLogin(response.user, response.token);
