@@ -430,6 +430,20 @@ namespace NalaCreditAPI.Controllers
                     return BadRequest(ModelState);
                 }
 
+                // Validate password if provided
+                if (!string.IsNullOrEmpty(updateDto.Password))
+                {
+                    if (updateDto.Password.Length < 8)
+                    {
+                        return BadRequest("Le mot de passe doit contenir au moins 8 caractères");
+                    }
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(updateDto.Password, 
+                        @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$"))
+                    {
+                        return BadRequest("Le mot de passe doit contenir au moins: 1 minuscule, 1 majuscule, 1 chiffre, 1 caractère spécial (@$!%*?&)");
+                    }
+                }
+
                 if (!updateDto.AssignedBranches.Any())
                 {
                     return BadRequest("Au moins une succursale doit être assignée");

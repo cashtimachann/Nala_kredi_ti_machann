@@ -134,10 +134,7 @@ namespace NalaCreditAPI.DTOs
         [MinLength(1, ErrorMessage = "Au moins une succursale doit être assignée")]
         public List<string> AssignedBranches { get; set; } = new List<string>();
 
-        // Mot de passe optionnel pour la mise à jour
-        [StringLength(100, MinimumLength = 8, ErrorMessage = "Le mot de passe doit contenir au moins 8 caractères")]
-        [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$", 
-            ErrorMessage = "Le mot de passe doit contenir au moins: 1 minuscule, 1 majuscule, 1 chiffre, 1 caractère spécial")]
+        // Mot de passe optionnel pour la mise à jour (validation uniquement si fourni)
         public string? Password { get; set; }
     }
 
