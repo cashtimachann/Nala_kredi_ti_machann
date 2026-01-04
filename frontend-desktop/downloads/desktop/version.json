@@ -1,10 +1,10 @@
 {
-  "version": "1.0.6",
+  "version": "1.0.7",
   "releaseDate": "2026-01-03",
-  "downloadUrl": "https://admin.nalakreditimachann.com/downloads/desktop/NalaCreditDesktop-v1.0.6.zip",
+  "downloadUrl": "https://admin.nalakreditimachann.com/downloads/desktop/NalaCreditDesktop-v1.0.7.zip",
   "changeLog": [
-    "API base URL mete sou branch.nalakreditimachann.com (pa localhost)",
-    "Dashboard web restriksyon pou Cashier/Secretary/Agent (desktop sèlman)",
+    "Amelyorasyon jesyon koneksyon ak sekirite",
+    "Koreksyon bug ak optimize pèfòmans",
     "Mizajou log ak sekirite general"
   ],
   "mandatory": true,

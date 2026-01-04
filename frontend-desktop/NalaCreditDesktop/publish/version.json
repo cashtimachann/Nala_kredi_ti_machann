@@ -1,11 +1,11 @@
 {
-  "version": "1.0.5",
-  "releaseDate": "2025-12-24",
-  "downloadUrl": "https://admin.nalakreditimachann.com/downloads/NalaCreditDesktop-v1.0.5.exe",
+  "version": "1.0.7",
+  "releaseDate": "2026-01-03",
+  "downloadUrl": "https://admin.nalakreditimachann.com/downloads/desktop/NalaCreditDesktop-v1.0.7.zip",
   "changeLog": [
-    "Fix: Correction du domaine pour les caissiers (branch.nalakreditimachann.com)",
-    "Fix: Résolution du problème de validation de domaine au login",
-    "Amélioration: Navigation automatique vers le dashboard approprié selon le rôle"
+    "Amelyorasyon jesyon koneksyon ak sekirite",
+    "Koreksyon bug ak optimize pèfòmans",
+    "Mizajou log ak sekirite general"
   ],
   "mandatory": true,
   "minimumVersion": "1.0.0"
