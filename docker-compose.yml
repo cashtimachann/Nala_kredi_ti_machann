@@ -84,7 +84,7 @@ services:
       JwtSettings__Audience: "NalaCreditClients"
       JwtSettings__ExpiryMinutes: "60"
     ports:
-      - "5000:5000"
+      - "5001:5000"
     volumes:
       - api_uploads:/app/uploads
       - api_logs:/app/logs
