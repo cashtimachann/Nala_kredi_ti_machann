@@ -73,6 +73,16 @@ public class CreditAgentDashboardDto
     public double RepaymentRate { get; set; }
     public decimal PaymentsExpectedThisWeek { get; set; }
     public decimal AverageTicketSize { get; set; }
+    public List<PaymentDueItemDto> PaymentsDueList { get; set; } = new();
+}
+
+public class PaymentDueItemDto
+{
+    public string BorrowerName { get; set; } = string.Empty;
+    public string LoanNumber { get; set; } = string.Empty;
+    public DateTime DueDate { get; set; }
+    public decimal Amount { get; set; }
+    public string Currency { get; set; } = "HTG";
 }
 
 public class BranchSupervisorDashboardDto

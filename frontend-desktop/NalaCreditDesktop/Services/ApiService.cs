@@ -2339,6 +2339,16 @@ public class CreditAgentDashboard
     public int PaymentsDueThisWeek { get; set; }
     public int OverdueCredits { get; set; }
     public double RepaymentRate { get; set; }
+    public List<PaymentDueItem> PaymentsDueList { get; set; } = new();
+}
+
+public class PaymentDueItem
+{
+    public string BorrowerName { get; set; } = string.Empty;
+    public string LoanNumber { get; set; } = string.Empty;
+    public DateTime DueDate { get; set; }
+    public decimal Amount { get; set; }
+    public string Currency { get; set; } = "HTG";
 }
 
 // BranchSupervisorDashboard is now defined in Models/BranchManagerModels.cs

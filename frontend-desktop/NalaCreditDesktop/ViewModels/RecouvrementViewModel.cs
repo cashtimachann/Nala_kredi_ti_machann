@@ -78,6 +78,15 @@ namespace NalaCreditDesktop.ViewModels
         [ObservableProperty]
         private bool isRecordPaymentEnabled = true;
 
+        [ObservableProperty]
+        private string? lastReceiptNumber;
+
+        [ObservableProperty]
+        private bool hasReceipt;
+
+        [ObservableProperty]
+        private MicrocreditPayment? lastPayment;
+
         public ObservableCollection<OverdueLoan> OverdueLoans { get; } = new();
 
         public RecouvrementViewModel(ApiService api)
@@ -292,6 +301,12 @@ namespace NalaCreditDesktop.ViewModels
                     // Refresh summary to reflect new balances
                     LoanSummary = await _api.GetLoanSummaryAsync(SelectedLoan.Id);
                     StatusMessage = $"Paiement confirmé. Reçu : {confirmed.ReceiptNumber}";
+                    
+                    // Store receipt info for printing
+                    LastReceiptNumber = confirmed.ReceiptNumber;
+                    LastPayment = confirmed;
+                    HasReceipt = true;
+                    
                     AppServices.RaiseTransactionProcessed();
                     IsRecordPaymentEnabled = false;
                 }
@@ -310,6 +325,137 @@ namespace NalaCreditDesktop.ViewModels
             {
                 IsBusy = false;
             }
+        }
+
+        [RelayCommand]
+        private void PrintReceipt()
+        {
+            if (LastPayment == null || SelectedLoan == null)
+            {
+                StatusMessage = "Aucun reçu à imprimer";
+                return;
+            }
+
+            try
+            {
+                var receiptText = GenerateReceiptText();
+                var printDialog = new System.Windows.Controls.PrintDialog();
+                
+                if (printDialog.ShowDialog() == true)
+                {
+                    var flowDoc = new System.Windows.Documents.FlowDocument
+                    {
+                        PagePadding = new System.Windows.Thickness(50),
+                        FontFamily = new System.Windows.Media.FontFamily("Courier New"),
+                        FontSize = 12
+                    };
+                    
+                    flowDoc.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run(receiptText)));
+                    
+                    var paginator = ((System.Windows.Documents.IDocumentPaginatorSource)flowDoc).DocumentPaginator;
+                    printDialog.PrintDocument(paginator, "Reçu de Paiement");
+                    
+                    StatusMessage = "Reçu imprimé avec succès";
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Erreur d'impression: {ex.Message}";
+            }
+        }
+
+        [RelayCommand]
+        private void SaveReceiptAsPdf()
+        {
+            if (LastPayment == null || SelectedLoan == null)
+            {
+                StatusMessage = "Aucun reçu à sauvegarder";
+                return;
+            }
+
+            try
+            {
+                var saveDialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "Text Files (*.txt)|*.txt",
+                    FileName = $"Recu_Paiement_{LastReceiptNumber}_{DateTime.Now:yyyyMMdd}.txt",
+                    DefaultExt = ".txt"
+                };
+
+                if (saveDialog.ShowDialog() == true)
+                {
+                    var receiptText = GenerateReceiptText();
+                    System.IO.File.WriteAllText(saveDialog.FileName, receiptText);
+                    StatusMessage = $"Reçu sauvegardé: {saveDialog.FileName}";
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Erreur de sauvegarde: {ex.Message}";
+            }
+        }
+
+        private string GenerateReceiptText()
+        {
+            if (LastPayment == null || SelectedLoan == null || LoanSummary == null)
+                return string.Empty;
+
+            return $@"
+═══════════════════════════════════════
+       NALA KREDI TI MACHANN
+         REÇU DE PAIEMENT
+═══════════════════════════════════════
+
+Reçu N° : {LastReceiptNumber}
+Date    : {LastPayment.PaymentDate:dd/MM/yyyy HH:mm}
+
+───────────────────────────────────────
+INFORMATIONS CLIENT
+───────────────────────────────────────
+Nom     : {LoanSummary.BorrowerName}
+Prêt N° : {SelectedLoan.LoanNumber}
+
+───────────────────────────────────────
+DÉTAILS DU PAIEMENT
+───────────────────────────────────────
+Montant payé : {LastPayment.Amount:N2} {SelectedLoan.Currency}
+Méthode      : {GetPaymentMethodText(LastPayment.PaymentMethod)}
+Référence    : {LastPayment.Reference ?? "N/A"}
+
+───────────────────────────────────────
+SOLDE APRÈS PAIEMENT
+───────────────────────────────────────
+Capital restant + frais : {RemainingWithFees:N2} {SelectedLoan.Currency}
+Prochain paiement : {(LoanSummary.NextPaymentDate.HasValue ? LoanSummary.NextPaymentDate.Value.ToString("dd/MM/yyyy") : "N/A")}
+
+───────────────────────────────────────
+NOTES
+───────────────────────────────────────
+{(string.IsNullOrWhiteSpace(LastPayment.Notes) ? "Aucune" : LastPayment.Notes)}
+
+═══════════════════════════════════════
+Édité le: {DateTime.Now:dd/MM/yyyy HH:mm}
+Caissier: {LastPayment.ProcessedByName ?? "Système"}
+═══════════════════════════════════════
+
+      Merci de votre confiance!
+";
+        }
+
+        private string GetPaymentMethodText(string method)
+        {
+            if (string.IsNullOrEmpty(method))
+                return "N/A";
+
+            return method.ToLower() switch
+            {
+                "cash" => "Espèces",
+                "banktransfer" => "Virement bancaire",
+                "mobilemoney" => "Mobile Money",
+                "check" => "Chèque",
+                "card" => "Carte",
+                _ => method
+            };
         }
     }
 }

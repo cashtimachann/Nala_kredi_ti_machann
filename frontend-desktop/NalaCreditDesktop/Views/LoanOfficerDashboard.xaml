@@ -354,27 +354,6 @@
                                                                FontSize="11"
                                                                ToolTip="Voir détails"
                                                                Cursor="Hand"/>
-                                                        <Button Content="✓" 
-                                                               Tag="{Binding Id}"
-                                                               Click="ApproveApplication_Click"
-                                                               Background="#10b981" 
-                                                               Foreground="White" 
-                                                               Padding="8,4"
-                                                               Margin="0,0,5,0"
-                                                               BorderThickness="0"
-                                                               FontSize="11"
-                                                               ToolTip="Approuver"
-                                                               Cursor="Hand"/>
-                                                        <Button Content="✗" 
-                                                               Tag="{Binding Id}"
-                                                               Click="RejectApplication_Click"
-                                                               Background="#ef4444" 
-                                                               Foreground="White" 
-                                                               Padding="8,4"
-                                                               BorderThickness="0"
-                                                               FontSize="11"
-                                                               ToolTip="Rejeter"
-                                                               Cursor="Hand"/>
                                                     </StackPanel>
                                                 </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>

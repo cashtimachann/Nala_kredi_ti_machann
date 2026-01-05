@@ -251,6 +251,16 @@ namespace NalaCreditDesktop.ViewModels
 
         #endregion
 
+        /// <summary>
+        /// Propriété qui détermine si les fonctionnalités nécessitant une caisse ouverte sont activées
+        /// </summary>
+        public bool AreCashierFunctionsEnabled => IsCashSessionOpen;
+
+        partial void OnIsCashSessionOpenChanged(bool value)
+        {
+            OnPropertyChanged(nameof(AreCashierFunctionsEnabled));
+        }
+
         public string TransactionModuleToggleLabel => IsTransactionModuleVisible
             ? "Masquer Transactions"
             : "Afficher Transactions";
@@ -694,6 +704,16 @@ namespace NalaCreditDesktop.ViewModels
         {
             try
             {
+                if (!IsCashSessionOpen)
+                {
+                    MessageBox.Show(
+                        "La caisse est fermée. Ouvrez une session de caisse pour effectuer un dépôt.",
+                        "Caisse fermée",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
                 // Ouvrir la fenêtre de dépôt
                 MessageBox.Show("Ouverture de la fenêtre de nouveau dépôt...", "Info", 
                                MessageBoxButton.OK, MessageBoxImage.Information);
@@ -710,6 +730,16 @@ namespace NalaCreditDesktop.ViewModels
         {
             try
             {
+                if (!IsCashSessionOpen)
+                {
+                    MessageBox.Show(
+                        "La caisse est fermée. Ouvrez une session de caisse pour effectuer un retrait.",
+                        "Caisse fermée",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
                 MessageBox.Show("Ouverture de la fenêtre de nouveau retrait...", "Info", 
                                MessageBoxButton.OK, MessageBoxImage.Information);
             }

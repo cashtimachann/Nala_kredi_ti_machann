@@ -3,18 +3,21 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Threading;
+using NalaCreditDesktop.Services;
 
 namespace NalaCreditDesktop.Views
 {
     public partial class CreditAgentDashboard : Window
     {
         private DispatcherTimer _timer;
+        private readonly ApiService _apiService;
 
-        public CreditAgentDashboard()
+        public CreditAgentDashboard(ApiService? apiService = null)
         {
             InitializeComponent();
+            _apiService = apiService ?? AppServices.GetRequiredApiService();
             InitializeTimer();
-            LoadDashboardData();
+            _ = LoadDashboardDataAsync();
         }
 
         private void InitializeTimer()
@@ -31,72 +34,125 @@ namespace NalaCreditDesktop.Views
             CurrentDateText.Text = DateTime.Now.ToString("dddd, dd MMMM yyyy");
         }
 
-        private void LoadDashboardData()
+        private async System.Threading.Tasks.Task LoadDashboardDataAsync()
         {
-            // Set user name (this would come from authentication)
-            UserNameText.Text = "Jean Baptiste - Agent #12345";
-
-            // Load statistics (sample data)
-            ActiveCreditsText.Text = "23";
-            PortfolioAmountText.Text = "345,500 HTG";
-            PendingApplicationsText.Text = "7";
-            RepaymentRateText.Text = "94.5%";
-            NotificationBadge.Text = "5";
-
-            // Load recent applications
-            var recentApplications = new ObservableCollection<LoanApplication>
+            try
             {
-                new LoanApplication { ClientName = "Marie Joseph", Amount = "15,000 HTG", Status = "En Attente" },
-                new LoanApplication { ClientName = "Pierre Duval", Amount = "25,000 HTG", Status = "Approuvé" },
-                new LoanApplication { ClientName = "Rose Michel", Amount = "10,000 HTG", Status = "En Révision" },
-                new LoanApplication { ClientName = "Jean Claude", Amount = "20,000 HTG", Status = "En Attente" },
-                new LoanApplication { ClientName = "Micheline Paul", Amount = "18,000 HTG", Status = "Approuvé" }
-            };
-            RecentApplicationsGrid.ItemsSource = recentApplications;
-
-            // Load payments due this week
-            var paymentsDue = new ObservableCollection<PaymentDue>
-            {
-                new PaymentDue { ClientName = "Marie Joseph", DueDate = "Lundi 14 Oct", Amount = "1,500 HTG" },
-                new PaymentDue { ClientName = "Pierre Duval", DueDate = "Mardi 15 Oct", Amount = "2,500 HTG" },
-                new PaymentDue { ClientName = "Rose Michel", DueDate = "Mercredi 16 Oct", Amount = "1,000 HTG" },
-                new PaymentDue { ClientName = "Jean Claude", DueDate = "Jeudi 17 Oct", Amount = "2,000 HTG" },
-                new PaymentDue { ClientName = "Micheline Paul", DueDate = "Vendredi 18 Oct", Amount = "1,800 HTG" }
-            };
-            PaymentsDueList.ItemsSource = paymentsDue;
-
-            // Load today's visits
-            var todayVisits = new ObservableCollection<ScheduledVisit>
-            {
-                new ScheduledVisit 
-                { 
-                    Time = "09:00", 
-                    ClientName = "Marie Joseph", 
-                    Purpose = "Évaluation terrain", 
-                    Address = "Rue 12, Delmas 32" 
-                },
-                new ScheduledVisit 
-                { 
-                    Time = "11:30", 
-                    ClientName = "Pierre Duval", 
-                    Purpose = "Suivi remboursement", 
-                    Address = "Avenue Martin Luther King, PaP" 
-                },
-                new ScheduledVisit 
-                { 
-                    Time = "14:00", 
-                    ClientName = "Rose Michel", 
-                    Purpose = "Nouvelle demande", 
-                    Address = "Rue Lamarre, Pétion-Ville" 
+                // Load dashboard data from API
+                var dashboard = await _apiService.GetCreditAgentDashboardAsync();
+                
+                if (dashboard != null)
+                {
+                    // Update statistics
+                    ActiveCreditsText.Text = dashboard.ActiveCreditsCount.ToString();
+                    PortfolioAmountText.Text = $"{dashboard.TotalPortfolioAmount:N0} HTG";
+                    PendingApplicationsText.Text = dashboard.PendingApplications.ToString();
+                    RepaymentRateText.Text = $"{dashboard.RepaymentRate:F1}%";
+                    NotificationBadge.Text = (dashboard.PendingApplications + dashboard.OverdueCredits).ToString();
+                    
+                    // Debug: Log payment count
+                    System.Diagnostics.Debug.WriteLine($"PaymentsDueList count: {dashboard.PaymentsDueList?.Count ?? 0}");
                 }
+                else
+                {
+                    // Fallback to default values if API call fails
+                    ActiveCreditsText.Text = "0";
+                    PortfolioAmountText.Text = "0 HTG";
+                    PendingApplicationsText.Text = "0";
+                    RepaymentRateText.Text = "0%";
+                    NotificationBadge.Text = "0";
+                }
+
+                // Set user name (will be updated from login session)
+                UserNameText.Text = "Agent de Crédit";
+
+                // Load applications from API
+                var applicationsResult = await _apiService.GetMicrocreditApplicationsAsync(page: 1, pageSize: 5);
+                if (applicationsResult?.Data?.Applications != null && applicationsResult.Data.Applications.Count > 0)
+                {
+                    var recentApps = new ObservableCollection<LoanApplication>();
+                    foreach (var app in applicationsResult.Data.Applications)
+                    {
+                        recentApps.Add(new LoanApplication
+                        {
+                            ClientName = app.CustomerName ?? "N/A",
+                            Amount = $"{app.RequestedAmount:N0} {app.Currency}",
+                            Status = GetStatusText(app.Status)
+                        });
+                    }
+                    RecentApplicationsGrid.ItemsSource = recentApps;
+                }
+                else
+                {
+                    RecentApplicationsGrid.ItemsSource = new ObservableCollection<LoanApplication>();
+                }
+
+                // Load payments due this week from dashboard
+                if (dashboard?.PaymentsDueList != null && dashboard.PaymentsDueList.Count > 0)
+                {
+                    var paymentsDue = new ObservableCollection<PaymentDue>();
+                    foreach (var payment in dashboard.PaymentsDueList)
+                    {
+                        // Debug logging
+                        System.Diagnostics.Debug.WriteLine($"Payment - Borrower: '{payment.BorrowerName}', Amount: {payment.Amount}, Date: {payment.DueDate}");
+                        
+                        // Handle null or empty borrower name
+                        var borrowerName = string.IsNullOrWhiteSpace(payment.BorrowerName) 
+                            ? "N/A" 
+                            : payment.BorrowerName;
+                            
+                        // Format due date, handle invalid dates
+                        var dueDate = payment.DueDate != DateTime.MinValue 
+                            ? payment.DueDate.ToString("dddd dd MMM", new System.Globalization.CultureInfo("fr-FR"))
+                            : "N/A";
+                            
+                        // Format amount with currency
+                        var amount = payment.Amount > 0 
+                            ? $"{payment.Amount:N2} {payment.Currency}"
+                            : "0 HTG";
+                        
+                        paymentsDue.Add(new PaymentDue
+                        {
+                            ClientName = borrowerName,
+                            DueDate = dueDate,
+                            Amount = amount
+                        });
+                    }
+                    PaymentsDueList.ItemsSource = paymentsDue;
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("No payments due this week");
+                    PaymentsDueList.ItemsSource = new ObservableCollection<PaymentDue>();
+                }
+
+                // Load visits (placeholder - would need specific API endpoint)
+                TodayVisitsList.ItemsSource = new ObservableCollection<ScheduledVisit>();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Erreur lors du chargement des données: {ex.Message}",
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private string GetStatusText(string status)
+        {
+            return status switch
+            {
+                "Submitted" => "En Attente",
+                "Approved" => "Approuvé",
+                "UnderReview" => "En Révision",
+                "Rejected" => "Rejeté",
+                "Disbursed" => "Décaissé",
+                _ => status
             };
-            TodayVisitsList.ItemsSource = todayVisits;
         }
 
         // Menu Navigation Events
-        private void Dashboard_Click(object sender, RoutedEventArgs e)
+        private async void Dashboard_Click(object sender, RoutedEventArgs e)
         {
-            LoadDashboardData();
+            await LoadDashboardDataAsync();
         }
 
         private void Transactions_Click(object sender, RoutedEventArgs e)
@@ -114,18 +170,20 @@ namespace NalaCreditDesktop.Views
 
         private void NewLoanApplication_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("📝 Nouvelle Demande de Crédit\n\n" +
-                          "Formulaire de saisie:\n" +
-                          "• Informations client\n" +
-                          "• Montant demandé\n" +
-                          "• Durée du prêt\n" +
-                          "• Type de crédit (Commerce, Agriculture, etc.)\n" +
-                          "• Garanties\n" +
-                          "• Documents requis\n" +
-                          "• Évaluation initiale",
-                          "Nouvelle Demande",
-                          MessageBoxButton.OK,
-                          MessageBoxImage.Information);
+            try
+            {
+                var createRequestWindow = new CreateCreditRequestWindow(_apiService);
+                createRequestWindow.Owner = this;
+                createRequestWindow.ShowDialog();
+                
+                // Refresh dashboard after creating a request
+                _ = LoadDashboardDataAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Erreur lors de l'ouverture du formulaire:\n{ex.Message}",
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void MyApplications_Click(object sender, RoutedEventArgs e)
@@ -145,22 +203,20 @@ namespace NalaCreditDesktop.Views
 
         private void RecordPayment_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("💵 Enregistrement Remboursement\n\n" +
-                          "Formulaire:\n" +
-                          "• Numéro de crédit\n" +
-                          "• Client\n" +
-                          "• Montant payé\n" +
-                          "• Date de paiement\n" +
-                          "• Mode de paiement (Cash, Mobile Money)\n" +
-                          "• Remarques\n\n" +
-                          "Le système calculera automatiquement:\n" +
-                          "• Capital remboursé\n" +
-                          "• Intérêts payés\n" +
-                          "• Solde restant\n" +
-                          "• Prochaine échéance",
-                          "Enregistrer Paiement",
-                          MessageBoxButton.OK,
-                          MessageBoxImage.Information);
+            try
+            {
+                var recouvrementWindow = new RecouvrementWindow(_apiService);
+                recouvrementWindow.Owner = this;
+                recouvrementWindow.ShowDialog();
+                
+                // Refresh dashboard after recording payment
+                _ = LoadDashboardDataAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Erreur lors de l'ouverture du module de recouvrement:\n{ex.Message}",
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void MyPortfolio_Click(object sender, RoutedEventArgs e)

@@ -478,12 +478,22 @@ namespace NalaCreditDesktop.Views
             }
         }
 
-        private void NouveauDepot_Click(object sender, RoutedEventArgs e)
+        private async void NouveauDepot_Click(object sender, RoutedEventArgs e)
         {
             if (_clientSelectionne != null)
             {
                 try
                 {
+                    // Verify current user's cash session is open before allowing deposit
+                    var dashboardResult = await _apiService.GetCashierDashboardAsync();
+                    if (dashboardResult?.Data == null || 
+                        !IsSessionOpen(dashboardResult.Data.CashSessionStatus))
+                    {
+                        MessageBox.Show("Vous ne pouvez pas effectuer de dépôt car votre caisse n'est pas ouverte.\n\nVeuillez ouvrir votre caisse d'abord.",
+                            "Caisse Fermée", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
                     var depotWindow = new NouveauDepotWindow(_apiService);
                     // Pré-remplir avec le numéro de compte du client
                     // depotWindow.PreRemplirClient(_clientSelectionne.NumeroCompte);
@@ -500,12 +510,22 @@ namespace NalaCreditDesktop.Views
             }
         }
 
-        private void NouveauRetrait_Click(object sender, RoutedEventArgs e)
+        private async void NouveauRetrait_Click(object sender, RoutedEventArgs e)
         {
             if (_clientSelectionne != null)
             {
                 try
                 {
+                    // Verify current user's cash session is open before allowing withdrawal
+                    var dashboardResult = await _apiService.GetCashierDashboardAsync();
+                    if (dashboardResult?.Data == null || 
+                        !IsSessionOpen(dashboardResult.Data.CashSessionStatus))
+                    {
+                        MessageBox.Show("Vous ne pouvez pas effectuer de retrait car votre caisse n'est pas ouverte.\n\nVeuillez ouvrir votre caisse d'abord.",
+                            "Caisse Fermée", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
                     var retraitWindow = new NouveauRetraitWindow(_apiService);
                     // Pré-remplir avec le numéro de compte du client
                     // retraitWindow.PreRemplirClient(_clientSelectionne.NumeroCompte);
@@ -604,6 +624,12 @@ Par: {editorName} {(string.IsNullOrWhiteSpace(caisseCode) ? string.Empty : "- " 
             {
                 await EffectuerRechercheAsync(_clientSelectionne.NumeroCompte);
             }
+        }
+
+        private bool IsSessionOpen(string? status)
+        {
+            return !string.IsNullOrEmpty(status) && 
+                   status.Equals("Open", StringComparison.OrdinalIgnoreCase);
         }
 
         private void Fermer_Click(object sender, RoutedEventArgs e)

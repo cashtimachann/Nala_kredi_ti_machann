@@ -33,6 +33,7 @@
 
             <Grid.Resources>
                 <conv:NullOrZeroToVisibilityConverter x:Key="NullOrZeroToVisibilityConverter"/>
+                <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
             </Grid.Resources>
 
             <!-- Overdue list -->
@@ -285,6 +286,27 @@
                                 Command="{Binding RecordPaymentCommand}"
                                 IsEnabled="{Binding IsRecordPaymentEnabled}"/>
                     </StackPanel>
+                    
+                    <!-- Receipt Actions (visible after payment) -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0"
+                                Visibility="{Binding HasReceipt, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Button Content="📄 Imprimer Reçu"
+                                Width="140"
+                                Height="36"
+                                Margin="0,0,10,0"
+                                Command="{Binding PrintReceiptCommand}"
+                                Background="#4CAF50"
+                                Foreground="White"
+                                BorderBrush="#4CAF50"/>
+                        <Button Content="💾 Sauvegarder Reçu"
+                                Width="150"
+                                Height="36"
+                                Command="{Binding SaveReceiptAsPdfCommand}"
+                                Background="#2196F3"
+                                Foreground="White"
+                                BorderBrush="#2196F3"/>
+                    </StackPanel>
+                    
                     <TextBlock Text="{Binding StatusMessage}" Margin="0,8,0,0" Foreground="#555"/>
                     </StackPanel>
                 </ScrollViewer>

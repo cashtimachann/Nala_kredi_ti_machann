@@ -437,6 +437,7 @@ public class DashboardController : ControllerBase
         // Active credits portfolio
         var activeCredits = await _context.Credits
             .Include(c => c.Application)
+                .ThenInclude(a => a.Customer)
             .Where(c => c.Application.AgentId == userId && c.Status == CreditStatus.Active)
             .ToListAsync();
 
@@ -469,7 +470,17 @@ public class DashboardController : ControllerBase
             OverdueCredits = overdueCredits,
             RepaymentRate = repaymentRate,
             PaymentsExpectedThisWeek = paymentsThisWeek.Sum(c => c.WeeklyPayment),
-            AverageTicketSize = activeCredits.Count > 0 ? activeCredits.Average(c => c.PrincipalAmount) : 0
+            AverageTicketSize = activeCredits.Count > 0 ? activeCredits.Average(c => c.PrincipalAmount) : 0,
+            PaymentsDueList = paymentsThisWeek
+                .Where(c => c.Application?.Customer != null)
+                .Select(c => new PaymentDueItemDto
+                {
+                    BorrowerName = $"{c.Application!.Customer!.FirstName} {c.Application.Customer.LastName}".Trim(),
+                    LoanNumber = c.CreditNumber ?? "N/A",
+                    DueDate = c.NextPaymentDate,
+                    Amount = c.WeeklyPayment,
+                    Currency = c.Application.Currency.ToString()
+                }).ToList()
         });
     }
 
