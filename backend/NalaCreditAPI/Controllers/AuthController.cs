@@ -60,7 +60,8 @@ public class AuthController : ControllerBase
         }
         
         // Only enforce domain restriction for production domains
-        if (!string.IsNullOrEmpty(currentDomain) && currentDomain != allowedDomain)
+        // "both" means user can access from any domain
+        if (!string.IsNullOrEmpty(currentDomain) && allowedDomain != "both" && currentDomain != allowedDomain)
         {
             await _auditService.LogAsync($"Login Denied - Wrong Domain", "User", user.Id, user.Id);
             return Unauthorized(new 
@@ -257,7 +258,7 @@ public class AuthController : ControllerBase
             UserRole.Manager => "branch",  // Branch Manager only on branch domain
             UserRole.SuperAdmin => "admin", // SuperAdmin only on admin domain
             UserRole.Admin => "admin",      // Admin only on admin domain
-            UserRole.SupportTechnique => "admin", // Support only on admin domain
+            UserRole.SupportTechnique => "both", // Support can access both admin and branch domains
             UserRole.Cashier => "branch",   // Cashier on branch domain
             UserRole.Employee => "branch",  // Employee on branch domain
             _ => "branch"
