@@ -28,7 +28,7 @@ public static class DbInitializer
         }
 
         // Create roles if they don't exist
-        string[] roles = { "SuperAdmin", "Manager", "Cashier", "Employee", "Admin", "Support" };
+        string[] roles = { "SuperAdmin", "Manager", "Cashier", "Employee", "Admin", "Secretary" };
 
         foreach (var role in roles)
         {

@@ -52,8 +52,8 @@ public class AuthService : IAuthService
             new Claim("AllowedDomain", GetAllowedDomain(user.Role))
         };
 
-        // Provide aliases for SupportTechnique so secretary/admin users receive the expected role claims
-        if (user.Role == UserRole.SupportTechnique)
+        // Provide aliases for Secretary so secretary/admin users receive the expected role claims
+        if (user.Role == UserRole.Secretary)
         {
             claims.Add(new Claim(ClaimTypes.Role, "Support"));
             claims.Add(new Claim(ClaimTypes.Role, "SecretaireAdministratif"));
@@ -88,7 +88,7 @@ public class AuthService : IAuthService
             UserRole.Employee => "Employee",
             UserRole.Manager => "Manager",
             UserRole.Admin => "Admin",
-            UserRole.SupportTechnique => "SupportTechnique",
+            UserRole.Secretary => "Secretary",
             UserRole.SuperAdmin => "SuperAdmin",
             _ => "Unknown"
         };
@@ -101,7 +101,7 @@ public class AuthService : IAuthService
             UserRole.Manager => "branch",  // Branch Manager only on branch domain
             UserRole.SuperAdmin => "admin", // SuperAdmin only on admin domain
             UserRole.Admin => "admin",      // Admin only on admin domain
-            UserRole.SupportTechnique => "admin", // Support only on admin domain
+            UserRole.Secretary => "branch", // Secretary works at branch level
             UserRole.Cashier => "branch",   // Cashier on branch domain
             UserRole.Employee => "branch",  // Employee on branch domain
             _ => "branch"
@@ -370,7 +370,7 @@ public class DashboardService : IDashboardService
             UserRole.Employee => await GetCreditAgentDashboardAsync(userId),
             UserRole.Manager => await GetBranchSupervisorDashboardAsync(userId),
             UserRole.Admin => await GetRegionalManagerDashboardAsync(userId),
-            UserRole.SupportTechnique => await GetSystemAdminDashboardAsync(),
+            UserRole.Secretary => await GetSystemAdminDashboardAsync(),
             UserRole.SuperAdmin => await GetSuperAdminDashboardAsync(),
             _ => throw new ArgumentException("Invalid user role")
         };

@@ -669,7 +669,7 @@ namespace NalaCreditAPI.Controllers
         private async Task<AdminStatisticsDto> GetAdminStatistics()
         {
             var adminUsers = await _context.Users
-                .Where(u => u.Role >= UserRole.SupportTechnique && u.Role <= UserRole.SuperAdmin)
+                .Where(u => u.Role >= UserRole.Secretary && u.Role <= UserRole.SuperAdmin)
                 .ToListAsync();
 
             var totalAdmins = adminUsers.Count;
@@ -734,7 +734,7 @@ namespace NalaCreditAPI.Controllers
                 UserRole.Manager => AdminTypeDto.DIRECTEUR_REGIONAL,
                 UserRole.Cashier => AdminTypeDto.CAISSIER,
                 UserRole.Employee => AdminTypeDto.AGENT_DE_CREDIT,
-                UserRole.SupportTechnique => AdminTypeDto.SECRETAIRE_ADMINISTRATIF,
+                UserRole.Secretary => AdminTypeDto.SECRETAIRE_ADMINISTRATIF,
                 _ => AdminTypeDto.CAISSIER
             };
         }
@@ -750,7 +750,7 @@ namespace NalaCreditAPI.Controllers
                 AdminTypeDto.CHEF_DE_SUCCURSALE => UserRole.Manager,
                 AdminTypeDto.AGENT_DE_CREDIT => UserRole.Employee,
                 AdminTypeDto.CAISSIER => UserRole.Cashier,
-                AdminTypeDto.SECRETAIRE_ADMINISTRATIF => UserRole.SupportTechnique,
+                AdminTypeDto.SECRETAIRE_ADMINISTRATIF => UserRole.Secretary,
                 _ => UserRole.Employee
             };
         }
@@ -764,7 +764,7 @@ namespace NalaCreditAPI.Controllers
                 UserRole.Manager => "Manager",
                 UserRole.Employee => "Employee",
                 UserRole.Cashier => "Cashier",
-                UserRole.SupportTechnique => "Support",
+                UserRole.Secretary => "Secretary",
                 _ => "Employee"
             };
         }

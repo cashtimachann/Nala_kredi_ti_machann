@@ -56,7 +56,7 @@ namespace NalaCreditDesktop
                 string userRole = loginResponse.User.Role;
                 StatusText.Text = $"Connexion réussie en tant que {userRole}...";
                 
-                // Backend uses: Cashier=0, Employee=1, Manager=2, Admin=3, SupportTechnique=4, SuperAdmin=5
+                // Backend uses: Cashier=0, Employee=1, Manager=2, Admin=3, Secretary=4, SuperAdmin=5
                 // Map these to our dashboards (Employee = Agent de Crédit)
                 Window? dashboardWindow = userRole switch
                 {
@@ -72,8 +72,8 @@ namespace NalaCreditDesktop
                     // Backend Role: Admin (3) → Administrateur Système
                     "Admin" or "Administrator" or "Administrateur" or "AdministrateurSysteme" => ShowUnderDevelopmentAndReturnDefault("Administrateur Système"),
 
-                    // Backend Role: SupportTechnique (4) → Secrétaire Administratif
-                    "SupportTechnique" or "Support" or "Secretaire" or "Secretary" or "Secrétaire" or "SecretaireAdministratif" => new Views.SecretaryDashboard(_apiService),
+                    // Backend Role: Secretary (4) → Secrétaire Administratif
+                    "Secretary" or "Secretaire" or "Secrétaire" or "SecretaireAdministratif" or "SupportTechnique" or "Support" => new Views.SecretaryDashboard(_apiService),
 
                     // Backend Role: SuperAdmin (5) → Super Administrateur
                     "SuperAdmin" or "Direction" or "DirectionGenerale" => ShowUnderDevelopmentAndReturnDefault("Direction Générale"),

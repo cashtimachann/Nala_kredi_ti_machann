@@ -803,7 +803,7 @@ namespace NalaCreditAPI.Controllers
                 UserRole.Employee => "Employé",
                 UserRole.Manager => "Chef Succursale",
                 UserRole.Admin => "Administrateur",
-                UserRole.SupportTechnique => "Support Technique",
+                UserRole.Secretary => "Secretaire Administratif",
                 UserRole.SuperAdmin => "Super Admin",
                 _ => role.ToString()
             };

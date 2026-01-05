@@ -37,7 +37,7 @@ namespace NalaCreditAPI.Services
                 UserRole.Employee => 5,
                 UserRole.Manager => 10,
                 UserRole.Admin => 5,
-                UserRole.SupportTechnique => 10,
+                UserRole.Secretary => 10,
                 UserRole.SuperAdmin => 5,
                 _ => 5
             };

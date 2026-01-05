@@ -258,7 +258,7 @@ public class AuthController : ControllerBase
             UserRole.Manager => "branch",  // Branch Manager only on branch domain
             UserRole.SuperAdmin => "admin", // SuperAdmin only on admin domain
             UserRole.Admin => "admin",      // Admin only on admin domain
-            UserRole.SupportTechnique => "both", // Support can access both admin and branch domains
+            UserRole.Secretary => "branch",  // Secretary works at branch level
             UserRole.Cashier => "branch",   // Cashier on branch domain
             UserRole.Employee => "branch",  // Employee on branch domain
             _ => "branch"

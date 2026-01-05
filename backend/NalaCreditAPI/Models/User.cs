@@ -45,6 +45,6 @@ public enum UserRole
     Employee = 1,
     Manager = 2,
     Admin = 3,
-    SupportTechnique = 4,
+    Secretary = 4,
     SuperAdmin = 5
 }
