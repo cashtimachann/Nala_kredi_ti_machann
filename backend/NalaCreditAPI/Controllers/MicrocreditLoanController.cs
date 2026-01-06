@@ -69,10 +69,16 @@ namespace NalaCreditAPI.Controllers
         {
             try
             {
+                _logger.LogInformation("GetLoans called - Page: {Page}, PageSize: {PageSize}, Status: {Status}, BranchId: {BranchId}, IsOverdue: {IsOverdue}", 
+                    page, pageSize, status, branchId, isOverdue);
+                    
                 if (page < 1) page = 1;
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
                 var result = await _loanApplicationService.GetLoansAsync(page, pageSize, status, loanType, branchId, isOverdue);
+                
+                _logger.LogInformation("GetLoans returning {Count} loans out of {Total}", result?.Loans?.Count ?? 0, result?.TotalCount ?? 0);
+                
                 return Ok(result);
             }
             catch (Exception ex)

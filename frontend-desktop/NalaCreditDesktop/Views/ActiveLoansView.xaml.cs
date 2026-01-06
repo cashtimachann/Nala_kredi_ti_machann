@@ -54,12 +54,13 @@ namespace NalaCreditDesktop.Views
                 Debug.WriteLine($"[ActiveLoansView] Current user branch ID: {userBranchId}");
 
                 // Get active loans - fetch Active, Overdue, and Defaulted loans (like web app)
-                // Filter by user's branch ID
+                // NOTE: Using null for branchId to get all loans (like before) since users may not have branchId set
+                // IMPORTANT: Backend expects enum numeric values (Active=2, Overdue=4, Defaulted=5)
                 var activeTasks = new[]
                 {
-                    _apiService.GetLoansAsync(page: _currentPage, pageSize: _pageSize, status: "Active", branchId: userBranchId, isOverdue: null),
-                    _apiService.GetLoansAsync(page: _currentPage, pageSize: _pageSize, status: "Overdue", branchId: userBranchId, isOverdue: null),
-                    _apiService.GetLoansAsync(page: _currentPage, pageSize: _pageSize, status: "Defaulted", branchId: userBranchId, isOverdue: null)
+                    _apiService.GetLoansAsync(page: _currentPage, pageSize: _pageSize, status: "2", branchId: null, isOverdue: null),  // Active
+                    _apiService.GetLoansAsync(page: _currentPage, pageSize: _pageSize, status: "4", branchId: null, isOverdue: null),  // Overdue
+                    _apiService.GetLoansAsync(page: _currentPage, pageSize: _pageSize, status: "5", branchId: null, isOverdue: null)   // Defaulted
                 };
 
                 var results = await Task.WhenAll(activeTasks);
@@ -78,20 +79,24 @@ namespace NalaCreditDesktop.Views
 
                 Debug.WriteLine($"[ActiveLoansView] Total loans combined: {allLoans.Count}");
 
+                // TEMPORARY DEBUG: Show what we received
+                MessageBox.Show(
+                    $"Debug Info:\n\n" +
+                    $"Active: {results[0]?.Loans?.Count ?? 0} (TotalCount: {results[0]?.TotalCount ?? 0})\n" +
+                    $"Overdue: {results[1]?.Loans?.Count ?? 0} (TotalCount: {results[1]?.TotalCount ?? 0})\n" +
+                    $"Defaulted: {results[2]?.Loans?.Count ?? 0} (TotalCount: {results[2]?.TotalCount ?? 0})\n" +
+                    $"Combined: {allLoans.Count}\n\n" +
+                    $"Results null check:\n" +
+                    $"Result[0] is null: {results[0] == null}\n" +
+                    $"Result[1] is null: {results[1] == null}\n" +
+                    $"Result[2] is null: {results[2] == null}",
+                    "Debug - Données reçues",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
                 if (!allLoans.Any())
                 {
                     Debug.WriteLine("[ActiveLoansView] No loans found - showing empty state");
-                    // Show debugging info to user
-                    MessageBox.Show(
-                        $"Aucun prêt actif trouvé.\n\n" +
-                        $"Branch ID: {userBranchId?.ToString() ?? "NULL"}\n" +
-                        $"Active: {results[0]?.Loans?.Count ?? 0}\n" +
-                        $"Overdue: {results[1]?.Loans?.Count ?? 0}\n" +
-                        $"Defaulted: {results[2]?.Loans?.Count ?? 0}\n" +
-                        $"Total Count from results: {results[0]?.TotalCount ?? 0}",
-                        "Debug Info",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
                     ShowEmptyState(true);
                     return;
                 }
@@ -190,7 +195,9 @@ namespace NalaCreditDesktop.Views
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur lors du chargement des crédits actifs:\n{ex.Message}",
+                Debug.WriteLine($"[ActiveLoansView] EXCEPTION: {ex.Message}");
+                Debug.WriteLine($"[ActiveLoansView] Stack trace: {ex.StackTrace}");
+                MessageBox.Show($"Erreur lors du chargement des crédits actifs:\n\n{ex.Message}\n\n{ex.StackTrace}",
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
                 ShowEmptyState(true);
             }
