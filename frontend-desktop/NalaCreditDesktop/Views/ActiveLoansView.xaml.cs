@@ -48,60 +48,143 @@ namespace NalaCreditDesktop.Views
                 ShowLoading(true);
                 _activeLoans.Clear();
 
-                // Get active loans (status: Active, Overdue, Defaulted)
-                var result = await _apiService.GetLoansAsync(
-                    page: _currentPage,
-                    pageSize: _pageSize,
-                    status: "Active",
-                    branchId: null,
-                    isOverdue: null
-                );
+                // Get the current user's branch ID to filter loans
+                var userBranchId = _apiService.CurrentUser?.BranchId;
 
-                if (result == null || result.Loans == null || !result.Loans.Any())
+                Debug.WriteLine($"[ActiveLoansView] Current user branch ID: {userBranchId}");
+
+                // Get active loans - fetch Active, Overdue, and Defaulted loans (like web app)
+                // Filter by user's branch ID
+                var activeTasks = new[]
                 {
-                    // Try to get overdue loans too
-                    var overdueResult = await _apiService.GetLoansAsync(
-                        page: _currentPage,
-                        pageSize: _pageSize,
-                        status: "Overdue",
-                        branchId: null,
-                        isOverdue: null
-                    );
+                    _apiService.GetLoansAsync(page: _currentPage, pageSize: _pageSize, status: "Active", branchId: userBranchId, isOverdue: null),
+                    _apiService.GetLoansAsync(page: _currentPage, pageSize: _pageSize, status: "Overdue", branchId: userBranchId, isOverdue: null),
+                    _apiService.GetLoansAsync(page: _currentPage, pageSize: _pageSize, status: "Defaulted", branchId: userBranchId, isOverdue: null)
+                };
 
-                    if (overdueResult != null && overdueResult.Loans != null && overdueResult.Loans.Any())
+                var results = await Task.WhenAll(activeTasks);
+                
+                Debug.WriteLine($"[ActiveLoansView] Results received - Active: {results[0]?.Loans?.Count ?? 0}, Overdue: {results[1]?.Loans?.Count ?? 0}, Defaulted: {results[2]?.Loans?.Count ?? 0}");
+
+                // Combine all loans from different statuses
+                var allLoans = new List<MicrocreditLoan>();
+                foreach (var result in results)
+                {
+                    if (result?.Loans != null && result.Loans.Any())
                     {
-                        result = overdueResult;
+                        allLoans.AddRange(result.Loans);
                     }
                 }
 
-                if (result != null && result.Loans != null)
+                Debug.WriteLine($"[ActiveLoansView] Total loans combined: {allLoans.Count}");
+
+                if (!allLoans.Any())
                 {
-                    _totalCount = result.TotalCount;
-                    _totalPages = result.TotalPages;
-
-                    foreach (var loan in result.Loans)
-                    {
-                        _activeLoans.Add(new ActiveLoanDisplayItem
-                        {
-                            Id = loan.Id,
-                            LoanNumber = loan.LoanNumber ?? "N/A",
-                            CustomerName = $"{loan.BorrowerFirstName} {loan.BorrowerLastName}".Trim(),
-                            CustomerPhone = loan.BorrowerPhone ?? "N/A",
-                            LoanTypeDisplay = GetLoanTypeDisplay(loan.LoanType),
-                            PrincipalAmountDisplay = $"{loan.PrincipalAmount:N2} {loan.Currency}",
-                            RemainingBalanceDisplay = $"Reste: {loan.RemainingBalance:N2} {loan.Currency}",
-                            MonthlyPaymentDisplay = $"{loan.MonthlyPayment:N2} {loan.Currency}",
-                            PaymentProgress = $"{loan.PaymentsMade}/{loan.TermMonths} versements",
-                            NextPaymentDateDisplay = loan.NextPaymentDate?.ToString("dd/MM/yyyy") ?? "N/A",
-                            StatusDisplay = GetStatusDisplay(loan.Status, loan.DaysOverdue),
-                            Status = loan.Status,
-                            DaysOverdue = loan.DaysOverdue
-                        });
-                    }
-
-                    UpdateStatistics();
-                    UpdatePagination();
+                    Debug.WriteLine("[ActiveLoansView] No loans found - showing empty state");
+                    // Show debugging info to user
+                    MessageBox.Show(
+                        $"Aucun prêt actif trouvé.\n\n" +
+                        $"Branch ID: {userBranchId?.ToString() ?? "NULL"}\n" +
+                        $"Active: {results[0]?.Loans?.Count ?? 0}\n" +
+                        $"Overdue: {results[1]?.Loans?.Count ?? 0}\n" +
+                        $"Defaulted: {results[2]?.Loans?.Count ?? 0}\n" +
+                        $"Total Count from results: {results[0]?.TotalCount ?? 0}",
+                        "Debug Info",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    ShowEmptyState(true);
+                    return;
                 }
+
+                // Use the first non-null result for pagination info
+                var paginationResult = results.FirstOrDefault(r => r != null);
+                if (paginationResult != null)
+                {
+                    _totalCount = allLoans.Count; // Total from all statuses
+                    _totalPages = Math.Max(1, (int)Math.Ceiling(_totalCount / (double)_pageSize));
+                }
+
+                foreach (var loan in allLoans)
+                {
+                    // Get borrower info from Borrower object if available, fallback to direct fields
+                    var firstName = loan.Borrower?.FirstName ?? loan.BorrowerFirstName ?? "";
+                    var lastName = loan.Borrower?.LastName ?? loan.BorrowerLastName ?? "";
+                    var customerName = !string.IsNullOrWhiteSpace(firstName) || !string.IsNullOrWhiteSpace(lastName)
+                        ? $"{firstName} {lastName}".Trim()
+                        : loan.BorrowerName;
+                    
+                    var customerPhone = loan.Borrower?.Phone ?? loan.BorrowerPhone ?? "N/A";
+                    
+                    // Get loan officer name
+                    var loanOfficer = !string.IsNullOrWhiteSpace(loan.LoanOfficerName) 
+                        ? loan.LoanOfficerName 
+                        : "N/A";
+                    
+                    // Use DurationMonths if TermMonths is 0 (backend sends DurationMonths)
+                    var termMonths = loan.TermMonths > 0 ? loan.TermMonths : loan.DurationMonths;
+                    if (termMonths <= 0) termMonths = 1; // Avoid division by zero
+                    
+                    // Use InstallmentAmount if MonthlyPayment is 0 (backend sends InstallmentAmount)
+                    var monthlyPayment = loan.MonthlyPayment > 0 ? loan.MonthlyPayment : loan.InstallmentAmount;
+                    
+                    // Calculate processing fee (5% of principal)
+                    var processingFee = loan.PrincipalAmount * 0.05m;
+                    var monthlyFeePortion = processingFee / termMonths;
+                    var monthlyPaymentWithFees = monthlyPayment + monthlyFeePortion;
+                    
+                    // Use OutstandingBalance if RemainingBalance is 0 (backend uses OutstandingBalance)
+                    var outstandingBalance = loan.RemainingBalance > 0 ? loan.RemainingBalance : loan.OutstandingBalance;
+                    
+                    // Use InstallmentsPaid if PaymentsMade is 0
+                    var paymentsMade = loan.PaymentsMade > 0 ? loan.PaymentsMade : loan.InstallmentsPaid;
+                    
+                    // Calculate remaining processing fees to add to outstanding balance
+                    var installmentsRemaining = termMonths - paymentsMade;
+                    var remainingProcessingFees = (processingFee * installmentsRemaining) / termMonths;
+                    
+                    // Total remaining balance = outstanding balance + remaining processing fees
+                    var remainingBalance = outstandingBalance + remainingProcessingFees;
+                    
+                    // Use AmountPaid directly from backend
+                    var amountPaid = loan.AmountPaid;
+                    
+                    // Get monthly interest rate: prefer MonthlyInterestRate, fallback to InterestRate / 12
+                    var monthlyRate = loan.MonthlyInterestRate.HasValue && loan.MonthlyInterestRate.Value > 0
+                        ? loan.MonthlyInterestRate.Value
+                        : (loan.InterestRate / 12);
+                    
+                    // Convert to percentage for display (multiply by 100)
+                    var monthlyRatePercent = monthlyRate * 100;
+                    
+                    _activeLoans.Add(new ActiveLoanDisplayItem
+                    {
+                        Id = loan.Id,
+                        LoanNumber = loan.LoanNumber ?? "N/A",
+                        CustomerName = customerName,
+                        CustomerPhone = customerPhone,
+                        Branch = loan.BranchName ?? "N/A",
+                        LoanOfficer = loanOfficer,
+                        LoanTypeDisplay = GetLoanTypeDisplay(loan.LoanType),
+                        TermMonths = termMonths,
+                        MonthlyInterestRate = monthlyRatePercent,
+                        InterestRateDisplay = $"{termMonths} mois · Taux mensuel: {monthlyRatePercent:F2}%",
+                        PrincipalAmountDisplay = $"{loan.PrincipalAmount:N2} {loan.Currency}",
+                        ProcessingFeeDisplay = $"Frais dossier (5%): {processingFee:N2} {loan.Currency}",
+                        RemainingBalanceDisplay = $"Reste: {remainingBalance:N2} {loan.Currency}",
+                        AmountPaidDisplay = $"Payé: {amountPaid:N2} {loan.Currency}",
+                        MonthlyPaymentDisplay = $"{monthlyPayment:N2} {loan.Currency}",
+                        MonthlyPaymentWithFeesDisplay = $"{monthlyPaymentWithFees:N2} {loan.Currency}",
+                        PaymentProgress = $"{paymentsMade}/{termMonths} versements",
+                        NextPaymentDateDisplay = loan.NextPaymentDate?.ToString("dd/MM/yyyy") ?? "N/A",
+                        StatusDisplay = GetStatusDisplay(loan.Status, loan.DaysOverdue),
+                        Status = loan.Status ?? "Unknown",
+                        DaysOverdue = loan.DaysOverdue,
+                        DaysOverdueDisplay = loan.DaysOverdue > 0 ? $"{loan.DaysOverdue} jours de retard" : ""
+                    });
+                }
+
+                UpdateStatistics();
+                UpdatePagination();
 
                 ShowEmptyState(_activeLoans.Count == 0);
             }
@@ -336,50 +419,16 @@ namespace NalaCreditDesktop.Views
         {
             if (sender is Button button && button.Tag is Guid loanId)
             {
-                // TODO: Open loan details window
-                MessageBox.Show($"Affichage des détails du prêt:\n{loanId}\n\nModule de détails à implémenter.",
-                    "Détails du Prêt", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-        }
-
-        private void RecordPayment_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button button && button.Tag is Guid loanId)
-            {
                 try
                 {
-                    // Find the loan in the collection
-                    var loan = _activeLoans.FirstOrDefault(l => l.Id == loanId);
-                    if (loan != null)
-                    {
-                        // Open Recouvrement window - it will prompt for loan number
-                        var recouvrementWindow = new RecouvrementWindow(_apiService);
-                        recouvrementWindow.Owner = Window.GetWindow(this);
-                        
-                        // Pre-fill loan number in the window after it loads
-                        recouvrementWindow.Loaded += (s, args) =>
-                        {
-                            // Try to set the loan number field if accessible
-                            try
-                            {
-                                var loanNumberField = recouvrementWindow.FindName("LoanNumberTextBox") as TextBox;
-                                if (loanNumberField != null)
-                                {
-                                    loanNumberField.Text = loan.LoanNumber;
-                                }
-                            }
-                            catch { /* Ignore if field not found */ }
-                        };
-                        
-                        recouvrementWindow.ShowDialog();
-
-                        // Refresh after payment
-                        _ = LoadActiveLoansAsync();
-                    }
+                    // Open loan details window
+                    var detailsWindow = new LoanDetailsWindow(_apiService, loanId);
+                    detailsWindow.Owner = Window.GetWindow(this);
+                    detailsWindow.ShowDialog();
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Erreur lors de l'ouverture du module de paiement:\n{ex.Message}",
+                    MessageBox.Show($"Erreur lors de l'ouverture des détails:\n{ex.Message}",
                         "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
@@ -412,14 +461,23 @@ namespace NalaCreditDesktop.Views
         public string LoanNumber { get; set; } = string.Empty;
         public string CustomerName { get; set; } = string.Empty;
         public string CustomerPhone { get; set; } = string.Empty;
+        public string Branch { get; set; } = string.Empty;
+        public string LoanOfficer { get; set; } = string.Empty;
         public string LoanTypeDisplay { get; set; } = string.Empty;
+        public int TermMonths { get; set; }
+        public decimal MonthlyInterestRate { get; set; }
+        public string InterestRateDisplay { get; set; } = string.Empty;
         public string PrincipalAmountDisplay { get; set; } = string.Empty;
+        public string ProcessingFeeDisplay { get; set; } = string.Empty;
         public string RemainingBalanceDisplay { get; set; } = string.Empty;
+        public string AmountPaidDisplay { get; set; } = string.Empty;
         public string MonthlyPaymentDisplay { get; set; } = string.Empty;
+        public string MonthlyPaymentWithFeesDisplay { get; set; } = string.Empty;
         public string PaymentProgress { get; set; } = string.Empty;
         public string NextPaymentDateDisplay { get; set; } = string.Empty;
         public string StatusDisplay { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
         public int DaysOverdue { get; set; }
+        public string DaysOverdueDisplay { get; set; } = string.Empty;
     }
 }

@@ -39,6 +39,8 @@ namespace NalaCreditDesktop.Models
         public string? BorrowerFirstName { get; set; }
         public string? BorrowerLastName { get; set; }
         public string? BorrowerPhone { get; set; }
+        public MicrocreditBorrower? Borrower { get; set; }
+        public decimal RequestedAmount { get; set; }
         public decimal ApprovedAmount { get; set; }
         public decimal PrincipalAmount { get; set; }
         public decimal InterestRate { get; set; }
@@ -50,15 +52,41 @@ namespace NalaCreditDesktop.Models
         public string Currency { get; set; } = "HTG";
         public decimal OutstandingBalance { get; set; }
         public decimal RemainingBalance { get; set; }
+        public decimal AmountPaid { get; set; }
+        public decimal InterestPaid { get; set; }
         public decimal OutstandingPrincipal { get; set; }
         public decimal OutstandingInterest { get; set; }
         public int DaysOverdue { get; set; }
         public string? Status { get; set; }
         public string? LoanType { get; set; }
         public int PaymentsMade { get; set; }
+        public int InstallmentsPaid { get; set; }
         public DateTime? NextPaymentDate { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? ApprovedAt { get; set; }
+        public string? ApprovedBy { get; set; }
+        public string? ApprovedByName { get; set; }
+        public DateTime? DisbursementDate { get; set; }
+        public DateTime? MaturityDate { get; set; }
         public int BranchId { get; set; }
         public string BranchName { get; set; } = string.Empty;
+        public string LoanOfficerId { get; set; } = string.Empty;
+        public string LoanOfficerName { get; set; } = string.Empty;
+    }
+
+    public class MicrocreditBorrower
+    {
+        public Guid Id { get; set; }
+        public Guid CustomerId { get; set; }
+        public string AccountNumber { get; set; } = string.Empty;
+        public string CustomerNumber { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string? Phone { get; set; }
+        public string? Email { get; set; }
+        public string? Address { get; set; }
+        public string? Occupation { get; set; }
     }
 
     public class MicrocreditLoanListResponse

@@ -628,17 +628,33 @@ public class ApiService
         if (branchId.HasValue) qs.Append("&branchId=").Append(branchId.Value);
         if (isOverdue.HasValue && isOverdue.Value) qs.Append("&isOverdue=true");
 
+        var requestUrl = qs.ToString();
+        System.Diagnostics.Debug.WriteLine($"[ApiService] GET request: {requestUrl}");
+
         try
         {
-            var resp = await _httpClient.GetAsync(qs.ToString());
+            var resp = await _httpClient.GetAsync(requestUrl);
             var raw = await resp.Content.ReadAsStringAsync();
-            if (!resp.IsSuccessStatusCode) return null;
-            return string.IsNullOrWhiteSpace(raw)
+            
+            System.Diagnostics.Debug.WriteLine($"[ApiService] Status: {resp.StatusCode}, Content length: {raw?.Length ?? 0}");
+            
+            if (!resp.IsSuccessStatusCode)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ApiService] Request failed: {raw}");
+                return null;
+            }
+            
+            var result = string.IsNullOrWhiteSpace(raw)
                 ? null
                 : JsonConvert.DeserializeObject<NalaCreditDesktop.Models.MicrocreditLoanListResponse>(raw);
+                
+            System.Diagnostics.Debug.WriteLine($"[ApiService] Deserialized loans count: {result?.Loans?.Count ?? 0}");
+            
+            return result;
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[ApiService] Exception: {ex.Message}");
             return null;
         }
     }
@@ -651,6 +667,57 @@ public class ApiService
         var result = await GetLoansAsync(1, 200);
         var match = result?.Loans?.FirstOrDefault(l => string.Equals(l.LoanNumber, loanNumber, StringComparison.OrdinalIgnoreCase));
         return match;
+    }
+
+    public async Task<NalaCreditDesktop.Models.MicrocreditLoan?> GetLoanByIdAsync(Guid loanId)
+    {
+        try
+        {
+            var resp = await _httpClient.GetAsync($"microcreditloan/{loanId}");
+            var raw = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode) return null;
+            return string.IsNullOrWhiteSpace(raw)
+                ? null
+                : JsonConvert.DeserializeObject<NalaCreditDesktop.Models.MicrocreditLoan>(raw);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<List<PaymentScheduleItem>?> GetPaymentScheduleAsync(Guid loanId)
+    {
+        try
+        {
+            var resp = await _httpClient.GetAsync($"microcreditloan/{loanId}/schedule");
+            var raw = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode) return null;
+            return string.IsNullOrWhiteSpace(raw)
+                ? null
+                : JsonConvert.DeserializeObject<List<PaymentScheduleItem>>(raw);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<List<LoanPayment>?> GetLoanPaymentsAsync(Guid loanId)
+    {
+        try
+        {
+            var resp = await _httpClient.GetAsync($"microcreditpayment/loan/{loanId}");
+            var raw = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode) return null;
+            return string.IsNullOrWhiteSpace(raw)
+                ? null
+                : JsonConvert.DeserializeObject<List<LoanPayment>>(raw);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public async Task<NalaCreditDesktop.Models.LoanSummary?> GetLoanSummaryAsync(Guid loanId)

@@ -346,6 +346,10 @@ namespace NalaCreditAPI.DTOs
         public string ReceiptNumber { get; set; } = string.Empty;
         public string? ReceiptPath { get; set; }
         
+        // Informations du prêt et client
+        public string? LoanNumber { get; set; }
+        public string? CustomerName { get; set; }
+        
         // Métadonnées
         public string? Notes { get; set; }
         public DateTime CreatedAt { get; set; }

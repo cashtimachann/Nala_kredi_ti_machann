@@ -50,6 +50,8 @@ export interface PaymentResponse {
   branchName: string;
   receiptNumber: string;
   receiptPath?: string;
+  loanNumber?: string;
+  customerName?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;

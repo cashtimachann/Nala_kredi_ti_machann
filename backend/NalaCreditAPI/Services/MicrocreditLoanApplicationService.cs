@@ -2743,6 +2743,12 @@ namespace NalaCreditAPI.Services
                 branchName = payment.Loan?.BranchName ?? string.Empty;
             }
 
+            // Extract loan and customer information
+            var loanNumber = payment.Loan?.LoanNumber;
+            var customerName = payment.Loan?.Borrower != null 
+                ? $"{payment.Loan.Borrower.FirstName} {payment.Loan.Borrower.LastName}".Trim() 
+                : null;
+
             return new MicrocreditPaymentDto
             {
                 Id = payment.Id,
@@ -2762,6 +2768,8 @@ namespace NalaCreditAPI.Services
                 ProcessedByName = payment.ProcessedByName,
                 BranchId = branchId,
                 BranchName = branchName,
+                LoanNumber = loanNumber,
+                CustomerName = customerName,
                 ReceiptNumber = payment.ReceiptNumber,
                 ReceiptPath = payment.ReceiptPath,
                 CreatedAt = payment.CreatedAt,

@@ -1445,15 +1445,17 @@ const LoanManagement: React.FC = () => {
       let tableRowsHtml = '';
 
       if (activeTab === 'payments') {
-        tableHeader = '<tr><th>Date</th><th>Reçu</th><th>Montant</th><th>Traité Par</th><th>Succursale</th><th>Statut</th></tr>';
+        tableHeader = '<tr><th>Date</th><th>Reçu</th><th>Client</th><th>N° Crédit</th><th>Montant</th><th>Traité Par</th><th>Succursale</th><th>Statut</th></tr>';
         tableRowsHtml = payments.map(p => {
           const date = p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('fr-FR') : (p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-FR') : 'N/A');
           const amount = formatAmount(p.amount, (p.currency as any) || 'HTG');
           const receipt = p.receiptNumber || '';
+          const customer = p.customerName || '-';
+          const loanNum = p.loanNumber || '-';
           const processedBy = p.processedByName || '';
           const branch = p.branchName || '';
           const status = p.status || '';
-          return `<tr><td>${date}</td><td>${receipt}</td><td>${amount}</td><td>${processedBy}</td><td>${branch}</td><td>${status}</td></tr>`;
+          return `<tr><td>${date}</td><td>${receipt}</td><td>${customer}</td><td>${loanNum}</td><td>${amount}</td><td>${processedBy}</td><td>${branch}</td><td>${status}</td></tr>`;
         }).join('');
       } else {
         tableHeader = '<tr><th>#</th><th>Client</th><th>Montant</th><th>Mensualité</th><th>Statut</th><th>Succursale</th></tr>';
@@ -3329,6 +3331,12 @@ const LoanManagement: React.FC = () => {
                         Numéro Reçu
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Client
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        N° Crédit
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Méthode
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -3361,7 +3369,9 @@ const LoanManagement: React.FC = () => {
                         const term = paymentsSearchTerm.toLowerCase();
                         return (payment.receiptNumber && payment.receiptNumber.toLowerCase().includes(term)) ||
                                (payment.reference && payment.reference.toLowerCase().includes(term)) ||
-                               (payment.processedByName && payment.processedByName.toLowerCase().includes(term));
+                               (payment.processedByName && payment.processedByName.toLowerCase().includes(term)) ||
+                               (payment.customerName && payment.customerName.toLowerCase().includes(term)) ||
+                               (payment.loanNumber && payment.loanNumber.toLowerCase().includes(term));
                       })
                       .map((payment) => (
                       <tr key={payment.id} className="hover:bg-gray-50">
@@ -3373,6 +3383,12 @@ const LoanManagement: React.FC = () => {
                           {payment.reference && (
                             <div className="text-xs text-gray-500">{payment.reference}</div>
                           )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm text-gray-900">{payment.customerName || '-'}</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm font-medium text-indigo-600">{payment.loanNumber || '-'}</span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {payment.paymentMethod}
@@ -3418,7 +3434,9 @@ const LoanManagement: React.FC = () => {
                   const term = paymentsSearchTerm.toLowerCase();
                   return (payment.receiptNumber && payment.receiptNumber.toLowerCase().includes(term)) ||
                          (payment.reference && payment.reference.toLowerCase().includes(term)) ||
-                         (payment.processedByName && payment.processedByName.toLowerCase().includes(term));
+                         (payment.processedByName && payment.processedByName.toLowerCase().includes(term)) ||
+                         (payment.customerName && payment.customerName.toLowerCase().includes(term)) ||
+                         (payment.loanNumber && payment.loanNumber.toLowerCase().includes(term));
                 }).length === 0 && (
                   <div className="text-center py-12">
                     <DollarSign className="w-16 h-16 text-gray-400 mx-auto mb-4" />

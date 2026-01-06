@@ -374,21 +374,26 @@
                     </DataGrid.CellStyle>
 
                     <DataGrid.Columns>
-                        <!-- Loan Number -->
-                        <DataGridTextColumn Header="N° Prêt" 
-                                          Binding="{Binding LoanNumber}" 
-                                          Width="120">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="FontWeight" Value="SemiBold"/>
-                                    <Setter Property="Foreground" Value="#1e40af"/>
-                                    <Setter Property="VerticalAlignment" Value="Center"/>
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
+                        <!-- Loan Number + Branch -->
+                        <DataGridTemplateColumn Header="Prêt" Width="150">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding LoanNumber}" 
+                                                  FontWeight="SemiBold" 
+                                                  FontSize="14" 
+                                                  Foreground="#1e40af"/>
+                                        <TextBlock Text="{Binding Branch}" 
+                                                  FontSize="11" 
+                                                  Foreground="#64748b" 
+                                                  Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
 
-                        <!-- Client Info -->
-                        <DataGridTemplateColumn Header="Emprunteur" Width="200">
+                        <!-- Client Info + Agent -->
+                        <DataGridTemplateColumn Header="Client" Width="200">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <StackPanel VerticalAlignment="Center">
@@ -396,8 +401,25 @@
                                                   FontWeight="SemiBold" 
                                                   FontSize="14" 
                                                   Foreground="#1e293b"/>
-                                        <TextBlock Text="{Binding CustomerPhone}" 
-                                                  FontSize="12" 
+                                        <TextBlock FontSize="11" Foreground="#64748b" Margin="0,2,0,0">
+                                            <Run Text="Agent: "/>
+                                            <Run Text="{Binding LoanOfficer}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Loan Type + Term + Interest -->
+                        <DataGridTemplateColumn Header="Type de Crédit" Width="180">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding LoanTypeDisplay}" 
+                                                  FontWeight="SemiBold" 
+                                                  FontSize="13"/>
+                                        <TextBlock Text="{Binding InterestRateDisplay}" 
+                                                  FontSize="11" 
                                                   Foreground="#64748b" 
                                                   Margin="0,2,0,0"/>
                                     </StackPanel>
@@ -405,29 +427,17 @@
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
-                        <!-- Loan Type -->
-                        <DataGridTextColumn Header="Type" 
-                                          Binding="{Binding LoanTypeDisplay}" 
-                                          Width="110">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="VerticalAlignment" Value="Center"/>
-                                    <Setter Property="FontSize" Value="13"/>
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-
-                        <!-- Amount Info -->
-                        <DataGridTemplateColumn Header="Montant" Width="150">
+                        <!-- Principal + Processing Fee -->
+                        <DataGridTemplateColumn Header="Montant" Width="160">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="{Binding PrincipalAmountDisplay}" 
                                                   FontWeight="Bold" 
                                                   FontSize="14" 
-                                                  Foreground="#10b981"/>
-                                        <TextBlock Text="{Binding RemainingBalanceDisplay}" 
-                                                  FontSize="11" 
+                                                  Foreground="#1e293b"/>
+                                        <TextBlock Text="{Binding ProcessingFeeDisplay}" 
+                                                  FontSize="10" 
                                                   Foreground="#64748b" 
                                                   Margin="0,2,0,0"/>
                                     </StackPanel>
@@ -435,16 +445,34 @@
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
-                        <!-- Payment Info -->
-                        <DataGridTemplateColumn Header="Paiements" Width="120">
+                        <!-- Monthly Payment + Fees -->
+                        <DataGridTemplateColumn Header="Mensualité + Frais" Width="150">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding MonthlyPaymentDisplay}" 
+                                        <TextBlock Text="{Binding MonthlyPaymentWithFeesDisplay}" 
                                                   FontWeight="SemiBold" 
                                                   FontSize="13" 
-                                                  Foreground="#1e293b"/>
-                                        <TextBlock Text="{Binding PaymentProgress}" 
+                                                  Foreground="#3b82f6"/>
+                                        <TextBlock FontSize="10" Foreground="#64748b" Margin="0,2,0,0">
+                                            <Run Text="Hors frais: "/>
+                                            <Run Text="{Binding MonthlyPaymentDisplay}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Remaining + Paid -->
+                        <DataGridTemplateColumn Header="Restant" Width="150">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding RemainingBalanceDisplay}" 
+                                                  FontWeight="Bold" 
+                                                  FontSize="13" 
+                                                  Foreground="#9333ea"/>
+                                        <TextBlock Text="{Binding AmountPaidDisplay}" 
                                                   FontSize="11" 
                                                   Foreground="#64748b" 
                                                   Margin="0,2,0,0"/>
@@ -453,31 +481,27 @@
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
-                        <!-- Due Date -->
-                        <DataGridTextColumn Header="Proch. Paiement" 
-                                          Binding="{Binding NextPaymentDateDisplay}" 
-                                          Width="120">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="VerticalAlignment" Value="Center"/>
-                                    <Setter Property="FontSize" Value="13"/>
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-
-                        <!-- Status -->
-                        <DataGridTemplateColumn Header="Statut" Width="110">
+                        <!-- Status + Days Overdue -->
+                        <DataGridTemplateColumn Header="Statut" Width="130">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <Border x:Name="StatusBorder" 
-                                           Style="{StaticResource StatusBadgeStyle}" 
-                                           Background="#dcfce7">
-                                        <TextBlock x:Name="StatusText" 
-                                                  Text="{Binding StatusDisplay}" 
-                                                  FontSize="11" 
-                                                  FontWeight="SemiBold" 
-                                                  Foreground="#166534"/>
-                                    </Border>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <Border x:Name="StatusBorder" 
+                                               Style="{StaticResource StatusBadgeStyle}" 
+                                               Background="#dcfce7">
+                                            <TextBlock x:Name="StatusText" 
+                                                      Text="{Binding StatusDisplay}" 
+                                                      FontSize="11" 
+                                                      FontWeight="SemiBold" 
+                                                      Foreground="#166534"/>
+                                        </Border>
+                                        <TextBlock Text="{Binding DaysOverdueDisplay}" 
+                                                  FontSize="10" 
+                                                  FontWeight="SemiBold"
+                                                  Foreground="#dc2626" 
+                                                  Margin="0,3,0,0"
+                                                  HorizontalAlignment="Center"/>
+                                    </StackPanel>
                                     <DataTemplate.Triggers>
                                         <DataTrigger Binding="{Binding StatusDisplay}" Value="En Retard">
                                             <Setter TargetName="StatusBorder" Property="Background" Value="#fee2e2"/>
@@ -504,14 +528,7 @@
                                                FontSize="13"
                                                Tag="{Binding Id}"
                                                Click="ViewDetails_Click"/>
-                                        <Button Content="💰" 
-                                               ToolTip="Enregistrer Paiement"
-                                               Style="{StaticResource SuccessButtonStyle}"
-                                               Padding="8,4"
-                                               FontSize="13"
-                                               Tag="{Binding Id}"
-                                               Click="RecordPayment_Click"/>
-                                        <Button Content="📞" 
+                                        <Button Content="" 
                                                ToolTip="Contacter Client"
                                                Style="{StaticResource ActionButtonStyle}"
                                                Padding="8,4"

@@ -1,0 +1,570 @@
+<Window x:Class="NalaCreditDesktop.Views.LoanDetailsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Détails du Prêt"
+        Height="700"
+        Width="900"
+        WindowStartupLocation="CenterOwner"
+        Background="#F5F5F5"
+        ResizeMode="CanResize">
+
+    <Window.Resources>
+        <Style x:Key="SectionHeaderStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#2C3E50"/>
+            <Setter Property="Margin" Value="0,20,0,10"/>
+        </Style>
+
+        <Style x:Key="LabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#5D6D7E"/>
+            <Setter Property="Margin" Value="0,5,0,2"/>
+        </Style>
+
+        <Style x:Key="ValueStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="#2C3E50"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+
+        <Style x:Key="StatusBadgeStyle" TargetType="Border">
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="12,4"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="#2C3E50" Padding="25,20">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Détails du Prêt" 
+                              FontSize="24" 
+                              FontWeight="Bold" 
+                              Foreground="White"/>
+                    <TextBlock x:Name="LoanNumberText" 
+                              FontSize="14" 
+                              Foreground="#BDC3C7" 
+                              Margin="0,5,0,0"/>
+                </StackPanel>
+
+                <Border x:Name="StatusBadge" 
+                       Grid.Column="1" 
+                       Style="{StaticResource StatusBadgeStyle}"
+                       VerticalAlignment="Center">
+                    <TextBlock x:Name="StatusText" 
+                              FontSize="13" 
+                              FontWeight="SemiBold"
+                              Foreground="White"/>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Content -->
+        <TabControl Grid.Row="1" Margin="0" BorderThickness="0">
+            <!-- Tab: Vue d'ensemble -->
+            <TabItem Header="Vue d'ensemble">
+                <TabItem.HeaderTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="📋" FontSize="14" Margin="0,0,5,0"/>
+                            <TextBlock Text="Vue d'ensemble" FontSize="13"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </TabItem.HeaderTemplate>
+                
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="25,20">
+
+                <!-- Client Information -->
+                <TextBlock Text="Informations Client" Style="{StaticResource SectionHeaderStyle}"/>
+                <Border Background="White" 
+                       CornerRadius="8" 
+                       Padding="20" 
+                       Margin="0,0,0,10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Nom complet" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="ClientNameText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Numéro Compte Épargne" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="CustomerCodeText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Numéro de téléphone" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="ClientPhoneText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Email" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="ClientEmailText" Style="{StaticResource ValueStyle}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Adresse" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="ClientAddressText" Style="{StaticResource ValueStyle}" TextWrapping="Wrap"/>
+
+                            <TextBlock Text="Profession" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="OccupationText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Agent de crédit" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="LoanOfficerText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Succursale" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="BranchText" Style="{StaticResource ValueStyle}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Loan Information -->
+                <TextBlock Text="Informations sur le Prêt" Style="{StaticResource SectionHeaderStyle}"/>
+                <Border Background="White" 
+                       CornerRadius="8" 
+                       Padding="20" 
+                       Margin="0,0,0,10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Type de crédit" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="LoanTypeText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Montant demandé" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="RequestedAmountText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Montant approuvé" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="ApprovedAmountText" 
+                                      Style="{StaticResource ValueStyle}"
+                                      FontWeight="Bold"
+                                      FontSize="16"
+                                      Foreground="#27AE60"/>
+
+                            <TextBlock Text="Différence vs demandé" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="ApprovalDifferenceText" Style="{StaticResource ValueStyle}" Foreground="#3498DB"/>
+
+                            <TextBlock Text="Montant principal" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="PrincipalAmountText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Frais de dossier (5%)" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="ProcessingFeeText" Style="{StaticResource ValueStyle}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Durée" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="DurationText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Taux d'intérêt mensuel" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="InterestRateText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Taux annuel (équivalent)" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="AnnualRateText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Versement mensuel" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="MonthlyPaymentText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Versement mensuel (avec frais)" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="MonthlyPaymentWithFeesText" 
+                                      Style="{StaticResource ValueStyle}"
+                                      FontWeight="Bold"/>
+
+                            <TextBlock Text="Intérêt Total (estimé)" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="TotalInterestText" Style="{StaticResource ValueStyle}" Foreground="#9B59B6"/>
+
+                            <TextBlock Text="Total à Rembourser (+ Frais)" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="TotalRepaymentText" Style="{StaticResource ValueStyle}" FontWeight="Bold" Foreground="#5D6D7E"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Payment Status -->
+                <TextBlock Text="État des Paiements" Style="{StaticResource SectionHeaderStyle}"/>
+                <Border Background="White" 
+                       CornerRadius="8" 
+                       Padding="20" 
+                       Margin="0,0,0,10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Versements effectués" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="PaymentsMadeText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Montant payé" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="AmountPaidText" 
+                                      Style="{StaticResource ValueStyle}"
+                                      FontWeight="Bold"
+                                      Foreground="#27AE60"/>
+
+                            <TextBlock Text="Intérêt Payé" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="InterestPaidText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Prochain paiement" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="NextPaymentDateText" Style="{StaticResource ValueStyle}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Solde restant" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="RemainingBalanceText" 
+                                      Style="{StaticResource ValueStyle}"
+                                      FontWeight="Bold"
+                                      FontSize="18"
+                                      Foreground="#E74C3C"/>
+
+                            <TextBlock Text="Capital restant" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="OutstandingPrincipalText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Intérêts restants" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="OutstandingInterestText" Style="{StaticResource ValueStyle}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Overdue Information (if applicable) -->
+                <Border x:Name="OverduePanel" 
+                       Background="#FADBD8" 
+                       BorderBrush="#E74C3C" 
+                       BorderThickness="2"
+                       CornerRadius="8" 
+                       Padding="20" 
+                       Margin="0,0,0,10"
+                       Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock Text="⚠️ Paiement en Retard" 
+                                  FontSize="16" 
+                                  FontWeight="Bold" 
+                                  Foreground="#C0392B"
+                                  Margin="0,0,0,10"/>
+                        <TextBlock x:Name="OverdueText" 
+                                  FontSize="14" 
+                                  Foreground="#C0392B"
+                                  TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Dates Importantes -->
+                <TextBlock Text="Dates Importantes" Style="{StaticResource SectionHeaderStyle}"/>
+                <Border Background="White" 
+                       CornerRadius="8" 
+                       Padding="20" 
+                       Margin="0,0,0,10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Date de Demande" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="ApplicationDateText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Date d'Approbation" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="ApprovalDateText" Style="{StaticResource ValueStyle}"/>
+                            <TextBlock x:Name="ApprovedByText" FontSize="11" Foreground="#7F8C8D" Margin="0,0,0,10"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Date de Décaissement" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="DisbursementDateText" Style="{StaticResource ValueStyle}"/>
+
+                            <TextBlock Text="Date d'Échéance Finale" Style="{StaticResource LabelStyle}"/>
+                            <TextBlock x:Name="MaturityDateText" Style="{StaticResource ValueStyle}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Progress Bar -->
+                <TextBlock Text="Progression du Remboursement" Style="{StaticResource SectionHeaderStyle}"/>
+                <Border Background="White" 
+                       CornerRadius="8" 
+                       Padding="20" 
+                       Margin="0,0,0,10">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <TextBlock x:Name="ProgressPercentageText" 
+                                      FontSize="14" 
+                                      FontWeight="SemiBold"
+                                      Foreground="#27AE60"
+                                      HorizontalAlignment="Left"/>
+                            <TextBlock x:Name="ProgressFractionText" 
+                                      FontSize="13" 
+                                      Foreground="#7F8C8D"
+                                      HorizontalAlignment="Right"/>
+                        </Grid>
+                        <ProgressBar x:Name="PaymentProgressBar" 
+                                    Height="20" 
+                                    Minimum="0" 
+                                    Maximum="100"
+                                    Foreground="#27AE60"
+                                    Background="#ECF0F1"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+            </TabItem>
+
+            <!-- Tab: Calendrier d'Amortissement -->
+            <TabItem Header="Calendrier">
+                <TabItem.HeaderTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="📅" FontSize="14" Margin="0,0,5,0"/>
+                            <TextBlock Text="Calendrier" FontSize="13"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </TabItem.HeaderTemplate>
+                
+                <Grid Margin="25,20">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <TextBlock Grid.Row="0" Text="Calendrier d'Amortissement" 
+                              FontSize="18" FontWeight="SemiBold" Foreground="#2C3E50" Margin="0,0,0,15"/>
+                    
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                        <DataGrid x:Name="ScheduleDataGrid"
+                                 AutoGenerateColumns="False"
+                                 IsReadOnly="True"
+                                 GridLinesVisibility="Horizontal"
+                                 HeadersVisibility="Column"
+                                 Background="White"
+                                 AlternatingRowBackground="#F9FAFB"
+                                 RowHeight="35"
+                                 CanUserResizeRows="False"
+                                 CanUserReorderColumns="False"
+                                 SelectionMode="Single">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="#" Binding="{Binding InstallmentNumber}" Width="50"/>
+                                <DataGridTextColumn Header="Date d'Échéance" Binding="{Binding DueDateFormatted}" Width="120"/>
+                                <DataGridTextColumn Header="Capital" Binding="{Binding PrincipalFormatted}" Width="100">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Intérêt" Binding="{Binding InterestFormatted}" Width="100">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Frais" Binding="{Binding FeeFormatted}" Width="80">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Total" Binding="{Binding TotalFormatted}" Width="110">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Total + Frais" Binding="{Binding TotalWithFeeFormatted}" Width="110">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                                            <Setter Property="FontWeight" Value="Bold"/>
+                                            <Setter Property="Foreground" Value="#5B21B6"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Solde Restant" Binding="{Binding BalanceFormatted}" Width="110">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTemplateColumn Header="Statut" Width="100">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border x:Name="StatusBorder" CornerRadius="10" Padding="8,3" HorizontalAlignment="Center">
+                                                <TextBlock x:Name="StatusText" Text="{Binding StatusText}" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Status}" Value="PAID">
+                                                    <Setter TargetName="StatusBorder" Property="Background" Value="#D1FAE5"/>
+                                                    <Setter TargetName="StatusText" Property="Foreground" Value="#065F46"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Status}" Value="PENDING">
+                                                    <Setter TargetName="StatusBorder" Property="Background" Value="#FEF3C7"/>
+                                                    <Setter TargetName="StatusText" Property="Foreground" Value="#92400E"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Status}" Value="OVERDUE">
+                                                    <Setter TargetName="StatusBorder" Property="Background" Value="#FEE2E2"/>
+                                                    <Setter TargetName="StatusText" Property="Foreground" Value="#991B1B"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Status}" Value="UPCOMING">
+                                                    <Setter TargetName="StatusBorder" Property="Background" Value="#E5E7EB"/>
+                                                    <Setter TargetName="StatusText" Property="Foreground" Value="#374151"/>
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- Tab: Historique des Paiements -->
+            <TabItem Header="Historique">
+                <TabItem.HeaderTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="💰" FontSize="14" Margin="0,0,5,0"/>
+                            <TextBlock Text="Historique" FontSize="13"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </TabItem.HeaderTemplate>
+                
+                <Grid Margin="25,20">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <TextBlock Grid.Row="0" Text="Historique des Paiements" 
+                              FontSize="18" FontWeight="SemiBold" Foreground="#2C3E50" Margin="0,0,0,15"/>
+                    
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="PaymentHistoryItemsControl">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="White" 
+                                           BorderBrush="#E5E7EB" 
+                                           BorderThickness="1" 
+                                           CornerRadius="8" 
+                                           Padding="15" 
+                                           Margin="0,0,0,10">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            
+                                            <!-- Header -->
+                                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+                                                <Border Background="#D1FAE5" CornerRadius="10" Padding="8,3" Margin="0,0,10,0">
+                                                    <TextBlock Text="✓ Payé" FontSize="11" FontWeight="SemiBold" Foreground="#065F46"/>
+                                                </Border>
+                                                <TextBlock Text="{Binding PaymentDateFormatted}" FontSize="13" Foreground="#6B7280" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                                <TextBlock Text="{Binding ReceiptDisplay}" FontSize="11" Foreground="#9CA3AF" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                            
+                                            <!-- Amounts -->
+                                            <Grid Grid.Row="1" Margin="0,0,0,10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="Montant Total" FontSize="11" Foreground="#6B7280"/>
+                                                    <TextBlock Text="{Binding AmountFormatted}" FontSize="16" FontWeight="Bold" Foreground="#111827"/>
+                                                </StackPanel>
+                                                
+                                                <StackPanel Grid.Column="1">
+                                                    <TextBlock Text="Capital" FontSize="11" Foreground="#6B7280"/>
+                                                    <TextBlock Text="{Binding PrincipalFormatted}" FontSize="14" FontWeight="SemiBold" Foreground="#111827"/>
+                                                </StackPanel>
+                                                
+                                                <StackPanel Grid.Column="2">
+                                                    <TextBlock Text="Intérêt" FontSize="11" Foreground="#6B7280"/>
+                                                    <TextBlock Text="{Binding InterestFormatted}" FontSize="14" FontWeight="SemiBold" Foreground="#6B7280"/>
+                                                </StackPanel>
+                                            </Grid>
+                                            
+                                            <!-- Details -->
+                                            <StackPanel Grid.Row="2" Orientation="Horizontal">
+                                                <TextBlock FontSize="11" Foreground="#6B7280">
+                                                    <Run Text="Méthode: "/>
+                                                    <Run Text="{Binding PaymentMethod}" FontWeight="SemiBold"/>
+                                                    <Run Text="  •  Reçu par: "/>
+                                                    <Run Text="{Binding ReceivedBy}" FontWeight="SemiBold"/>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <!-- Footer Actions -->
+        <Border Grid.Row="2" 
+               Background="White" 
+               BorderBrush="#E0E0E0" 
+               BorderThickness="0,1,0,0" 
+               Padding="25,15">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Fermer"
+                       Background="#95A5A6"
+                       Foreground="White"
+                       Padding="20,10"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       BorderThickness="0"
+                       Cursor="Hand"
+                       Click="Close_Click">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="#95A5A6"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}"
+                                               CornerRadius="6"
+                                               Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#7F8C8D"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
