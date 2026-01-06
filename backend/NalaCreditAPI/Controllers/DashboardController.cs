@@ -433,13 +433,32 @@ public class DashboardController : ControllerBase
     public async Task<ActionResult<CreditAgentDashboardDto>> GetCreditAgentDashboard()
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var branchIdClaim = User.FindFirst("BranchId")?.Value;
+        int? branchId = null;
+        if (!string.IsNullOrWhiteSpace(branchIdClaim) && int.TryParse(branchIdClaim, out var parsedBranchId))
+        {
+            branchId = parsedBranchId;
+        }
         
         // Active credits portfolio
-        var activeCredits = await _context.Credits
+        var activeCreditsQuery = _context.Credits
             .Include(c => c.Application)
                 .ThenInclude(a => a.Customer)
-            .Where(c => c.Application.AgentId == userId && c.Status == CreditStatus.Active)
-            .ToListAsync();
+            .Include(c => c.Account)
+            .Where(c => c.Status == CreditStatus.Active);
+
+        // Prefer branch-based visibility when BranchId claim is present.
+        // This aligns the desktop "Agent de Crédit" dashboard with branch portfolio expectations.
+        if (branchId.HasValue)
+        {
+            activeCreditsQuery = activeCreditsQuery.Where(c => c.Account != null && c.Account.BranchId == branchId.Value);
+        }
+        else
+        {
+            activeCreditsQuery = activeCreditsQuery.Where(c => c.Application.AgentId == userId);
+        }
+
+        var activeCredits = await activeCreditsQuery.ToListAsync();
 
         // Pending applications
         var pendingApplications = await _context.CreditApplications
