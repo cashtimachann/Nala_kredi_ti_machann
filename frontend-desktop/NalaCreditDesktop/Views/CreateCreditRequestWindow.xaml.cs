@@ -542,23 +542,22 @@ namespace NalaCreditDesktop.Views
 
         private CreateMicrocreditLoanApplicationDto CreateCreditRequestDtoFromForm()
         {
-            // Map ComboBox indices to available enum values
-            // Since we have 13 types in UI but only 9 in enum, we'll map to closest match
+            // Map ComboBox indices to enum values (now all 13 match web app)
             var loanType = LoanTypeComboBox.SelectedIndex switch
             {
-                0 => MicrocreditLoanType.Business,      // Crédit Commercial
-                1 => MicrocreditLoanType.Agriculture,   // Crédit Agricole (Standard)
-                2 => MicrocreditLoanType.Personal,      // Crédit Personnel (Standard)
-                3 => MicrocreditLoanType.Personal,      // Crédit d'Urgence -> Personal
-                4 => MicrocreditLoanType.Housing,       // Crédit Loyer -> Housing
-                5 => MicrocreditLoanType.CreditAuto,    // Crédit Auto
-                6 => MicrocreditLoanType.CreditMoto,    // Crédit Moto
-                7 => MicrocreditLoanType.Personal,      // Crédit Personnel
-                8 => MicrocreditLoanType.Education,     // Crédit Scolaire -> Education
-                9 => MicrocreditLoanType.Agriculture,   // Crédit Agricole
-                10 => MicrocreditLoanType.Business,     // Crédit Professionnel -> Business
-                11 => MicrocreditLoanType.Personal,     // Crédit d'Appui -> Personal
-                12 => MicrocreditLoanType.Housing,      // Crédit Hypothécaire -> Housing
+                0 => MicrocreditLoanType.Commercial,           // Crédit Commercial
+                1 => MicrocreditLoanType.Agricultural,         // Crédit Agricole
+                2 => MicrocreditLoanType.Personal,             // Crédit Personnel
+                3 => MicrocreditLoanType.Emergency,            // Crédit d'Urgence
+                4 => MicrocreditLoanType.CreditLoyer,          // Crédit Loyer
+                5 => MicrocreditLoanType.CreditAuto,           // Crédit Auto
+                6 => MicrocreditLoanType.CreditMoto,           // Crédit Moto
+                7 => MicrocreditLoanType.CreditPersonnel,      // Crédit Personnel (Alt)
+                8 => MicrocreditLoanType.CreditScolaire,       // Crédit Scolaire
+                9 => MicrocreditLoanType.CreditAgricole,       // Crédit Agricole (Alt)
+                10 => MicrocreditLoanType.CreditProfessionnel, // Crédit Professionnel
+                11 => MicrocreditLoanType.CreditAppui,         // Crédit d'Appui
+                12 => MicrocreditLoanType.CreditHypothecaire,  // Crédit Hypothécaire
                 _ => MicrocreditLoanType.Personal
             };
 

@@ -69,6 +69,16 @@ namespace NalaCreditAPI.Controllers
         {
             try
             {
+                // Defense-in-depth: for branch-scoped roles, never allow cross-branch listing.
+                if (User.IsInRole("CreditAgent") || User.IsInRole("Employee") || User.IsInRole("LoanOfficer"))
+                {
+                    branchId = await ResolveEffectiveBranchIdAsync();
+                    if (!branchId.HasValue)
+                    {
+                        return BadRequest("User not assigned to a branch");
+                    }
+                }
+
                 _logger.LogInformation("GetLoans called - Page: {Page}, PageSize: {PageSize}, Status: {Status}, BranchId: {BranchId}, IsOverdue: {IsOverdue}", 
                     page, pageSize, status, branchId, isOverdue);
                     
@@ -86,6 +96,24 @@ namespace NalaCreditAPI.Controllers
                 _logger.LogError(ex, "Error retrieving loans");
                 return StatusCode(500, "An error occurred while retrieving loans");
             }
+        }
+
+        private async Task<int?> ResolveEffectiveBranchIdAsync()
+        {
+            var branchIdClaim = User.FindFirst("BranchId")?.Value;
+            if (!string.IsNullOrWhiteSpace(branchIdClaim) && int.TryParse(branchIdClaim, out var parsedBranchId))
+            {
+                return parsedBranchId;
+            }
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return null;
+            }
+
+            var user = await _context.Users.FindAsync(userId);
+            return user?.BranchId;
         }
 
         /// <summary>
@@ -403,13 +431,23 @@ namespace NalaCreditAPI.Controllers
         /// </summary>
         [HttpGet("overdue")]
         [Authorize(Roles = "SuperAdmin,Admin,Manager,Employee")]
-        public async Task<ActionResult<IList<OverdueLoanDto>>> GetOverdueLoans([FromQuery] int daysOverdue = 1)
+        public async Task<ActionResult<IList<OverdueLoanDto>>> GetOverdueLoans([FromQuery] int daysOverdue = 1, [FromQuery] int? branchId = null)
         {
             try
             {
                 if (daysOverdue < 1) daysOverdue = 1;
 
-                var overdueLoans = await _loanApplicationService.GetOverdueLoansAsync(daysOverdue);
+                // Defense-in-depth: for branch-scoped roles, never allow cross-branch overdue listing.
+                if (User.IsInRole("CreditAgent") || User.IsInRole("Employee") || User.IsInRole("LoanOfficer"))
+                {
+                    branchId = await ResolveEffectiveBranchIdAsync();
+                    if (!branchId.HasValue)
+                    {
+                        return BadRequest("User not assigned to a branch");
+                    }
+                }
+
+                var overdueLoans = await _loanApplicationService.GetOverdueLoansAsync(daysOverdue, branchId);
                 return Ok(overdueLoans);
             }
             catch (Exception ex)

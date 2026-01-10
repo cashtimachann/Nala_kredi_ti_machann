@@ -40,6 +40,6 @@ catch {
     
     if ($_.ErrorDetails) {
         $errDetails = $_.ErrorDetails.Message
-        Write-Host "  Response: $errDetails" -ForegroundColor Red
+        Write-Host "  Response: $errDetails"
     }
 }

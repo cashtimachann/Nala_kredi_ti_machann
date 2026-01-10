@@ -203,7 +203,8 @@ namespace NalaCreditDesktop.ViewModels
                 IsBusy = true;
                 StatusMessage = "Chargement des prêts en retard...";
                 OverdueLoans.Clear();
-                var list = await _api.GetOverdueLoansAsync(1);
+                var branchId = _api.CurrentUser?.BranchId;
+                var list = await _api.GetOverdueLoansAsync(1, branchId);
                 foreach (var item in list)
                 {
                     OverdueLoans.Add(item);

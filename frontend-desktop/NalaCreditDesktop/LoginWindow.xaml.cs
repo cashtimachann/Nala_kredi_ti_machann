@@ -54,17 +54,18 @@ namespace NalaCreditDesktop
 
                 // Successfully authenticated - determine dashboard based on user role
                 string userRole = loginResponse.User.Role;
-                StatusText.Text = $"Connexion réussie en tant que {userRole}...";
-                
+                var branchId = loginResponse.User.BranchId;
+                StatusText.Text = $"Connexion réussie en tant que {userRole} (BranchId: {(branchId.HasValue ? branchId.Value.ToString() : "NULL")})...";
+
                 // Backend uses: Cashier=0, Employee=1, Manager=2, Admin=3, Secretary=4, SuperAdmin=5
-                // Map these to our dashboards (Employee = Agent de Crédit)
+                // Map these to our dashboards
                 Window? dashboardWindow = userRole switch
                 {
                     // Backend Role: Cashier (0)
                     "Cashier" or "Caissier" => new Views.CashierDashboard(_apiService),
 
-                    // Backend Role: Employee (1) → Agent de Crédit / Loan Officer
-                    "Employee" or "LoanOfficer" or "AgentDeCredit" or "Agent de Credit" or "CreditAgent" => new Views.LoanOfficerDashboard(_apiService),
+                    // Backend Role: Employee/LoanOfficer (1) → Agent de Crédit
+                    "Employee" or "LoanOfficer" or "CreditAgent" or "AgentDeCredit" or "Agent de Credit" => new Views.CreditAgentDashboard(_apiService),
 
                     // Backend Role: Manager (2) → Chef de Succursale
                     "Manager" or "BranchManager" or "Chef de Succursale" or "ChefDeSuccursale" => new Views.BranchManagerDashboard(_apiService),

@@ -142,6 +142,14 @@ public class ApiService
             new AuthenticationHeaderValue("Bearer", token);
     }
 
+    public string GetDiagnosticsSummary()
+    {
+        var baseAddress = _httpClient.BaseAddress?.ToString() ?? "(null)";
+        var hasAuthHeader = _httpClient.DefaultRequestHeaders.Authorization != null;
+        var scheme = _httpClient.DefaultRequestHeaders.Authorization?.Scheme;
+        return $"BaseAddress={baseAddress}; AuthHeader={(hasAuthHeader ? scheme : "none")}";
+    }
+
     public void ClearAuth()
     {
         _authToken = null;
@@ -247,6 +255,9 @@ public class ApiService
 
     public async Task<CreditAgentDashboard?> GetCreditAgentDashboardAsync() =>
         await GetAsync<CreditAgentDashboard>("dashboard/credit-agent");
+
+    public async Task<ApiResult<CreditAgentDashboard?>> GetCreditAgentDashboardResultAsync() =>
+        await GetAsyncResult<CreditAgentDashboard>("dashboard/credit-agent");
 
     public async Task<BranchSupervisorDashboard?> GetBranchSupervisorDashboardAsync() =>
         await GetAsync<BranchSupervisorDashboard>("dashboard/branch-supervisor");
@@ -599,11 +610,15 @@ public class ApiService
     }
 
     // --- Microcredit (Recouvrement) ---
-    public async Task<List<NalaCreditDesktop.Models.OverdueLoan>> GetOverdueLoansAsync(int daysOverdue = 1)
+    public async Task<List<NalaCreditDesktop.Models.OverdueLoan>> GetOverdueLoansAsync(int daysOverdue = 1, int? branchId = null)
     {
         try
         {
             var endpoint = $"microcreditloan/overdue?daysOverdue={daysOverdue}";
+            if (branchId.HasValue)
+            {
+                endpoint += $"&branchId={branchId.Value}";
+            }
             var response = await _httpClient.GetAsync(endpoint);
             var raw = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
@@ -621,8 +636,14 @@ public class ApiService
         }
     }
 
+    public string? LastApiError { get; private set; }
+    public System.Net.HttpStatusCode? LastApiStatusCode { get; private set; }
+
     public async Task<NalaCreditDesktop.Models.MicrocreditLoanListResponse?> GetLoansAsync(int page = 1, int pageSize = 100, string? status = null, int? branchId = null, bool? isOverdue = null)
     {
+        LastApiError = null;
+        LastApiStatusCode = null;
+
         var qs = new StringBuilder($"microcreditloan?page={page}&pageSize={pageSize}");
         if (!string.IsNullOrWhiteSpace(status)) qs.Append("&status=").Append(Uri.EscapeDataString(status));
         if (branchId.HasValue) qs.Append("&branchId=").Append(branchId.Value);
@@ -636,10 +657,12 @@ public class ApiService
             var resp = await _httpClient.GetAsync(requestUrl);
             var raw = await resp.Content.ReadAsStringAsync();
             
+            LastApiStatusCode = resp.StatusCode;
             System.Diagnostics.Debug.WriteLine($"[ApiService] Status: {resp.StatusCode}, Content length: {raw?.Length ?? 0}");
             
             if (!resp.IsSuccessStatusCode)
             {
+                LastApiError = $"HTTP {(int)resp.StatusCode} - {resp.ReasonPhrase}";
                 System.Diagnostics.Debug.WriteLine($"[ApiService] Request failed: {raw}");
                 return null;
             }
@@ -654,6 +677,7 @@ public class ApiService
         }
         catch (Exception ex)
         {
+            LastApiError = ex.Message;
             System.Diagnostics.Debug.WriteLine($"[ApiService] Exception: {ex.Message}");
             return null;
         }
@@ -663,10 +687,31 @@ public class ApiService
     {
         if (string.IsNullOrWhiteSpace(loanNumber)) return null;
 
-        // Try first page with a bigger pageSize to reduce round-trips
-        var result = await GetLoansAsync(1, 200);
-        var match = result?.Loans?.FirstOrDefault(l => string.Equals(l.LoanNumber, loanNumber, StringComparison.OrdinalIgnoreCase));
-        return match;
+        // Always scope loan search to the current user's branch when available.
+        // This prevents agents from accidentally finding/processing loans from other branches.
+        var branchId = CurrentUser?.BranchId;
+        if (!branchId.HasValue)
+        {
+            System.Diagnostics.Debug.WriteLine("[ApiService] SearchLoanByNumberAsync: CurrentUser.BranchId is missing; refusing unscoped search.");
+            return null;
+        }
+
+        // Backend caps pageSize at 100; use paging to ensure we can find older loans.
+        const int pageSize = 100;
+        var page = 1;
+        while (true)
+        {
+            var result = await GetLoansAsync(page, pageSize, status: null, branchId: branchId, isOverdue: null);
+            var match = result?.Loans?.FirstOrDefault(l =>
+                string.Equals(l.LoanNumber, loanNumber, StringComparison.OrdinalIgnoreCase));
+            if (match != null) return match;
+
+            var totalPages = result?.TotalPages > 0 ? result.TotalPages : 1;
+            if (page >= totalPages) break;
+            page++;
+        }
+
+        return null;
     }
 
     public async Task<NalaCreditDesktop.Models.MicrocreditLoan?> GetLoanByIdAsync(Guid loanId)
@@ -690,7 +735,8 @@ public class ApiService
     {
         try
         {
-            var resp = await _httpClient.GetAsync($"microcreditloan/{loanId}/schedule");
+            // Backend route: GET /api/MicrocreditLoan/{id}/payment-schedule
+            var resp = await _httpClient.GetAsync($"microcreditloan/{loanId}/payment-schedule");
             var raw = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode) return null;
             return string.IsNullOrWhiteSpace(raw)
@@ -1293,21 +1339,37 @@ public class ApiService
     {
         try
         {
+            System.Diagnostics.Debug.WriteLine($"[ApiService.GetAsyncResult] Calling: {endpoint}");
+            System.Diagnostics.Debug.WriteLine($"[ApiService.GetAsyncResult] Current User: {CurrentUser?.Email}, Role: {CurrentUser?.Role}, BranchId: {CurrentUser?.BranchId}");
+            
             var response = await _httpClient.GetAsync(endpoint);
+            
+            System.Diagnostics.Debug.WriteLine($"[ApiService.GetAsyncResult] Response Status: {response.StatusCode}");
 
             if (!response.IsSuccessStatusCode)
             {
                 var errorRaw = await response.Content.ReadAsStringAsync();
+                System.Diagnostics.Debug.WriteLine($"[ApiService.GetAsyncResult] ERROR Response: {errorRaw}");
                 var message = ExtractErrorMessage(errorRaw) ?? response.ReasonPhrase ?? "Erreur inconnue";
                 return ApiResult<T?>.Failure(message);
             }
 
             var json = await response.Content.ReadAsStringAsync();
+            System.Diagnostics.Debug.WriteLine($"[ApiService.GetAsyncResult] SUCCESS Response length: {json?.Length ?? 0} chars");
+            if (!string.IsNullOrWhiteSpace(json) && json.Length < 500)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ApiService.GetAsyncResult] Response: {json}");
+            }
+            
             var data = string.IsNullOrWhiteSpace(json) ? null : JsonConvert.DeserializeObject<T>(json);
+            System.Diagnostics.Debug.WriteLine($"[ApiService.GetAsyncResult] Deserialized data: {(data != null ? "SUCCESS" : "NULL")}");
+            
             return ApiResult<T?>.Success(data);
         }
         catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[ApiService.GetAsyncResult] EXCEPTION: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[ApiService.GetAsyncResult] Stack: {ex.StackTrace}");
             return ApiResult<T?>.Failure(ex.Message);
         }
     }
@@ -1826,7 +1888,8 @@ public class ApiService
         int pageSize = 20, 
         string? status = null, 
         string? loanType = null, 
-        int? branchId = null)
+        int? branchId = null,
+        string? loanOfficerId = null)
     {
         try
         {
@@ -1844,6 +1907,9 @@ public class ApiService
 
             if (branchId.HasValue)
                 queryParams.Add($"branchId={branchId.Value}");
+
+            if (!string.IsNullOrEmpty(loanOfficerId))
+                queryParams.Add($"loanOfficerId={loanOfficerId}");
 
             var queryString = string.Join("&", queryParams);
             var url = $"MicrocreditLoanApplication?{queryString}";
@@ -1885,6 +1951,50 @@ public class ApiService
         catch (Exception ex)
         {
             return ApiResult<MicrocreditLoanApplicationDto?>.Failure($"Erreur: {ex.Message}");
+        }
+    }
+
+    public async Task<PaymentHistoryResponse?> GetPaymentHistoryAsync(
+        int page = 1,
+        int pageSize = 100,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        int? branchId = null)
+    {
+        try
+        {
+            var queryParams = new List<string>
+            {
+                $"page={page}",
+                $"pageSize={pageSize}"
+            };
+
+            if (fromDate.HasValue)
+                queryParams.Add($"fromDate={fromDate.Value:yyyy-MM-dd}");
+
+            if (toDate.HasValue)
+                queryParams.Add($"toDate={toDate.Value:yyyy-MM-dd}");
+
+            if (branchId.HasValue)
+                queryParams.Add($"branchId={branchId.Value}");
+
+            var queryString = string.Join("&", queryParams);
+            var url = $"MicrocreditPayment/history?{queryString}";
+
+            var response = await _httpClient.GetAsync(url);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                return JsonConvert.DeserializeObject<PaymentHistoryResponse>(raw);
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ApiService] GetPaymentHistoryAsync error: {ex.Message}");
+            return null;
         }
     }
 

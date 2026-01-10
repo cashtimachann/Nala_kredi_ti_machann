@@ -235,6 +235,9 @@ namespace NalaCreditAPI.Migrations
                     b.Property<string>("OldValues")
                         .HasColumnType("text");
 
+                    b.Property<byte[]>("RowVersion")
+                        .HasColumnType("bytea");
+
                     b.Property<DateTime>("Timestamp")
                         .HasColumnType("timestamp without time zone");
 

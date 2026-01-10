@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using NalaCreditAPI.Data;
 using NalaCreditAPI.DTOs;
 using NalaCreditAPI.Models;
 using NalaCreditAPI.Services;
@@ -16,15 +18,18 @@ namespace NalaCreditAPI.Controllers
         private readonly IMicrocreditLoanApplicationService _loanApplicationService;
         private readonly IFileStorageService _fileStorageService;
         private readonly ILogger<MicrocreditLoanApplicationController> _logger;
+        private readonly ApplicationDbContext _context;
 
         public MicrocreditLoanApplicationController(
             IMicrocreditLoanApplicationService loanApplicationService,
             IFileStorageService fileStorageService,
-            ILogger<MicrocreditLoanApplicationController> logger)
+            ILogger<MicrocreditLoanApplicationController> logger,
+            ApplicationDbContext context)
         {
             _loanApplicationService = loanApplicationService;
             _fileStorageService = fileStorageService;
             _logger = logger;
+            _context = context;
         }
 
         /// <summary>
@@ -59,14 +64,25 @@ namespace NalaCreditAPI.Controllers
             [FromQuery] int pageSize = 10,
             [FromQuery] MicrocreditApplicationStatus? status = null,
             [FromQuery] MicrocreditLoanType? loanType = null,
-            [FromQuery] int? branchId = null)
+            [FromQuery] int? branchId = null,
+            [FromQuery] string? loanOfficerId = null)
         {
             try
             {
+                // Defense-in-depth: for branch-scoped roles, never allow cross-branch listing.
+                if (User.IsInRole("CreditAgent") || User.IsInRole("Employee") || User.IsInRole("LoanOfficer"))
+                {
+                    branchId = await ResolveEffectiveBranchIdAsync();
+                    if (!branchId.HasValue)
+                    {
+                        return BadRequest("User not assigned to a branch");
+                    }
+                }
+
                 if (page < 1) page = 1;
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
-                var result = await _loanApplicationService.GetApplicationsAsync(page, pageSize, status, loanType, branchId);
+                var result = await _loanApplicationService.GetApplicationsAsync(page, pageSize, status, loanType, branchId, loanOfficerId);
                 return Ok(result);
             }
             catch (Exception ex)
@@ -74,6 +90,24 @@ namespace NalaCreditAPI.Controllers
                 _logger.LogError(ex, "Error retrieving loan applications");
                 return StatusCode(500, "An error occurred while retrieving loan applications");
             }
+        }
+
+        private async Task<int?> ResolveEffectiveBranchIdAsync()
+        {
+            var branchIdClaim = User.FindFirst("BranchId")?.Value;
+            if (!string.IsNullOrWhiteSpace(branchIdClaim) && int.TryParse(branchIdClaim, out var parsedBranchId))
+            {
+                return parsedBranchId;
+            }
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return null;
+            }
+
+            var user = await _context.Users.FindAsync(userId);
+            return user?.BranchId;
         }
 
         /// <summary>
@@ -100,6 +134,12 @@ namespace NalaCreditAPI.Controllers
             }
             catch (ArgumentException ex)
             {
+                return BadRequest(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Business validation errors (e.g., debt-to-income ratio too high)
+                _logger.LogWarning(ex, "Business validation error creating loan application");
                 return BadRequest(ex.Message);
             }
             catch (Exception ex)

@@ -233,6 +233,7 @@ public class ApplicationDbContext : IdentityDbContext<User>
         {
             entity.HasIndex(al => new { al.UserId, al.Timestamp });
             entity.HasIndex(al => new { al.EntityType, al.EntityId });
+            entity.Property(al => al.RowVersion).IsRowVersion();
         });
 
         // Savings Module Configurations

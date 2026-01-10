@@ -429,76 +429,135 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("credit-agent")]
-    [Authorize(Roles = "CreditAgent")]
+    // Desktop credit agents commonly authenticate as "Employee" (and some deployments use "LoanOfficer").
+    // Allow those roles alongside the legacy "CreditAgent" role to prevent silent empty dashboards (403).
+    [Authorize(Roles = "CreditAgent,Employee,LoanOfficer")]
     public async Task<ActionResult<CreditAgentDashboardDto>> GetCreditAgentDashboard()
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Unauthorized("User ID not found in token");
+        }
+
+        // Resolve BranchId from token claim (preferred) with fallback to the user record.
+        // This avoids empty dashboards when older tokens miss claims or when upstream auth differs.
+        int? branchIdFromClaim = null;
         var branchIdClaim = User.FindFirst("BranchId")?.Value;
-        int? branchId = null;
         if (!string.IsNullOrWhiteSpace(branchIdClaim) && int.TryParse(branchIdClaim, out var parsedBranchId))
         {
-            branchId = parsedBranchId;
+            branchIdFromClaim = parsedBranchId;
         }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        var branchIdFromUser = user?.BranchId;
+        var effectiveBranchId = branchIdFromClaim ?? branchIdFromUser;
+
+        _logger.LogInformation(
+            "[Dashboard/credit-agent] userId={UserId} roleClaims={Roles} branchIdClaim={BranchIdClaim} branchIdUser={BranchIdUser} effectiveBranchId={EffectiveBranchId}",
+            userId,
+            string.Join(",", User.FindAll(ClaimTypes.Role).Select(c => c.Value)),
+            branchIdClaim,
+            branchIdFromUser,
+            effectiveBranchId);
         
-        // Active credits portfolio
-        var activeCreditsQuery = _context.Credits
-            .Include(c => c.Application)
-                .ThenInclude(a => a.Customer)
-            .Include(c => c.Account)
-            .Where(c => c.Status == CreditStatus.Active);
+        // Active credits portfolio - USE MICROCREDIT SYSTEM (not old Credits table)
+        var activeMicrocreditsQuery = _context.MicrocreditLoans
+            .Include(l => l.Borrower)
+            .Include(l => l.Application)
+            .Where(l => l.Status == MicrocreditLoanStatus.Active || l.Status == MicrocreditLoanStatus.Overdue || l.Status == MicrocreditLoanStatus.Defaulted);
 
         // Prefer branch-based visibility when BranchId claim is present.
         // This aligns the desktop "Agent de Crédit" dashboard with branch portfolio expectations.
-        if (branchId.HasValue)
+        if (effectiveBranchId.HasValue)
         {
-            activeCreditsQuery = activeCreditsQuery.Where(c => c.Account != null && c.Account.BranchId == branchId.Value);
+            activeMicrocreditsQuery = activeMicrocreditsQuery.Where(l => l.BranchId == effectiveBranchId.Value);
         }
         else
         {
-            activeCreditsQuery = activeCreditsQuery.Where(c => c.Application.AgentId == userId);
+            // Fallback to agent-based filtering
+            activeMicrocreditsQuery = activeMicrocreditsQuery.Where(l => l.LoanOfficerId == userId);
         }
 
-        var activeCredits = await activeCreditsQuery.ToListAsync();
+        var activeMicrocredits = await activeMicrocreditsQuery.ToListAsync();
 
-        // Pending applications
-        var pendingApplications = await _context.CreditApplications
-            .Where(ca => ca.AgentId == userId && ca.Status == CreditApplicationStatus.Submitted)
-            .CountAsync();
+        // Extra diagnostics: compare counts if BranchId is available but results are unexpectedly empty
+        if (effectiveBranchId.HasValue)
+        {
+            var countByBranch = await _context.MicrocreditLoans
+                .AsNoTracking()
+                .Where(l => (l.Status == MicrocreditLoanStatus.Active || l.Status == MicrocreditLoanStatus.Overdue || l.Status == MicrocreditLoanStatus.Defaulted)
+                    && l.BranchId == effectiveBranchId.Value)
+                .CountAsync();
+            var countByOfficer = await _context.MicrocreditLoans
+                .AsNoTracking()
+                .Where(l => (l.Status == MicrocreditLoanStatus.Active || l.Status == MicrocreditLoanStatus.Overdue || l.Status == MicrocreditLoanStatus.Defaulted)
+                    && l.LoanOfficerId == userId)
+                .CountAsync();
+            _logger.LogInformation(
+                "[Dashboard/credit-agent] activeLoans branchCount={BranchCount} officerCount={OfficerCount} returned={Returned}",
+                countByBranch,
+                countByOfficer,
+                activeMicrocredits.Count);
+        }
+
+        // Pending applications - USE MICROCREDIT APPLICATIONS
+        // Match filtering logic with activeMicrocredits: prefer branch-based when available, fallback to loan officer
+        var pendingApplicationsQuery = _context.MicrocreditLoanApplications
+            .Where(app => app.Status == MicrocreditApplicationStatus.Submitted);
+        
+        if (effectiveBranchId.HasValue)
+        {
+            pendingApplicationsQuery = pendingApplicationsQuery.Where(app => app.BranchId == effectiveBranchId.Value);
+        }
+        else
+        {
+            pendingApplicationsQuery = pendingApplicationsQuery.Where(app => app.LoanOfficerId == userId);
+        }
+        
+        var pendingApplications = await pendingApplicationsQuery.CountAsync();
 
         // This week's payments due
         // Use UTC date range when computing week bounds as well
         var weekStart = DateTime.UtcNow.Date.AddDays(-(int)DateTime.UtcNow.Date.DayOfWeek);
         var weekEnd = weekStart.AddDays(7);
         
-        var paymentsThisWeek = activeCredits
-            .Where(c => c.NextPaymentDate >= weekStart && c.NextPaymentDate < weekEnd)
-            .ToList();
+        // For microcredit loans, check NextPaymentDate from PaymentSchedule
+        var loanIds = activeMicrocredits.Select(l => l.Id).ToList();
+        var upcomingPayments = await _context.MicrocreditPaymentSchedules
+            .Where(ps => loanIds.Contains(ps.LoanId) 
+                && ps.Status == MicrocreditPaymentStatus.Pending
+                && ps.DueDate >= DateOnly.FromDateTime(weekStart) 
+                && ps.DueDate < DateOnly.FromDateTime(weekEnd))
+            .Include(ps => ps.Loan)
+                .ThenInclude(l => l.Borrower)
+            .ToListAsync();
 
         // Performance metrics
-        var totalPortfolio = activeCredits.Sum(c => c.OutstandingBalance);
-        var overdueCredits = activeCredits.Where(c => c.DaysInArrears > 0).Count();
-        var repaymentRate = activeCredits.Count > 0 ? 
-            (activeCredits.Count - overdueCredits) / (double)activeCredits.Count * 100 : 100;
+        var totalPortfolio = activeMicrocredits.Sum(l => l.OutstandingBalance);
+        var overdueCredits = activeMicrocredits.Where(l => l.DaysOverdue > 0).Count();
+        var repaymentRate = activeMicrocredits.Count > 0 ? 
+            (activeMicrocredits.Count - overdueCredits) / (double)activeMicrocredits.Count * 100 : 100;
 
         return Ok(new CreditAgentDashboardDto
         {
-            ActiveCreditsCount = activeCredits.Count,
+            ActiveCreditsCount = activeMicrocredits.Count,
             TotalPortfolioAmount = totalPortfolio,
             PendingApplications = pendingApplications,
-            PaymentsDueThisWeek = paymentsThisWeek.Count,
+            PaymentsDueThisWeek = upcomingPayments.Count,
             OverdueCredits = overdueCredits,
             RepaymentRate = repaymentRate,
-            PaymentsExpectedThisWeek = paymentsThisWeek.Sum(c => c.WeeklyPayment),
-            AverageTicketSize = activeCredits.Count > 0 ? activeCredits.Average(c => c.PrincipalAmount) : 0,
-            PaymentsDueList = paymentsThisWeek
-                .Where(c => c.Application?.Customer != null)
-                .Select(c => new PaymentDueItemDto
+            PaymentsExpectedThisWeek = upcomingPayments.Sum(ps => ps.TotalAmount),
+            AverageTicketSize = activeMicrocredits.Count > 0 ? activeMicrocredits.Average(l => l.PrincipalAmount) : 0,
+            PaymentsDueList = upcomingPayments
+                .Where(ps => ps.Loan?.Borrower != null)
+                .Select(ps => new PaymentDueItemDto
                 {
-                    BorrowerName = $"{c.Application!.Customer!.FirstName} {c.Application.Customer.LastName}".Trim(),
-                    LoanNumber = c.CreditNumber ?? "N/A",
-                    DueDate = c.NextPaymentDate,
-                    Amount = c.WeeklyPayment,
-                    Currency = c.Application.Currency.ToString()
+                    BorrowerName = $"{ps.Loan!.Borrower!.FirstName} {ps.Loan.Borrower.LastName}".Trim(),
+                    LoanNumber = ps.Loan.LoanNumber ?? "N/A",
+                    DueDate = ps.DueDate.ToDateTime(TimeOnly.MinValue),
+                    Amount = ps.TotalAmount,
+                    Currency = ps.Loan.Currency.ToString()
                 }).ToList()
         });
     }

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using NalaCreditAPI.Data;
 using NalaCreditAPI.DTOs;
 using NalaCreditAPI.Migrations;
@@ -271,6 +272,16 @@ namespace NalaCreditAPI.Controllers
         {
             try
             {
+                // Defense-in-depth: for branch-scoped roles, never allow cross-branch listing.
+                if (User.IsInRole("CreditAgent") || User.IsInRole("Employee") || User.IsInRole("LoanOfficer"))
+                {
+                    branchId = await ResolveEffectiveBranchIdAsync();
+                    if (!branchId.HasValue)
+                    {
+                        return BadRequest("User not assigned to a branch");
+                    }
+                }
+
                 if (page < 1) page = 1;
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
@@ -282,6 +293,24 @@ namespace NalaCreditAPI.Controllers
                 _logger.LogError(ex, "Error retrieving payment history");
                 return StatusCode(500, "An error occurred while retrieving payment history");
             }
+        }
+
+        private async Task<int?> ResolveEffectiveBranchIdAsync()
+        {
+            var branchIdClaim = User.FindFirst("BranchId")?.Value;
+            if (!string.IsNullOrWhiteSpace(branchIdClaim) && int.TryParse(branchIdClaim, out var parsedBranchId))
+            {
+                return parsedBranchId;
+            }
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return null;
+            }
+
+            var user = await _context.Users.FindAsync(userId);
+            return user?.BranchId;
         }
 
         /// <summary>

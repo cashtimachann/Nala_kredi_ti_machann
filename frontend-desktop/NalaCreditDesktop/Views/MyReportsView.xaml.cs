@@ -195,30 +195,52 @@ namespace NalaCreditDesktop.Views
             {
                 ShowLoading(true);
                 StatusMessageText.Text = "Chargement des données...";
+
+                var branchId = _apiService.CurrentUser?.BranchId;
+                if (!branchId.HasValue)
+                {
+                    MessageBox.Show(
+                        "Kont itilizatè sa a pa gen succursale (BranchId).\n\nPou respekte règleman 'filtre pa succursale', rapò yo pap chaje san BranchId. Kontakte administrateur.",
+                        "Konfigirasyon Enkonplè",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    StatusMessageText.Text = "BranchId manke";
+                    _currentLoans.Clear();
+                    return;
+                }
+
+                async Task<List<MicrocreditLoan>> FetchAllLoansAsync(string status, bool isOverdue)
+                {
+                    const int pageSize = 100; // backend max
+                    var page = 1;
+                    var all = new List<MicrocreditLoan>();
+                    while (true)
+                    {
+                        var resp = await _apiService.GetLoansAsync(
+                            page: page,
+                            pageSize: pageSize,
+                            status: status,
+                            branchId: branchId,
+                            isOverdue: isOverdue ? true : null);
+
+                        if (resp?.Loans != null && resp.Loans.Any())
+                            all.AddRange(resp.Loans);
+
+                        var totalPages = resp?.TotalPages > 0 ? resp.TotalPages : 1;
+                        if (page >= totalPages) break;
+                        page++;
+                    }
+                    return all;
+                }
                 
                 // Get all active and overdue loans
-                var activeLoans = await _apiService.GetLoansAsync(
-                    page: 1,
-                    pageSize: 1000,
-                    status: "Active",
-                    branchId: null,
-                    isOverdue: null
-                );
-
-                var overdueLoans = await _apiService.GetLoansAsync(
-                    page: 1,
-                    pageSize: 1000,
-                    status: "Overdue",
-                    branchId: null,
-                    isOverdue: true
-                );
+                var activeLoans = await FetchAllLoansAsync("Active", isOverdue: false);
+                var overdueLoans = await FetchAllLoansAsync("Overdue", isOverdue: true);
 
                 // Combine loans
                 _currentLoans.Clear();
-                if (activeLoans?.Loans != null)
-                    _currentLoans.AddRange(activeLoans.Loans);
-                if (overdueLoans?.Loans != null)
-                    _currentLoans.AddRange(overdueLoans.Loans);
+                _currentLoans.AddRange(activeLoans);
+                _currentLoans.AddRange(overdueLoans);
 
                 // Apply filters
                 ApplyFilters();

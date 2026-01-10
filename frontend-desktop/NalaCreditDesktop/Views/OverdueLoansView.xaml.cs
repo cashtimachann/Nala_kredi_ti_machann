@@ -47,12 +47,24 @@ namespace NalaCreditDesktop.Views
                 ShowLoading(true);
                 _overdueLoans.Clear();
 
+                var branchId = _apiService.CurrentUser?.BranchId;
+                if (!branchId.HasValue)
+                {
+                    MessageBox.Show(
+                        "Kont itilizatè sa a pa gen succursale (BranchId).\n\nPou respekte règleman 'filtre pa succursale', sistèm nan pap chaje prè san BranchId. Kontakte administrateur.",
+                        "Konfigirasyon Enkonplè",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    ShowEmptyState(true);
+                    return;
+                }
+
                 // Get overdue loans (status: Overdue)
                 var result = await _apiService.GetLoansAsync(
                     page: _currentPage,
                     pageSize: _pageSize,
                     status: "Overdue",
-                    branchId: null,
+                    branchId: branchId,
                     isOverdue: true
                 );
 

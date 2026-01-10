@@ -124,29 +124,67 @@ namespace NalaCreditDesktop.Views
                 _searchResults.Clear();
                 _borrowerLoans.Clear();
 
-                // Get all active and overdue loans to find borrowers
-                var activeLoans = await _apiService.GetLoansAsync(
-                    page: 1,
-                    pageSize: 500,
-                    status: "Active",
-                    branchId: null,
-                    isOverdue: null
-                );
+                var branchId = _apiService.CurrentUser?.BranchId;
+                if (!branchId.HasValue)
+                {
+                    MessageBox.Show(
+                        "Kont itilizatè sa a pa gen succursale (BranchId).\n\nPou respekte règleman 'filtre pa succursale', rechèch la pap fèt san BranchId. Kontakte administrateur.",
+                        "Konfigirasyon Enkonplè",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    ShowEmptyState(true);
+                    return;
+                }
 
-                var overdueLoans = await _apiService.GetLoansAsync(
-                    page: 1,
-                    pageSize: 500,
-                    status: "Overdue",
-                    branchId: null,
-                    isOverdue: true
-                );
+                // For Credit Agents, filter by their loanOfficerId
+                var userRole = _apiService.CurrentUser?.Role ?? string.Empty;
+                var userId = _apiService.CurrentUser?.Id ?? string.Empty;
+                var isCreditAgent = userRole.Equals("CreditAgent", StringComparison.OrdinalIgnoreCase) ||
+                                   userRole.Equals("LoanOfficer", StringComparison.OrdinalIgnoreCase) ||
+                                   userRole.Equals("Employee", StringComparison.OrdinalIgnoreCase);
+
+                async Task<List<MicrocreditLoan>> FetchAllLoansAsync(string status, bool isOverdue)
+                {
+                    const int pageSize = 100; // backend max
+                    var page = 1;
+                    var all = new List<MicrocreditLoan>();
+                    while (true)
+                    {
+                        var resp = await _apiService.GetLoansAsync(
+                            page: page,
+                            pageSize: pageSize,
+                            status: status,
+                            branchId: branchId,
+                            isOverdue: isOverdue ? true : null);
+
+                        if (resp?.Loans != null && resp.Loans.Any())
+                        {
+                            var loans = resp.Loans;
+                            
+                            // Filter by loanOfficerId if user is a Credit Agent
+                            if (isCreditAgent && !string.IsNullOrEmpty(userId))
+                            {
+                                loans = loans.Where(l => string.Equals(l.LoanOfficerId, userId, StringComparison.OrdinalIgnoreCase)).ToList();
+                            }
+                            
+                            all.AddRange(loans);
+                        }
+
+                        var totalPages = resp?.TotalPages > 0 ? resp.TotalPages : 1;
+                        if (page >= totalPages) break;
+                        page++;
+                    }
+                    return all;
+                }
+
+                // Get all active and overdue loans to find borrowers
+                var activeLoans = await FetchAllLoansAsync("Active", isOverdue: false);
+                var overdueLoans = await FetchAllLoansAsync("Overdue", isOverdue: true);
 
                 // Combine all loans
                 var allLoans = new List<MicrocreditLoan>();
-                if (activeLoans?.Loans != null)
-                    allLoans.AddRange(activeLoans.Loans);
-                if (overdueLoans?.Loans != null)
-                    allLoans.AddRange(overdueLoans.Loans);
+                allLoans.AddRange(activeLoans);
+                allLoans.AddRange(overdueLoans);
 
                 // Apply filters
                 var filteredLoans = allLoans.AsEnumerable();

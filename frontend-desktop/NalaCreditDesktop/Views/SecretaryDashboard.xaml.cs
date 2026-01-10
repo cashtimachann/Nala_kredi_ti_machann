@@ -578,15 +578,19 @@ namespace NalaCreditDesktop.Views
         {
             return loanType switch
             {
-                MicrocreditLoanType.Personal => "Personnel",
-                MicrocreditLoanType.Business => "Commercial",
-                MicrocreditLoanType.Agriculture => "Agricole",
-                MicrocreditLoanType.Education => "Éducation",
-                MicrocreditLoanType.Housing => "Logement",
-                MicrocreditLoanType.CreditAuto => "Auto",
-                MicrocreditLoanType.CreditMoto => "Moto",
-                MicrocreditLoanType.Equipment => "Équipement",
-                MicrocreditLoanType.WorkingCapital => "Fonds de roulement",
+                MicrocreditLoanType.Commercial => "Crédit Commercial",
+                MicrocreditLoanType.Agricultural => "Crédit Agricole",
+                MicrocreditLoanType.Personal => "Crédit Personnel",
+                MicrocreditLoanType.Emergency => "Crédit d'Urgence",
+                MicrocreditLoanType.CreditLoyer => "Crédit Loyer",
+                MicrocreditLoanType.CreditAuto => "Crédit Auto",
+                MicrocreditLoanType.CreditMoto => "Crédit Moto",
+                MicrocreditLoanType.CreditPersonnel => "Crédit Personnel (Alt)",
+                MicrocreditLoanType.CreditScolaire => "Crédit Scolaire",
+                MicrocreditLoanType.CreditAgricole => "Crédit Agricole (Alt)",
+                MicrocreditLoanType.CreditProfessionnel => "Crédit Professionnel",
+                MicrocreditLoanType.CreditAppui => "Crédit d'Appui",
+                MicrocreditLoanType.CreditHypothecaire => "Crédit Hypothécaire",
                 _ => loanType.ToString()
             };
         }

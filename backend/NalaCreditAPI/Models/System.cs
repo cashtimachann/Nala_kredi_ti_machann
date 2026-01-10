@@ -93,4 +93,6 @@ public class AuditLog
     
     [MaxLength(500)]
     public string? UserAgent { get; set; }
+    
+    public byte[]? RowVersion { get; set; }
 }

@@ -16,7 +16,8 @@ namespace NalaCreditAPI.Services
             int pageSize = 10, 
             MicrocreditApplicationStatus? status = null,
             MicrocreditLoanType? loanType = null,
-            int? branchId = null);
+            int? branchId = null,
+            string? loanOfficerId = null);
         Task<MicrocreditLoanApplicationDto> CreateApplicationAsync(CreateMicrocreditLoanApplicationDto dto, string userId);
         Task<MicrocreditLoanApplicationDto> UpdateApplicationAsync(Guid id, CreateMicrocreditLoanApplicationDto dto);
         Task<MicrocreditLoanApplicationDto> SubmitApplicationAsync(Guid id);
@@ -42,7 +43,7 @@ namespace NalaCreditAPI.Services
         Task<MicrocreditLoanDto> RehabilitateLoanAsync(Guid loanId, string rehabilitatedBy, string? notes = null);
         Task<LoanSummaryDto?> GetLoanSummaryAsync(Guid loanId);
         Task<List<MicrocreditPaymentDto>> GetLoanTransactionsAsync(Guid loanId);
-        Task<List<OverdueLoanDto>> GetOverdueLoansAsync(int daysOverdue = 1);
+        Task<List<OverdueLoanDto>> GetOverdueLoansAsync(int daysOverdue = 1, int? branchId = null);
         Task UpdateOverdueLoansAsync(); // Background job to update overdue status
 
         // Gestion des paiements
@@ -107,7 +108,8 @@ namespace NalaCreditAPI.Services
             int pageSize = 10, 
             MicrocreditApplicationStatus? status = null,
             MicrocreditLoanType? loanType = null,
-            int? branchId = null)
+            int? branchId = null,
+            string? loanOfficerId = null)
         {
             var query = _context.MicrocreditLoanApplications
                 .Include(a => a.Borrower)
@@ -121,6 +123,9 @@ namespace NalaCreditAPI.Services
 
             if (branchId.HasValue)
                 query = query.Where(a => a.BranchId == branchId.Value);
+
+            if (!string.IsNullOrEmpty(loanOfficerId))
+                query = query.Where(a => a.LoanOfficerId == loanOfficerId);
 
             var totalCount = await query.CountAsync();
             var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
@@ -1470,14 +1475,22 @@ namespace NalaCreditAPI.Services
             return await GetLoanPaymentsAsync(loanId);
         }
 
-        public async Task<List<OverdueLoanDto>> GetOverdueLoansAsync(int daysOverdue = 1)
+        public async Task<List<OverdueLoanDto>> GetOverdueLoansAsync(int daysOverdue = 1, int? branchId = null)
         {
             var today = DateOnly.FromDateTime(DateTime.Now);
 
-            var overdueLoans = await _context.MicrocreditLoans
+            var query = _context.MicrocreditLoans
                 .Include(l => l.Borrower)
                 .Where(l => l.Status == MicrocreditLoanStatus.Active || l.Status == MicrocreditLoanStatus.Overdue)
-                .Where(l => l.DaysOverdue >= daysOverdue)
+                .Where(l => l.DaysOverdue >= daysOverdue);
+
+            // Filter by branch if specified
+            if (branchId.HasValue)
+            {
+                query = query.Where(l => l.BranchId == branchId.Value);
+            }
+
+            var overdueLoans = await query
                 .OrderByDescending(l => l.DaysOverdue)
                 .ToListAsync();
 
