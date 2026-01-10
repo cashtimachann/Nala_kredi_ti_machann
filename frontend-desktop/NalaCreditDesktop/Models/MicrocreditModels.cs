@@ -94,6 +94,10 @@ namespace NalaCreditDesktop.Models
         public string BranchName { get; set; } = string.Empty;
         public string LoanOfficerId { get; set; } = string.Empty;
         public string LoanOfficerName { get; set; } = string.Empty;
+        
+        // Calculated penalty amount (0.11667% per day on principal)
+        [JsonIgnore]
+        public decimal PenaltyAmount => DaysOverdue > 0 ? PrincipalAmount * 0.0011667m * DaysOverdue : 0;
     }
 
     public class MicrocreditBorrower

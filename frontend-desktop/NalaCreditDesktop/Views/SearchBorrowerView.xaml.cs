@@ -136,13 +136,8 @@ namespace NalaCreditDesktop.Views
                     return;
                 }
 
-                // For Credit Agents, filter by their loanOfficerId
-                var userRole = _apiService.CurrentUser?.Role ?? string.Empty;
-                var userId = _apiService.CurrentUser?.Id ?? string.Empty;
-                var isCreditAgent = userRole.Equals("CreditAgent", StringComparison.OrdinalIgnoreCase) ||
-                                   userRole.Equals("LoanOfficer", StringComparison.OrdinalIgnoreCase) ||
-                                   userRole.Equals("Employee", StringComparison.OrdinalIgnoreCase);
-
+                // Note: For client search, we show ALL clients in the branch, regardless of loan officer
+                // This allows any agent to search and find any client in their branch
                 async Task<List<MicrocreditLoan>> FetchAllLoansAsync(string status, bool isOverdue)
                 {
                     const int pageSize = 100; // backend max
@@ -159,35 +154,77 @@ namespace NalaCreditDesktop.Views
 
                         if (resp?.Loans != null && resp.Loans.Any())
                         {
-                            var loans = resp.Loans;
-                            
-                            // Filter by loanOfficerId if user is a Credit Agent
-                            if (isCreditAgent && !string.IsNullOrEmpty(userId))
-                            {
-                                loans = loans.Where(l => string.Equals(l.LoanOfficerId, userId, StringComparison.OrdinalIgnoreCase)).ToList();
-                            }
-                            
-                            all.AddRange(loans);
+                            System.Diagnostics.Debug.WriteLine($"[SEARCH] Status={status}, Page={page}, Loans returned: {resp.Loans.Count}");
+                            all.AddRange(resp.Loans);
                         }
 
                         var totalPages = resp?.TotalPages > 0 ? resp.TotalPages : 1;
                         if (page >= totalPages) break;
                         page++;
                     }
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] Status={status}, Total fetched: {all.Count} loans");
                     return all;
                 }
 
-                // Get all active and overdue loans to find borrowers
-                var activeLoans = await FetchAllLoansAsync("Active", isOverdue: false);
-                var overdueLoans = await FetchAllLoansAsync("Overdue", isOverdue: true);
-
-                // Combine all loans
+                // Get all loans regardless of status to find borrowers
                 var allLoans = new List<MicrocreditLoan>();
-                allLoans.AddRange(activeLoans);
-                allLoans.AddRange(overdueLoans);
+                
+                // If searching by loan number, try direct API call first
+                if (!string.IsNullOrWhiteSpace(searchTerm) && 
+                    (searchTerm.Contains("ML-") || searchTerm.Contains("ml-") || 
+                     searchTerm.Length >= 6))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] Recherche directe par numéro: {searchTerm}");
+                    var loanResult = await _apiService.GetLoanByNumberAsync(searchTerm);
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] Résultat direct API: IsSuccess={loanResult.IsSuccess}, Data={loanResult.Data?.LoanNumber ?? "null"}");
+                    if (loanResult.IsSuccess && loanResult.Data != null)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[SEARCH] Prêt trouvé: {loanResult.Data.LoanNumber}, BranchId={loanResult.Data.BranchId}, Status={loanResult.Data.Status}");
+                        allLoans.Add(loanResult.Data);
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[SEARCH] Aucun prêt trouvé avec recherche directe.");
+                    }
+                }
+                
+                // If no direct match found, search through all loans
+                if (allLoans.Count == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] Aucun résultat direct. Recherche dans tous les statuts...");
+                    // Get loans with all valid statuses: Pending, Approved, Active, Completed, Overdue, Defaulted, Cancelled
+                    var pendingLoans = await FetchAllLoansAsync("Pending", isOverdue: false);
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] Pending: {pendingLoans.Count} prêts");
+                    var approvedLoans = await FetchAllLoansAsync("Approved", isOverdue: false);
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] Approved: {approvedLoans.Count} prêts");
+                    var activeLoans = await FetchAllLoansAsync("Active", isOverdue: false);
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] Active: {activeLoans.Count} prêts");
+                    var completedLoans = await FetchAllLoansAsync("Completed", isOverdue: false);
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] Completed: {completedLoans.Count} prêts");
+                    var overdueLoans = await FetchAllLoansAsync("Overdue", isOverdue: true);
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] Overdue: {overdueLoans.Count} prêts");
+                    var defaultedLoans = await FetchAllLoansAsync("Defaulted", isOverdue: false);
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] Defaulted: {defaultedLoans.Count} prêts");
+                    var cancelledLoans = await FetchAllLoansAsync("Cancelled", isOverdue: false);
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] Cancelled: {cancelledLoans.Count} prêts");
+                    
+                    allLoans.AddRange(pendingLoans);
+                    allLoans.AddRange(approvedLoans);
+                    allLoans.AddRange(activeLoans);
+                    allLoans.AddRange(completedLoans);
+                    allLoans.AddRange(overdueLoans);
+                    allLoans.AddRange(defaultedLoans);
+                    allLoans.AddRange(cancelledLoans);
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] Total après toutes les requêtes: {allLoans.Count} prêts");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] {allLoans.Count} prêt(s) trouvé(s) avec recherche directe");
+                }
 
                 // Apply filters
                 var filteredLoans = allLoans.AsEnumerable();
+                System.Diagnostics.Debug.WriteLine($"[SEARCH] Avant filtrage: {allLoans.Count} prêts");
 
                 if (!string.IsNullOrWhiteSpace(searchTerm))
                 {
@@ -198,6 +235,9 @@ namespace NalaCreditDesktop.Views
                         (l.BorrowerPhone?.Contains(term) ?? false) ||
                         (l.LoanNumber?.ToLower().Contains(term) ?? false)
                     );
+                    var afterFilter = filteredLoans.ToList();
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] Après filtrage par searchTerm '{searchTerm}': {afterFilter.Count} prêts");
+                    filteredLoans = afterFilter.AsEnumerable();
                 }
 
                 if (!string.IsNullOrWhiteSpace(firstName))
@@ -218,13 +258,30 @@ namespace NalaCreditDesktop.Views
                         l.BorrowerPhone?.Contains(phone) ?? false);
                 }
 
-                // Group by borrower
+                // Group by borrower - use account number as fallback since borrower info may be missing
                 var borrowerGroups = filteredLoans
                     .GroupBy(l => new { 
-                        Name = $"{l.BorrowerFirstName} {l.BorrowerLastName}".Trim(), 
-                        Phone = l.BorrowerPhone 
+                        Name = !string.IsNullOrWhiteSpace(l.BorrowerName)
+                            ? l.BorrowerName
+                            : (!string.IsNullOrWhiteSpace(l.BorrowerFirstName) || !string.IsNullOrWhiteSpace(l.BorrowerLastName)
+                                ? $"{l.BorrowerFirstName} {l.BorrowerLastName}".Trim()
+                                : (!string.IsNullOrWhiteSpace(l.Borrower?.FullName)
+                                    ? l.Borrower.FullName
+                                    : $"Compte: {l.Borrower?.AccountNumber ?? "N/A"}")),
+                        Phone = !string.IsNullOrWhiteSpace(l.BorrowerPhone)
+                            ? l.BorrowerPhone
+                            : l.Borrower?.Phone ?? ""
                     })
                     .ToList();
+                
+                System.Diagnostics.Debug.WriteLine($"[SEARCH] {borrowerGroups.Count} groupes d'emprunteurs trouvés");
+                foreach (var g in borrowerGroups)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH] Groupe: Name='{g.Key.Name}', Phone='{g.Key.Phone}', Prêts={g.Count()}");
+                    var firstLoan = g.First();
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH]   Premier prêt: LoanNumber={firstLoan.LoanNumber}, BorrowerName='{firstLoan.BorrowerName}', BorrowerFirstName='{firstLoan.BorrowerFirstName}', BorrowerLastName='{firstLoan.BorrowerLastName}'");
+                    System.Diagnostics.Debug.WriteLine($"[SEARCH]   Borrower: FullName='{firstLoan.Borrower?.FullName}', Email='{firstLoan.Borrower?.Email}', AccountNumber='{firstLoan.Borrower?.AccountNumber}'");
+                }
 
                 // Apply loan status filter
                 if (!string.IsNullOrWhiteSpace(loanStatus) && loanStatus != "Tous")
@@ -261,8 +318,8 @@ namespace NalaCreditDesktop.Views
                         CustomerId = customerId,
                         CustomerName = group.Key.Name,
                         CustomerPhone = group.Key.Phone ?? "N/A",
-                        CustomerEmail = email ?? "N/A",
-                        SavingsAccountNumber = accountNumber ?? "N/A",
+                        CustomerEmail = firstLoan.Borrower?.Email ?? "N/A",
+                        SavingsAccountNumber = firstLoan.Borrower?.AccountNumber ?? "N/A",
                         TotalLoans = loans.Count,
                         TotalLoansDisplay = $"{loans.Count} prêt{(loans.Count > 1 ? "s" : "")}",
                         ActiveLoans = activeLoansCount,

@@ -2701,6 +2701,7 @@ namespace NalaCreditAPI.Services
                     AccountNumber = accountNumber,
                     FirstName = loan.Borrower.FirstName,
                     LastName = loan.Borrower.LastName,
+                    FullName = $"{loan.Borrower.FirstName} {loan.Borrower.LastName}".Trim(),
                     DateOfBirth = loan.Borrower.DateOfBirth,
                     Gender = loan.Borrower.Gender,
                     Occupation = loan.Borrower.Occupation,

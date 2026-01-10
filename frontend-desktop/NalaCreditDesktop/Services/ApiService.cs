@@ -1998,6 +1998,111 @@ public class ApiService
         }
     }
 
+    public async Task<ApiResult<List<LoanPayment>>> GetBranchPaymentsAsync(int branchId, DateTime? fromDate = null, string? currency = null)
+    {
+        try
+        {
+            var queryParams = new List<string>
+            {
+                $"page=1",
+                $"pageSize=1000",
+                $"branchId={branchId}"
+            };
+
+            if (fromDate.HasValue)
+                queryParams.Add($"fromDate={fromDate.Value:yyyy-MM-dd}");
+
+            if (!string.IsNullOrEmpty(currency))
+                queryParams.Add($"currency={currency}");
+
+            var queryString = string.Join("&", queryParams);
+            var url = $"MicrocreditPayment/history?{queryString}";
+
+            var response = await _httpClient.GetAsync(url);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var paymentHistory = JsonConvert.DeserializeObject<PaymentHistoryResponse>(raw);
+                
+                // Convert MicrocreditPayment to LoanPayment
+                var loanPayments = paymentHistory?.Payments?.Select(p => new LoanPayment
+                {
+                    Id = p.Id,
+                    ReceiptNumber = p.ReceiptNumber,
+                    Amount = p.Amount,
+                    PrincipalAmount = p.PrincipalAmount,
+                    InterestAmount = p.InterestAmount,
+                    PenaltyAmount = p.PenaltyAmount,
+                    Currency = p.Currency,
+                    PaymentDate = p.PaymentDate,
+                    PaymentMethod = p.PaymentMethod,
+                    ProcessedByName = p.ProcessedByName,
+                    LoanNumber = p.LoanNumber,
+                    CustomerName = p.CustomerName,
+                    ReceivedBy = p.ProcessedByName,
+                    Notes = p.Notes
+                }).ToList() ?? new List<LoanPayment>();
+
+                return ApiResult<List<LoanPayment>>.Success(loanPayments);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur récupération paiements";
+            return ApiResult<List<LoanPayment>>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<List<LoanPayment>>.Failure($"Erreur: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResult<MicrocreditLoan?>> GetLoanByNumberAsync(string loanNumber)
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync($"microcreditloan/by-number/{Uri.EscapeDataString(loanNumber)}");
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var loan = JsonConvert.DeserializeObject<MicrocreditLoan>(raw);
+                return ApiResult<MicrocreditLoan?>.Success(loan);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Prêt non trouvé";
+            return ApiResult<MicrocreditLoan?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<MicrocreditLoan?>.Failure($"Erreur: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResult<MicrocreditPayment?>> CreatePaymentAsync(CreatePaymentDto payment)
+    {
+        try
+        {
+            var json = JsonConvert.SerializeObject(payment);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync("MicrocreditPayment", content);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var createdPayment = JsonConvert.DeserializeObject<MicrocreditPayment>(raw);
+                return ApiResult<MicrocreditPayment?>.Success(createdPayment);
+            }
+
+            var message = ExtractErrorMessage(raw) ?? response.ReasonPhrase ?? "Erreur enregistrement paiement";
+            return ApiResult<MicrocreditPayment?>.Failure(message);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<MicrocreditPayment?>.Failure($"Erreur: {ex.Message}");
+        }
+    }
+
     public async Task<ApiResult<MicrocreditLoanApplicationDto?>> ApproveMicrocreditApplicationAsync(Guid applicationId, ApproveMicrocreditApplicationDto approvalData)
     {
         try

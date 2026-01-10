@@ -254,30 +254,33 @@ namespace NalaCreditDesktop.Views
 
         private void OverdueLoans_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("⚠️ Crédits en Retard\n\n" +
-                          "Cette fonctionnalité permet de:\n" +
-                          "• Voir tous vos crédits en retard\n" +
-                          "• Suivre les paiements manqués\n" +
-                          "• Enregistrer les actions de recouvrement\n" +
-                          "• Générer des rappels de paiement\n\n" +
-                          "Fonctionnalité en cours de développement.",
-                          "Crédits en Retard",
-                          MessageBoxButton.OK,
-                          MessageBoxImage.Information);
+            try
+            {
+                var branchId = _apiService.CurrentUser?.BranchId ?? 0;
+                var branchName = _apiService.CurrentUser?.BranchName ?? "Succursale";
+
+                var window = new OverdueLoansWindow(_apiService, branchId, branchName);
+                window.Owner = this;
+                window.ShowDialog();
+
+                // Refresh dashboard after closing
+                _ = LoadDashboardDataAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Erreur: {ex.Message}", "Erreur",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void Payments_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("💵 Gestion des Paiements\n\n" +
-                          "Cette fonctionnalité permet de:\n" +
-                          "• Enregistrer les paiements reçus\n" +
-                          "• Voir l'historique des paiements\n" +
-                          "• Gérer les échéanciers\n" +
-                          "• Suivre les paiements anticipés\n\n" +
-                          "Fonctionnalité en cours de développement.",
-                          "Gestion des Paiements",
-                          MessageBoxButton.OK,
-                          MessageBoxImage.Information);
+            var branchId = _apiService.CurrentUser?.BranchId ?? 0;
+            var branchName = _apiService.CurrentUser?.BranchName ?? "N/A";
+
+            var paymentsWindow = new PaymentManagementWindow(_apiService, branchId, branchName);
+            paymentsWindow.Owner = Window.GetWindow(this);
+            paymentsWindow.ShowDialog();
         }
 
         private void RecordPayment_Click(object sender, RoutedEventArgs e)
@@ -301,16 +304,20 @@ namespace NalaCreditDesktop.Views
 
         private void SearchBorrower_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("🔍 Recherche de Client\n\n" +
-                          "Recherchez un client par:\n" +
-                          "• Nom ou prénom\n" +
-                          "• Numéro de compte\n" +
-                          "• Numéro de téléphone\n" +
-                          "• Numéro d'identification\n\n" +
-                          "Fonctionnalité en cours de développement.",
-                          "Recherche de Client",
-                          MessageBoxButton.OK,
-                          MessageBoxImage.Information);
+            try
+            {
+                var user = _apiService.CurrentUser;
+                var branchName = user?.BranchName ?? "N/A";
+                var searchWindow = new ClientSearchWindow(_apiService, branchName);
+                searchWindow.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Erreur lors de l'ouverture de la recherche de client: {ex.Message}",
+                    "Erreur",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
         }
 
         private void MyPerformance_Click(object sender, RoutedEventArgs e)

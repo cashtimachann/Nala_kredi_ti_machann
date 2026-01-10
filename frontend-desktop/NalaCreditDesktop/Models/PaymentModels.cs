@@ -27,5 +27,19 @@ namespace NalaCreditDesktop.Services
         public DateTime PaymentDate { get; set; }
         public string PaymentMethod { get; set; } = string.Empty;
         public string? ProcessedByName { get; set; }
+        public string? LoanNumber { get; set; }
+        public string? CustomerName { get; set; }
+        public string? ReceivedBy { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    public class CreatePaymentDto
+    {
+        public Guid LoanId { get; set; }
+        public decimal Amount { get; set; }
+        public string PaymentMethod { get; set; } = "Cash";
+        public string ReceiptNumber { get; set; } = string.Empty;
+        public string? Notes { get; set; }
+        public DateTime PaymentDate { get; set; }
     }
 }
